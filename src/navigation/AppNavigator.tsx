@@ -8,7 +8,7 @@ import { MainNavigator } from './MainNavigator';
 import { CreateTripScreen } from '../screens/trip/CreateTripScreen';
 import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
 import { ItineraryScreen } from '../screens/trip/ItineraryScreen';
-import { MapScreen } from '../screens/trip/MapScreen';
+import { MapScreen } from '../screens/trip/MapScreenWrapper';
 import { PhotosScreen } from '../screens/trip/PhotosScreen';
 import { BudgetScreen } from '../screens/trip/BudgetScreen';
 import { PackingScreen } from '../screens/trip/PackingScreen';
