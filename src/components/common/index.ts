@@ -12,3 +12,5 @@ export { DatePickerInput } from './DatePickerInput';
 export { TimePickerInput } from './TimePickerInput';
 export { CategoryFieldsInput } from './CategoryFieldsInput';
 export { TripBottomNav } from './TripBottomNav';
+export { ActivityModal } from './ActivityModal';
+export type { ActivityFormData } from './ActivityModal';

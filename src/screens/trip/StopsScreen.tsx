@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Card, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
-import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
+import type { ActivityFormData } from '../../components/common';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { getDirections, formatDuration, formatDistance, TRAVEL_MODES, TravelMode, DirectionsResult } from '../../services/directions';
@@ -38,15 +38,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('hotel');
-  const [newStartTime, setNewStartTime] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-  const [newLocationLat, setNewLocationLat] = useState<number | null>(null);
-  const [newLocationLng, setNewLocationLng] = useState<number | null>(null);
-  const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
-  const [newNotes, setNewNotes] = useState('');
-  const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
 
   // Travel mode picker
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
@@ -200,70 +191,45 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   };
 
-  const resetForm = () => {
-    setNewTitle('');
-    setNewNotes('');
-    setNewLocation('');
-    setNewLocationLat(null);
-    setNewLocationLng(null);
-    setNewLocationAddress(null);
-    setNewStartTime('');
-    setNewCategory('hotel');
-    setNewCategoryData({});
-    setEditingActivity(null);
-  };
-
   const openAddModal = () => {
-    resetForm();
+    setEditingActivity(null);
     setShowModal(true);
   };
 
   const openEditModal = (activity: Activity) => {
     setEditingActivity(activity);
-    setNewTitle(activity.title);
-    setNewCategory(activity.category);
-    setNewStartTime(activity.start_time || '');
-    setNewLocation(activity.location_name || '');
-    setNewLocationLat(activity.location_lat);
-    setNewLocationLng(activity.location_lng);
-    setNewLocationAddress(activity.location_address || null);
-    setNewNotes(activity.description || '');
-    setNewCategoryData(activity.category_data || {});
     setShowModal(true);
   };
 
-  const handleSave = async () => {
-    const actDate = getActivityDate(newCategory, newCategoryData);
+  const handleModalSave = async (data: ActivityFormData) => {
+    const actDate = getActivityDate(data.category, data.categoryData);
     const resolvedDayId = getDayIdForDate(actDate) || (days.length > 0 ? days[0].id : '');
-    if (!newTitle.trim() || !resolvedDayId) return;
+    if (!data.title || !resolvedDayId) return;
     try {
       const payload = {
         day_id: resolvedDayId,
-        title: newTitle.trim(),
-        description: newNotes.trim() || null,
-        category: newCategory,
-        start_time: newStartTime || null,
-        location_name: newLocation.trim() || null,
-        location_lat: newLocationLat,
-        location_lng: newLocationLng,
-        location_address: newLocationAddress,
-        check_in_date: newCategoryData.check_in_date || null,
-        check_out_date: newCategoryData.check_out_date || null,
-        category_data: newCategoryData,
+        title: data.title,
+        description: data.notes || null,
+        category: data.category,
+        start_time: data.startTime || null,
+        location_name: data.locationName || null,
+        location_lat: data.locationLat,
+        location_lng: data.locationLng,
+        location_address: data.locationAddress,
+        check_in_date: data.categoryData.check_in_date || null,
+        check_out_date: data.categoryData.check_out_date || null,
+        category_data: data.categoryData,
       };
 
       if (editingActivity) {
-        // If location changed, clear travel cache for this and next activity
-        const locChanged = editingActivity.location_lat !== newLocationLat || editingActivity.location_lng !== newLocationLng;
+        const locChanged = editingActivity.location_lat !== data.locationLat || editingActivity.location_lng !== data.locationLng;
         if (locChanged) {
-          // Clear own cache
-          const cleanData = { ...newCategoryData };
+          const cleanData = { ...data.categoryData };
           delete cleanData.travel_from_prev;
           payload.category_data = cleanData;
         }
         await updateActivity(editingActivity.id, payload);
 
-        // Also clear next activity's cache if location changed
         if (locChanged) {
           const idx = activities.findIndex(a => a.id === editingActivity.id);
           if (idx >= 0 && idx < activities.length - 1) {
@@ -284,7 +250,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         });
       }
       setShowModal(false);
-      resetForm();
+      setEditingActivity(null);
       await loadData();
     } catch (e) {
       Alert.alert('Fehler', editingActivity ? 'Änderung fehlgeschlagen' : 'Aktivität konnte nicht erstellt werden');
@@ -408,54 +374,16 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         </LinearGradient>
       </TouchableOpacity>
 
-      <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editingActivity ? 'Stop bearbeiten' : 'Stop hinzufügen'}</Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Input label="Titel" placeholder="z.B. Hotel Schweizerhof" value={newTitle} onChangeText={setNewTitle} />
-
-              <Text style={styles.fieldLabel}>Kategorie</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-                {ACTIVITY_CATEGORIES.filter(c => c.id === 'hotel' || c.id === 'stop').map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[styles.catChip, newCategory === cat.id && styles.catChipActive]}
-                    onPress={() => { setNewCategory(cat.id); setNewCategoryData({}); }}
-                  >
-                    <Text style={styles.catIcon}>{cat.icon}</Text>
-                    <Text style={[styles.catLabel, newCategory === cat.id && styles.catLabelActive]}>{cat.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
-
-              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} tripStartDate={trip?.start_date} tripEndDate={trip?.end_date} />
-
-              <PlaceAutocomplete
-                label="Ort"
-                placeholder="z.B. Hotel Schweizerhof, Luzern"
-                value={newLocation}
-                onChangeText={setNewLocation}
-                onSelect={(place: PlaceResult) => {
-                  setNewLocation(place.name);
-                  setNewLocationLat(place.lat);
-                  setNewLocationLng(place.lng);
-                  setNewLocationAddress(place.address);
-                }}
-              />
-
-              <Input label="Notizen" placeholder="Optionale Notizen..." value={newNotes} onChangeText={setNewNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
-            </ScrollView>
-
-            <View style={styles.modalButtons}>
-              <Button title="Abbrechen" onPress={() => { setShowModal(false); resetForm(); }} variant="ghost" style={styles.modalBtn} />
-              <Button title={editingActivity ? 'Speichern' : 'Hinzufügen'} onPress={handleSave} disabled={!newTitle.trim()} style={styles.modalBtn} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ActivityModal
+        visible={showModal}
+        activity={editingActivity}
+        onSave={handleModalSave}
+        onCancel={() => { setShowModal(false); setEditingActivity(null); }}
+        tripStartDate={trip?.start_date}
+        tripEndDate={trip?.end_date}
+        categoryFilter={['hotel', 'stop']}
+        defaultCategory="hotel"
+      />
 
       <TripBottomNav tripId={tripId} activeTab="Stops" />
     </View>
@@ -519,25 +447,4 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.card, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.xl, maxHeight: '80%' },
-  modalTitle: { ...typography.h2, marginBottom: spacing.lg },
-  fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
-  categoryRow: { marginBottom: spacing.md },
-  catChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    marginRight: spacing.sm,
-  },
-  catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-  catIcon: { fontSize: 16, marginRight: spacing.xs },
-  catLabel: { ...typography.bodySmall },
-  catLabelActive: { color: colors.primary, fontWeight: '600' },
-  modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  modalBtn: { flex: 1 },
 });

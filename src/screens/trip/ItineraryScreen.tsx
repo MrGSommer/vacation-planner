@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput, TimePickerInput, TripBottomNav } from '../../components/common';
-import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
+import type { ActivityFormData } from '../../components/common';
 import { getDays, getActivities, getActivitiesForTrip, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
@@ -23,30 +23,12 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [dayDates, setDayDates] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('activity');
-  const [newStartTime, setNewStartTime] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-  const [newLocationLat, setNewLocationLat] = useState<number | null>(null);
-  const [newLocationLng, setNewLocationLng] = useState<number | null>(null);
-  const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
-  const [newNotes, setNewNotes] = useState('');
-  const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
+  const [modalActivity, setModalActivity] = useState<Activity | null>(null);
+  const [modalDefaultCategoryData, setModalDefaultCategoryData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [hotelActivities, setHotelActivities] = useState<Activity[]>([]);
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
-  const [editActivity, setEditActivity] = useState<Activity | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState('activity');
-  const [editStartTime, setEditStartTime] = useState('');
-  const [editLocation, setEditLocation] = useState('');
-  const [editLocationLat, setEditLocationLat] = useState<number | null>(null);
-  const [editLocationLng, setEditLocationLng] = useState<number | null>(null);
-  const [editLocationAddress, setEditLocationAddress] = useState<string | null>(null);
-  const [editNotes, setEditNotes] = useState('');
-  const [editCategoryData, setEditCategoryData] = useState<Record<string, any>>({});
 
   const loadData = useCallback(async () => {
     try {
@@ -110,42 +92,59 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     setActivities(acts);
   };
 
-  const handleAddActivity = async () => {
-    if (!newTitle.trim() || !selectedDayId) return;
+  const handleModalSave = async (data: ActivityFormData) => {
+    if (!data.title) return;
     try {
-      const actDate = getActivityDate(newCategory, newCategoryData);
+      const actDate = getActivityDate(data.category, data.categoryData);
       const targetDayId = getDayIdForDate(actDate) || selectedDayId;
-      await createActivity({
-        day_id: targetDayId,
-        trip_id: tripId,
-        title: newTitle.trim(),
-        description: newNotes.trim() || null,
-        category: newCategory,
-        start_time: newStartTime || null,
-        end_time: null,
-        location_name: newLocation.trim() || null,
-        location_lat: newLocationLat,
-        location_lng: newLocationLng,
-        location_address: newLocationAddress,
-        cost: null,
-        currency: 'CHF',
-        sort_order: activities.length,
-        check_in_date: newCategoryData.check_in_date || null,
-        check_out_date: newCategoryData.check_out_date || null,
-        category_data: newCategoryData,
-      });
+      if (!targetDayId) return;
+
+      if (modalActivity) {
+        // Edit
+        const newDayId = getDayIdForDate(actDate);
+        await updateActivity(modalActivity.id, {
+          title: data.title,
+          category: data.category,
+          start_time: data.startTime || null,
+          description: data.notes || null,
+          location_name: data.locationName || null,
+          location_lat: data.locationLat,
+          location_lng: data.locationLng,
+          location_address: data.locationAddress,
+          check_in_date: data.categoryData.check_in_date || null,
+          check_out_date: data.categoryData.check_out_date || null,
+          category_data: data.categoryData,
+          ...(newDayId ? { day_id: newDayId } : {}),
+        });
+      } else {
+        // Add
+        await createActivity({
+          day_id: targetDayId,
+          trip_id: tripId,
+          title: data.title,
+          description: data.notes || null,
+          category: data.category,
+          start_time: data.startTime || null,
+          end_time: null,
+          location_name: data.locationName || null,
+          location_lat: data.locationLat,
+          location_lng: data.locationLng,
+          location_address: data.locationAddress,
+          cost: null,
+          currency: 'CHF',
+          sort_order: activities.length,
+          check_in_date: data.categoryData.check_in_date || null,
+          check_out_date: data.categoryData.check_out_date || null,
+          category_data: data.categoryData,
+        });
+      }
       setShowModal(false);
-      setNewTitle('');
-      setNewNotes('');
-      setNewLocation('');
-      setNewLocationLat(null);
-      setNewLocationLng(null);
-      setNewLocationAddress(null);
-      setNewStartTime('');
-      setNewCategoryData({});
-      await loadActivities(selectedDayId);
+      setModalActivity(null);
+      const allActs = await getActivitiesForTrip(tripId);
+      setHotelActivities(allActs.filter(a => a.category === 'hotel'));
+      if (selectedDayId) await loadActivities(selectedDayId);
     } catch (e) {
-      Alert.alert('Fehler', 'Aktivität konnte nicht erstellt werden');
+      Alert.alert('Fehler', modalActivity ? 'Aktivität konnte nicht aktualisiert werden' : 'Aktivität konnte nicht erstellt werden');
     }
   };
 
@@ -160,47 +159,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const openEdit = (activity: Activity) => {
-    setEditActivity(activity);
-    setEditTitle(activity.title);
-    setEditCategory(activity.category);
-    setEditStartTime(activity.start_time || '');
-    setEditLocation(activity.location_name || '');
-    setEditLocationLat(activity.location_lat);
-    setEditLocationLng(activity.location_lng);
-    setEditLocationAddress(activity.location_address);
-    setEditNotes(activity.description || '');
-    setEditCategoryData(activity.category_data || {});
-    setShowEditModal(true);
-  };
-
-  const handleEditSave = async () => {
-    if (!editActivity || !editTitle.trim()) return;
-    try {
-      const actDate = getActivityDate(editCategory, editCategoryData);
-      const newDayId = getDayIdForDate(actDate);
-      await updateActivity(editActivity.id, {
-        title: editTitle.trim(),
-        category: editCategory,
-        start_time: editStartTime || null,
-        description: editNotes.trim() || null,
-        location_name: editLocation.trim() || null,
-        location_lat: editLocationLat,
-        location_lng: editLocationLng,
-        location_address: editLocationAddress,
-        check_in_date: editCategoryData.check_in_date || null,
-        check_out_date: editCategoryData.check_out_date || null,
-        category_data: editCategoryData,
-        ...(newDayId ? { day_id: newDayId } : {}),
-      });
-      setShowEditModal(false);
-      setEditActivity(null);
-      // Refresh hotel activities and current day
-      const allActs = await getActivitiesForTrip(tripId);
-      setHotelActivities(allActs.filter(a => a.category === 'hotel'));
-      if (selectedDayId) await loadActivities(selectedDayId);
-    } catch {
-      Alert.alert('Fehler', 'Aktivität konnte nicht aktualisiert werden');
-    }
+    setModalActivity(activity);
+    setShowModal(true);
   };
 
   const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
@@ -333,112 +293,21 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => { setNewCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Add Activity Modal */}
-      <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Aktivität hinzufügen</Text>
-            <ScrollView>
-              <Input label="Titel" placeholder="z.B. Stadtführung" value={newTitle} onChangeText={setNewTitle} />
-              <Text style={styles.fieldLabel}>Kategorie</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-                {ACTIVITY_CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[styles.catChip, newCategory === cat.id && styles.catChipActive]}
-                    onPress={() => { setNewCategory(cat.id); setNewCategoryData(selectedDate ? { date: selectedDate } : {}); }}
-                  >
-                    <Text style={styles.catIcon}>{cat.icon}</Text>
-                    <Text style={[styles.catLabel, newCategory === cat.id && styles.catLabelActive]}>{cat.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
-              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} tripStartDate={tripStartDate} tripEndDate={tripEndDate} />
-              <PlaceAutocomplete
-                label="Ort"
-                placeholder="z.B. Sagrada Familia"
-                value={newLocation}
-                onChangeText={setNewLocation}
-                onSelect={(place: PlaceResult) => {
-                  setNewLocation(place.name);
-                  setNewLocationLat(place.lat);
-                  setNewLocationLng(place.lng);
-                  setNewLocationAddress(place.address);
-                  // Auto-fill sightseeing/food fields from Google Places
-                  const updates: Record<string, any> = {};
-                  if (place.opening_hours) updates.opening_hours = place.opening_hours;
-                  if (place.website) updates.website_url = place.website;
-                  if (Object.keys(updates).length > 0) {
-                    setNewCategoryData(prev => ({ ...prev, ...updates }));
-                  }
-                }}
-              />
-              <Input label="Notizen" placeholder="Optionale Notizen..." value={newNotes} onChangeText={setNewNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
-            </ScrollView>
-            <View style={styles.modalButtons}>
-              <Button title="Abbrechen" onPress={() => setShowModal(false)} variant="ghost" style={styles.modalBtn} />
-              <Button title="Hinzufügen" onPress={handleAddActivity} disabled={!newTitle.trim()} style={styles.modalBtn} />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Activity Modal */}
-      <Modal visible={showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Aktivität bearbeiten</Text>
-            <ScrollView>
-              <Input label="Titel" placeholder="z.B. Stadtführung" value={editTitle} onChangeText={setEditTitle} />
-              <Text style={styles.fieldLabel}>Kategorie</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-                {ACTIVITY_CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[styles.catChip, editCategory === cat.id && styles.catChipActive]}
-                    onPress={() => { setEditCategory(cat.id); setEditCategoryData({}); }}
-                  >
-                    <Text style={styles.catIcon}>{cat.icon}</Text>
-                    <Text style={[styles.catLabel, editCategory === cat.id && styles.catLabelActive]}>{cat.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TimePickerInput label="Uhrzeit" value={editStartTime} onChange={setEditStartTime} placeholder="z.B. 09:00" />
-              <CategoryFieldsInput category={editCategory} data={editCategoryData} onChange={setEditCategoryData} tripStartDate={tripStartDate} tripEndDate={tripEndDate} />
-              <PlaceAutocomplete
-                label="Ort"
-                placeholder="z.B. Sagrada Familia"
-                value={editLocation}
-                onChangeText={setEditLocation}
-                onSelect={(place: PlaceResult) => {
-                  setEditLocation(place.name);
-                  setEditLocationLat(place.lat);
-                  setEditLocationLng(place.lng);
-                  setEditLocationAddress(place.address);
-                  const updates: Record<string, any> = {};
-                  if (place.opening_hours) updates.opening_hours = place.opening_hours;
-                  if (place.website) updates.website_url = place.website;
-                  if (Object.keys(updates).length > 0) {
-                    setEditCategoryData(prev => ({ ...prev, ...updates }));
-                  }
-                }}
-              />
-              <Input label="Notizen" placeholder="Optionale Notizen..." value={editNotes} onChangeText={setEditNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
-            </ScrollView>
-            <View style={styles.modalButtons}>
-              <Button title="Abbrechen" onPress={() => { setShowEditModal(false); setEditActivity(null); }} variant="ghost" style={styles.modalBtn} />
-              <Button title="Speichern" onPress={handleEditSave} disabled={!editTitle.trim()} style={styles.modalBtn} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ActivityModal
+        visible={showModal}
+        activity={modalActivity}
+        onSave={handleModalSave}
+        onCancel={() => { setShowModal(false); setModalActivity(null); }}
+        tripStartDate={tripStartDate}
+        tripEndDate={tripEndDate}
+        defaultCategoryData={modalDefaultCategoryData}
+      />
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
@@ -478,18 +347,6 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.card, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.xl, maxHeight: '80%' },
-  modalTitle: { ...typography.h2, marginBottom: spacing.lg },
-  fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
-  categoryRow: { marginBottom: spacing.md },
-  catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
-  catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-  catIcon: { fontSize: 16, marginRight: 4 },
-  catLabel: { ...typography.caption },
-  catLabelActive: { color: colors.primary, fontWeight: '600' },
-  modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  modalBtn: { flex: 1 },
   accommodationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary, ...shadows.sm },
   accommodationBadge: { position: 'absolute', top: spacing.xs, right: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
   checkInBadge: { backgroundColor: colors.success + '20' },
