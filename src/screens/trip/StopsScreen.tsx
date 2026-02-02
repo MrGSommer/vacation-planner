@@ -4,7 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
-import { getActivitiesForTrip, getDays, createActivity, deleteActivity } from '../../api/itineraries';
+import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { calculateRouteForStops, formatDuration, formatDistance } from '../../services/directions';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
@@ -26,6 +26,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string>('');
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('hotel');
@@ -53,7 +54,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       const filtered = acts.filter(a => a.category === 'hotel' || a.category === 'stop');
       setActivities(filtered);
 
-      // Calculate travel info between stops that have coordinates
       const withCoords = filtered.filter(a => a.location_lat && a.location_lng);
       if (withCoords.length >= 2) {
         calculateRouteForStops(withCoords.map(a => ({ id: a.id, lat: a.location_lat!, lng: a.location_lng! }))).then(info => {
@@ -81,35 +81,64 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     setNewStartTime('');
     setNewCategory('hotel');
     setNewCategoryData({});
+    setEditingActivity(null);
   };
 
-  const handleAddActivity = async () => {
+  const openAddModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const openEditModal = (activity: Activity) => {
+    setEditingActivity(activity);
+    setSelectedDayId(activity.day_id);
+    setNewTitle(activity.title);
+    setNewCategory(activity.category);
+    setNewStartTime(activity.start_time || '');
+    setNewLocation(activity.location_name || '');
+    setNewLocationLat(activity.location_lat);
+    setNewLocationLng(activity.location_lng);
+    setNewLocationAddress(activity.location_address || null);
+    setNewNotes(activity.description || '');
+    setNewCategoryData(activity.category_data || {});
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
     if (!newTitle.trim() || !selectedDayId) return;
     try {
-      await createActivity({
+      const payload = {
         day_id: selectedDayId,
-        trip_id: tripId,
         title: newTitle.trim(),
         description: newNotes.trim() || null,
         category: newCategory,
         start_time: newStartTime || null,
-        end_time: null,
         location_name: newLocation.trim() || null,
         location_lat: newLocationLat,
         location_lng: newLocationLng,
         location_address: newLocationAddress,
-        cost: null,
-        currency: 'CHF',
-        sort_order: activities.length,
         check_in_date: newCategoryData.check_in_date || null,
         check_out_date: newCategoryData.check_out_date || null,
         category_data: newCategoryData,
-      });
+      };
+
+      if (editingActivity) {
+        await updateActivity(editingActivity.id, payload);
+      } else {
+        await createActivity({
+          ...payload,
+          trip_id: tripId,
+          end_time: null,
+          cost: null,
+          currency: 'CHF',
+          sort_order: activities.length,
+        });
+      }
       setShowModal(false);
       resetForm();
       await loadData();
     } catch (e) {
-      Alert.alert('Fehler', 'Aktivität konnte nicht erstellt werden');
+      Alert.alert('Fehler', editingActivity ? 'Änderung fehlgeschlagen' : 'Aktivität konnte nicht erstellt werden');
     }
   };
 
@@ -152,41 +181,43 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
               )}
 
-              <Card style={styles.stopCard}>
-                <View style={styles.stopHeader}>
-                  <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
-                  <View style={styles.stopInfo}>
-                    <Text style={styles.stopName}>{activity.title}</Text>
-                    {(activity.location_name || activity.location_address) && (
-                      <Text style={styles.stopAddress} numberOfLines={1}>
-                        {activity.location_name || activity.location_address}
-                      </Text>
-                    )}
-                    <View style={styles.stopMeta}>
-                      {activity.start_time && (
-                        <Text style={styles.stopTime}>🕐 {activity.start_time}</Text>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => openEditModal(activity)}>
+                <Card style={styles.stopCard}>
+                  <View style={styles.stopHeader}>
+                    <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
+                    <View style={styles.stopInfo}>
+                      <Text style={styles.stopName}>{activity.title}</Text>
+                      {(activity.location_name || activity.location_address) && (
+                        <Text style={styles.stopAddress} numberOfLines={1}>
+                          {activity.location_name || activity.location_address}
+                        </Text>
                       )}
-                      {(() => {
-                        const detail = formatCategoryDetail(activity.category, activity.category_data || {});
-                        return detail ? (
-                          <Text style={[styles.stopDetail, { color: CATEGORY_COLORS[activity.category] || colors.primary }]}>{detail}</Text>
-                        ) : null;
-                      })()}
+                      <View style={styles.stopMeta}>
+                        {activity.start_time && (
+                          <Text style={styles.stopTime}>🕐 {activity.start_time}</Text>
+                        )}
+                        {(() => {
+                          const detail = formatCategoryDetail(activity.category, activity.category_data || {});
+                          return detail ? (
+                            <Text style={[styles.stopDetail, { color: CATEGORY_COLORS[activity.category] || colors.primary }]}>{detail}</Text>
+                          ) : null;
+                        })()}
+                      </View>
                     </View>
                   </View>
-                </View>
-                <View style={styles.stopActions}>
-                  <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
-                    <Text style={styles.deleteBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              </Card>
+                  <View style={styles.stopActions}>
+                    <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
+                      <Text style={styles.deleteBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              </TouchableOpacity>
             </View>
           ))
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.fab} onPress={openAddModal} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
@@ -195,7 +226,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Stop hinzufügen</Text>
+            <Text style={styles.modalTitle}>{editingActivity ? 'Stop bearbeiten' : 'Stop hinzufügen'}</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
               {/* Day Picker */}
               <Text style={styles.fieldLabel}>Tag</Text>
@@ -251,7 +282,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
             <View style={styles.modalButtons}>
               <Button title="Abbrechen" onPress={() => { setShowModal(false); resetForm(); }} variant="ghost" style={styles.modalBtn} />
-              <Button title="Hinzufügen" onPress={handleAddActivity} disabled={!newTitle.trim() || !selectedDayId} style={styles.modalBtn} />
+              <Button title={editingActivity ? 'Speichern' : 'Hinzufügen'} onPress={handleSave} disabled={!newTitle.trim() || !selectedDayId} style={styles.modalBtn} />
             </View>
           </View>
         </View>

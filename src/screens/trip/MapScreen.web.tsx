@@ -101,6 +101,13 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       googleMapRef.current = map;
 
       const bounds = new google.maps.LatLngBounds();
+      let openInfoWindow: google.maps.InfoWindow | null = null;
+
+      const openInfo = (infoWindow: google.maps.InfoWindow, marker: google.maps.Marker) => {
+        if (openInfoWindow) openInfoWindow.close();
+        infoWindow.open(map, marker);
+        openInfoWindow = infoWindow;
+      };
 
       // Stop markers
       s.forEach((stop: TripStop, i: number) => {
@@ -123,7 +130,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         const infoWindow = new google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏨 ${stop.arrival_date && stop.departure_date ? `${stop.arrival_date} – ${stop.departure_date} (${stop.nights} N.)` : `${stop.nights} Nacht/Nächte`}` : '📍 Zwischenstopp'}<br/><small>${stop.address || ''}</small></div>`,
         });
-        marker.addListener('click', () => infoWindow.open(map, marker));
+        marker.addListener('click', () => openInfo(infoWindow, marker));
       });
 
       // Activity markers with category-specific styling
@@ -149,7 +156,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
 
         const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-        marker.addListener('click', () => infoWindow.open(map, marker));
+        marker.addListener('click', () => openInfo(infoWindow, marker));
       });
 
       // Transport routes: draw lines between departure and arrival stations
@@ -181,7 +188,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             },
           });
           const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-          depMarker.addListener('click', () => depInfo.open(map, depMarker));
+          depMarker.addListener('click', () => openInfo(depInfo, depMarker));
 
           const arrMarker = new google.maps.Marker({
             position: arrPos,
@@ -198,7 +205,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             },
           });
           const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-          arrMarker.addListener('click', () => arrInfo.open(map, arrMarker));
+          arrMarker.addListener('click', () => openInfo(arrInfo, arrMarker));
 
           new google.maps.Polyline({
             path: [depPos, arrPos],

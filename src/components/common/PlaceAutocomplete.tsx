@@ -47,17 +47,11 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [ready, setReady] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
-  const dummyDivRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     loadGoogleMaps().then(() => {
       autocompleteServiceRef.current = new google.maps.places.AutocompleteService();
-      // PlacesService needs a div or map element
-      const div = document.createElement('div');
-      dummyDivRef.current = div;
-      placesServiceRef.current = new google.maps.places.PlacesService(div);
       setReady(true);
     }).catch(console.error);
   }, []);
@@ -91,25 +85,33 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     debounceRef.current = setTimeout(() => search(text), 300);
   };
 
-  const handleSelect = (prediction: google.maps.places.AutocompletePrediction) => {
+  const handleSelect = async (prediction: google.maps.places.AutocompletePrediction) => {
     setShowDropdown(false);
     setQuery(prediction.description);
-    if (!placesServiceRef.current) return;
 
-    placesServiceRef.current.getDetails(
-      { placeId: prediction.place_id, fields: ['name', 'formatted_address', 'geometry'] },
-      (place, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
-          onSelect({
-            name: place.name || prediction.structured_formatting?.main_text || prediction.description,
-            place_id: prediction.place_id,
-            address: place.formatted_address || prediction.description,
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-          });
-        }
+    try {
+      const place = new google.maps.places.Place({ id: prediction.place_id });
+      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+      const loc = place.location;
+      if (loc) {
+        onSelect({
+          name: place.displayName || prediction.structured_formatting?.main_text || prediction.description,
+          place_id: prediction.place_id,
+          address: place.formattedAddress || prediction.description,
+          lat: loc.lat(),
+          lng: loc.lng(),
+        });
       }
-    );
+    } catch {
+      // Fallback: use prediction data without coordinates
+      onSelect({
+        name: prediction.structured_formatting?.main_text || prediction.description,
+        place_id: prediction.place_id,
+        address: prediction.description,
+        lat: 0,
+        lng: 0,
+      });
+    }
   };
 
   return (

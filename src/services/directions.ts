@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -9,7 +10,7 @@ interface DirectionsResult {
   distance: number; // meters
 }
 
-export const getDirections = async (
+const getDirectionsRest = async (
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number }
 ): Promise<DirectionsResult | null> => {
@@ -26,6 +27,42 @@ export const getDirections = async (
   } catch {
     return null;
   }
+};
+
+const getDirectionsWeb = async (
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number }
+): Promise<DirectionsResult | null> => {
+  try {
+    const google = (window as any).google;
+    if (!google?.maps) return null;
+    const service = new google.maps.DirectionsService();
+    const result = await service.route({
+      origin: new google.maps.LatLng(origin.lat, origin.lng),
+      destination: new google.maps.LatLng(destination.lat, destination.lng),
+      travelMode: google.maps.TravelMode.DRIVING,
+    });
+    if (result.routes?.length) {
+      const leg = result.routes[0].legs[0];
+      return {
+        duration: Math.round(leg.duration.value / 60),
+        distance: leg.distance.value,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const getDirections = async (
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number }
+): Promise<DirectionsResult | null> => {
+  if (Platform.OS === 'web') {
+    return getDirectionsWeb(origin, destination);
+  }
+  return getDirectionsRest(origin, destination);
 };
 
 export const calculateRouteForStops = async (
