@@ -5,6 +5,22 @@ const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || '';
 
+const ensureGoogleMaps = (): Promise<void> => {
+  if (Platform.OS !== 'web') return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    if ((window as any).google?.maps) { resolve(); return; }
+    const existing = document.getElementById('google-maps-script');
+    if (existing) { existing.addEventListener('load', () => resolve()); return; }
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Maps'));
+    document.head.appendChild(script);
+  });
+};
+
 interface DirectionsResult {
   duration: number; // minutes
   distance: number; // meters
@@ -34,6 +50,7 @@ const getDirectionsWeb = async (
   destination: { lat: number; lng: number }
 ): Promise<DirectionsResult | null> => {
   try {
+    await ensureGoogleMaps();
     const google = (window as any).google;
     if (!google?.maps) return null;
     const service = new google.maps.DirectionsService();
