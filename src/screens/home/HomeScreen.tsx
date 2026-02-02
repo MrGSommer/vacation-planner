@@ -1,14 +1,16 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrips } from '../../hooks/useTrips';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { EmptyState } from '../../components/common';
+import { ShareModal } from './ShareModal';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -26,7 +28,7 @@ const statusColors: Record<string, string> = {
   completed: colors.textLight,
 };
 
-const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress }) => (
+const TripCard: React.FC<{ trip: Trip; onPress: () => void; onShare: () => void }> = ({ trip, onPress, onShare }) => (
   <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
     <LinearGradient
       colors={trip.cover_image_url ? ['transparent', 'rgba(0,0,0,0.6)'] : [...gradients.sunset]}
@@ -35,8 +37,13 @@ const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress
       end={{ x: 0, y: 1 }}
     >
       <View style={styles.cardContent}>
-        <View style={[styles.badge, { backgroundColor: statusColors[trip.status] || colors.textLight }]}>
-          <Text style={styles.badgeText}>{statusLabels[trip.status] || trip.status}</Text>
+        <View style={styles.cardTopRow}>
+          <View style={[styles.badge, { backgroundColor: statusColors[trip.status] || colors.textLight }]}>
+            <Text style={styles.badgeText}>{statusLabels[trip.status] || trip.status}</Text>
+          </View>
+          <TouchableOpacity onPress={onShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.shareIcon}>↗</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.cardBottom}>
           <Text style={styles.cardTitle}>{trip.name}</Text>
@@ -52,7 +59,9 @@ const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips } = useTrips();
+  const { user } = useAuthContext();
   const insets = useSafeAreaInsets();
+  const [shareTrip, setShareTrip] = useState<Trip | null>(null);
 
   useEffect(() => { fetchTrips(); }, [fetchTrips]);
 
@@ -78,10 +87,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       ) : (
         <FlashList
           data={trips}
-          renderItem={({ item }) => <TripCard trip={item} onPress={() => handleTripPress(item)} />}
+          renderItem={({ item }) => (
+            <TripCard
+              trip={item}
+              onPress={() => handleTripPress(item)}
+              onShare={() => setShareTrip(item)}
+            />
+          )}
           contentContainerStyle={{ padding: spacing.md }}
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchTrips} tintColor={colors.primary} />}
+        />
+      )}
+
+      {shareTrip && user && (
+        <ShareModal
+          visible={!!shareTrip}
+          onClose={() => setShareTrip(null)}
+          tripId={shareTrip.id}
+          tripName={shareTrip.name}
+          userId={user.id}
         />
       )}
 
@@ -106,6 +131,8 @@ const styles = StyleSheet.create({
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },
   cardGradient: { flex: 1 },
   cardContent: { flex: 1, justifyContent: 'space-between', padding: spacing.md },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  shareIcon: { fontSize: 20, color: '#FFFFFF', fontWeight: '700' },
   badge: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.full },
   badgeText: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' },
   cardBottom: {},

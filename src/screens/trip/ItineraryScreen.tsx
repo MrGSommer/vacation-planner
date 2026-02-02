@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Input, Card } from '../../components/common';
+import { Header, Button, Input, Card, PlaceAutocomplete } from '../../components/common';
+import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getDays, getActivities, createDay, createActivity, deleteActivity } from '../../api/itineraries';
 import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
@@ -25,6 +26,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [newCategory, setNewCategory] = useState('activity');
   const [newStartTime, setNewStartTime] = useState('');
   const [newLocation, setNewLocation] = useState('');
+  const [newLocationLat, setNewLocationLat] = useState<number | null>(null);
+  const [newLocationLng, setNewLocationLng] = useState<number | null>(null);
+  const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
   const [newNotes, setNewNotes] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -82,9 +86,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         start_time: newStartTime || null,
         end_time: null,
         location_name: newLocation.trim() || null,
-        location_lat: null,
-        location_lng: null,
-        location_address: null,
+        location_lat: newLocationLat,
+        location_lng: newLocationLng,
+        location_address: newLocationAddress,
         cost: null,
         currency: 'CHF',
         sort_order: activities.length,
@@ -93,6 +97,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setNewTitle('');
       setNewNotes('');
       setNewLocation('');
+      setNewLocationLat(null);
+      setNewLocationLng(null);
+      setNewLocationAddress(null);
       setNewStartTime('');
       await loadActivities(selectedDayId);
     } catch (e) {
@@ -189,7 +196,18 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                 ))}
               </ScrollView>
               <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
-              <Input label="Ort" placeholder="z.B. Sagrada Familia" value={newLocation} onChangeText={setNewLocation} />
+              <PlaceAutocomplete
+                label="Ort"
+                placeholder="z.B. Sagrada Familia"
+                value={newLocation}
+                onChangeText={setNewLocation}
+                onSelect={(place: PlaceResult) => {
+                  setNewLocation(place.name);
+                  setNewLocationLat(place.lat);
+                  setNewLocationLng(place.lng);
+                  setNewLocationAddress(place.address);
+                }}
+              />
               <Input label="Notizen" placeholder="Optionale Notizen..." value={newNotes} onChangeText={setNewNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
             </ScrollView>
             <View style={styles.modalButtons}>

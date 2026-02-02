@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Calendar, DateData } from 'react-native-calendars';
-import { Header, Input, Button, Card } from '../../components/common';
+import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components/common';
+import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { useTrips } from '../../hooks/useTrips';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
@@ -15,6 +16,8 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
+  const [destinationLat, setDestinationLat] = useState<number | null>(null);
+  const [destinationLng, setDestinationLng] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
@@ -66,8 +69,8 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
       const trip = await create({
         name: name.trim(),
         destination: destination.trim(),
-        destination_lat: null,
-        destination_lng: null,
+        destination_lat: destinationLat,
+        destination_lng: destinationLng,
         cover_image_url: null,
         start_date: startDate,
         end_date: endDate,
@@ -103,7 +106,17 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
             <>
               <Text style={styles.stepTitle}>Wohin geht die Reise?</Text>
               <Input label="Reisename" placeholder="z.B. Sommerferien 2026" value={name} onChangeText={setName} />
-              <Input label="Reiseziel" placeholder="z.B. Barcelona, Spanien" value={destination} onChangeText={setDestination} />
+              <PlaceAutocomplete
+                label="Reiseziel"
+                placeholder="z.B. Barcelona, Spanien"
+                value={destination}
+                onChangeText={setDestination}
+                onSelect={(place: PlaceResult) => {
+                  setDestination(place.name);
+                  setDestinationLat(place.lat);
+                  setDestinationLng(place.lng);
+                }}
+              />
             </>
           )}
 

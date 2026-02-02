@@ -50,7 +50,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <Card style={styles.settingsCard}>
-        <TouchableOpacity style={styles.settingsRow}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('EditProfile')}>
           <Text style={styles.settingsIcon}>👤</Text>
           <Text style={styles.settingsText}>Profil bearbeiten</Text>
           <Text style={styles.arrow}>›</Text>

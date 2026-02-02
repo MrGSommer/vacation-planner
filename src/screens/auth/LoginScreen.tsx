@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Tou
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
@@ -11,10 +12,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, loading, error, clearError } = useAuth();
+  const { showToast } = useToast();
 
   const handleLogin = async () => {
     try {
       await signIn(email.trim(), password);
+      showToast('Willkommen zurück!', 'success');
     } catch {}
   };
 
@@ -45,6 +48,10 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
           />
 
           <Button title="Anmelden" onPress={handleLogin} loading={loading} disabled={!email || !password} style={styles.loginButton} />
+
+          <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} style={styles.link}>
+            <Text style={styles.linkText}>Passwort vergessen?</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={() => navigation.navigate('SignUp')} style={styles.link}>
             <Text style={styles.linkText}>Noch kein Konto? <Text style={styles.linkBold}>Registrieren</Text></Text>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Tou
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
@@ -14,6 +15,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   const { signUp, loading, error, clearError } = useAuth();
+  const { showToast } = useToast();
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
@@ -27,6 +29,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLocalError(null);
       await signUp(email.trim(), password, fullName.trim());
+      showToast('Konto erstellt! Willkommen.', 'success');
     } catch {}
   };
 
@@ -49,7 +52,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
           <Button title="Registrieren" onPress={handleSignUp} loading={loading} disabled={!fullName || !email || !password || !confirmPassword} style={styles.signUpButton} />
 
-          <TouchableOpacity onPress={() => navigation.navigate('SignUp')} style={styles.link}>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
             <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>
           </TouchableOpacity>
         </ScrollView>

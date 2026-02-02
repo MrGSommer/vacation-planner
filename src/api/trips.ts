@@ -5,7 +5,6 @@ export const getTrips = async (userId: string): Promise<Trip[]> => {
   const { data, error } = await supabase
     .from('trips')
     .select('*')
-    .or(`owner_id.eq.${userId},id.in.(select trip_id from trip_collaborators where user_id='${userId}')`)
     .order('start_date', { ascending: false });
   if (error) throw error;
   return data || [];

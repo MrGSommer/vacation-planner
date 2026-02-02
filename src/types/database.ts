@@ -111,12 +111,32 @@ export interface PackingItem {
   created_at: string;
 }
 
+export interface TripStop {
+  id: string;
+  trip_id: string;
+  name: string;
+  place_id: string | null;
+  address: string | null;
+  lat: number;
+  lng: number;
+  type: 'overnight' | 'waypoint';
+  nights: number | null;
+  arrival_date: string | null;
+  departure_date: string | null;
+  sort_order: number;
+  travel_duration_from_prev: number | null;
+  travel_distance_from_prev: number | null;
+  created_at: string;
+}
+
 export interface TripInvitation {
   id: string;
   trip_id: string;
-  invited_email: string;
+  invited_email: string | null;
   invited_by: string;
   role: 'editor' | 'viewer';
   status: 'pending' | 'accepted' | 'declined';
+  token: string;
+  type: 'info' | 'collaborate';
   created_at: string;
 }

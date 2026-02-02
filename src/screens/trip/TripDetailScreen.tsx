@@ -16,9 +16,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
 const actionCards = [
   { key: 'Itinerary', icon: '📋', label: 'Programm', color: colors.primary },
-  { key: 'Map', icon: '🗺️', label: 'Karte', color: colors.secondary },
-  { key: 'Photos', icon: '📸', label: 'Fotos', color: colors.accent },
-  { key: 'Budget', icon: '💰', label: 'Budget', color: colors.sunny },
+  { key: 'Stops', icon: '🛣️', label: 'Route', color: colors.secondary },
+  { key: 'Map', icon: '🗺️', label: 'Karte', color: colors.accent },
+  { key: 'Photos', icon: '📸', label: 'Fotos', color: colors.sunny },
+  { key: 'Budget', icon: '💰', label: 'Budget', color: colors.warning },
   { key: 'Packing', icon: '🧳', label: 'Packliste', color: colors.sky },
 ];
 

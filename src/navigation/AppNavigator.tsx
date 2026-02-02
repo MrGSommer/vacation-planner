@@ -12,6 +12,8 @@ import { MapScreen } from '../screens/trip/MapScreenWrapper';
 import { PhotosScreen } from '../screens/trip/PhotosScreen';
 import { BudgetScreen } from '../screens/trip/BudgetScreen';
 import { PackingScreen } from '../screens/trip/PackingScreen';
+import { StopsScreen } from '../screens/trip/StopsScreen';
+import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -34,6 +36,8 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Photos" component={PhotosScreen} />
             <Stack.Screen name="Budget" component={BudgetScreen} />
             <Stack.Screen name="Packing" component={PackingScreen} />
+            <Stack.Screen name="Stops" component={StopsScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />

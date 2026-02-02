@@ -8,6 +8,8 @@ export type RootStackParamList = {
   Photos: { tripId: string };
   Budget: { tripId: string };
   Packing: { tripId: string };
+  Stops: { tripId: string };
+  EditProfile: undefined;
 };
 
 export type MainTabParamList = {

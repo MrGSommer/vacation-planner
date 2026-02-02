@@ -19,6 +19,7 @@
     "@supabase/supabase-js": "^2.93.3",
     "date-fns": "^4.1.0",
     "expo": "~54.0.33",
+    "expo-clipboard": "~8.0.8",
     "expo-crypto": "~15.0.8",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
@@ -46,6 +47,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/google.maps": "^3.58.1",
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
   },
