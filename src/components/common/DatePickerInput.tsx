@@ -8,6 +8,10 @@ interface DatePickerInputProps {
   value: string;
   onChange: (date: string) => void;
   placeholder?: string;
+  /** Calendar opens on this date when value is empty */
+  initialDate?: string;
+  /** Dates before this are disabled */
+  minDate?: string;
 }
 
 function formatDisplay(dateStr: string): string {
@@ -16,8 +20,10 @@ function formatDisplay(dateStr: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder }) => {
+export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder, initialDate, minDate }) => {
   const [visible, setVisible] = useState(false);
+
+  const calendarCurrent = value || initialDate || undefined;
 
   return (
     <View style={styles.container}>
@@ -32,7 +38,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, 
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setVisible(false)}>
           <View style={styles.calendarContainer}>
             <Calendar
-              current={value || undefined}
+              current={calendarCurrent}
+              minDate={minDate || undefined}
               markedDates={value ? { [value]: { selected: true, selectedColor: colors.primary } } : {}}
               onDayPress={(day: any) => {
                 onChange(day.dateString);

@@ -13,6 +13,12 @@ interface Props {
   onChange: (data: Record<string, any>) => void;
 }
 
+// Maps end-date keys to their corresponding start-date keys
+const DATE_PAIRS: Record<string, string> = {
+  check_out_date: 'check_in_date',
+  departure_date: 'arrival_date',
+};
+
 export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange }) => {
   const fields = CATEGORY_FIELDS[category];
   if (!fields || fields.length === 0) return null;
@@ -46,7 +52,9 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange 
                 onChangeText={(v: string) => update(field.key, v)}
               />
             );
-          case 'date':
+          case 'date': {
+            const startKey = DATE_PAIRS[field.key];
+            const startValue = startKey ? data[startKey] : undefined;
             return (
               <DatePickerInput
                 key={field.key}
@@ -54,8 +62,11 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange 
                 value={data[field.key] || ''}
                 onChange={(v: string) => update(field.key, v)}
                 placeholder={field.placeholder}
+                initialDate={startValue || undefined}
+                minDate={startValue || undefined}
               />
             );
+          }
           case 'select':
             return (
               <View key={field.key} style={styles.selectContainer}>
