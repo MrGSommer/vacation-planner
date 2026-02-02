@@ -40,7 +40,7 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
 
     const uri = result.assets[0].uri;
     const ext = uri.split('.').pop() || 'jpg';
-    const path = `avatars/${user!.id}.${ext}`;
+    const path = `${user!.id}.${ext}`;
 
     try {
       let body: any;
