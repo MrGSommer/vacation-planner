@@ -66,3 +66,13 @@ export const deleteActivity = async (id: string): Promise<void> => {
   const { error } = await supabase.from('activities').delete().eq('id', id);
   if (error) throw error;
 };
+
+export const deleteDay = async (dayId: string): Promise<void> => {
+  const { error } = await supabase.from('itinerary_days').delete().eq('id', dayId);
+  if (error) throw error;
+};
+
+export const moveActivitiesToDay = async (activityIds: string[], newDayId: string): Promise<void> => {
+  const { error } = await supabase.from('activities').update({ day_id: newDayId }).in('id', activityIds);
+  if (error) throw error;
+};

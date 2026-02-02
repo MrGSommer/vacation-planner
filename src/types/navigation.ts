@@ -2,6 +2,7 @@ export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
   CreateTrip: undefined;
+  EditTrip: { tripId: string };
   TripDetail: { tripId: string };
   Itinerary: { tripId: string };
   Map: { tripId: string };

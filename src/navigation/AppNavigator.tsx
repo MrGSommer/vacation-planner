@@ -6,6 +6,7 @@ import { LoadingScreen } from '../components/common';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import { CreateTripScreen } from '../screens/trip/CreateTripScreen';
+import { EditTripScreen } from '../screens/trip/EditTripScreen';
 import { TripDetailScreen } from '../screens/trip/TripDetailScreen';
 import { ItineraryScreen } from '../screens/trip/ItineraryScreen';
 import { MapScreen } from '../screens/trip/MapScreenWrapper';
@@ -30,6 +31,7 @@ export const AppNavigator: React.FC = () => {
           <>
             <Stack.Screen name="Main" component={MainNavigator} />
             <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
+            <Stack.Screen name="EditTrip" component={EditTripScreen} />
             <Stack.Screen name="TripDetail" component={TripDetailScreen} />
             <Stack.Screen name="Itinerary" component={ItineraryScreen} />
             <Stack.Screen name="Map" component={MapScreen} />

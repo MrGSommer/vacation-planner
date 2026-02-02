@@ -32,7 +32,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setLoading(true);
+      loadData();
+    });
+    return unsubscribe;
+  }, [navigation, tripId]);
+
+  const loadData = async () => {
       try {
         const [t, activities, spent] = await Promise.all([
           getTrip(tripId),
@@ -42,14 +49,12 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         setTrip(t);
         setActivityCount(activities.length);
         setTotalSpent(spent);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [tripId]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading || !trip) return <LoadingScreen />;
 
@@ -58,9 +63,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <ScrollView style={styles.container} bounces={false}>
       <LinearGradient colors={[...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backText}>←</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
+            <Text style={styles.editText}>✏️</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.tripName}>{trip.name}</Text>
         <Text style={styles.destination}>{trip.destination}</Text>
         <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
@@ -114,8 +124,11 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { padding: spacing.xl, paddingBottom: spacing.xxl },
-  backBtn: { marginBottom: spacing.md },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  backBtn: {},
   backText: { fontSize: 24, color: '#FFFFFF' },
+  editBtn: {},
+  editText: { fontSize: 22, color: '#FFFFFF' },
   tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs },
   destination: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginBottom: spacing.xs },
   dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.8)' },
