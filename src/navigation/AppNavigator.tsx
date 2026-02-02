@@ -66,7 +66,6 @@ export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer ref={navigationRef} linking={Platform.OS === 'web' ? linking : undefined}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="TripShare" component={TripShareScreen} />
         {session ? (
           <>
             <Stack.Screen name="Main" component={MainNavigator} />
@@ -87,6 +86,7 @@ export const AppNavigator: React.FC = () => {
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
+        <Stack.Screen name="TripShare" component={TripShareScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
