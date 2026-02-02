@@ -1,0 +1,66 @@
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
+import { colors, spacing, typography, shadows } from '../../utils/theme';
+
+const TABS = [
+  { key: 'Itinerary' as const, icon: '📋', label: 'Programm' },
+  { key: 'Stops' as const, icon: '🛣️', label: 'Route' },
+  { key: 'Map' as const, icon: '🗺️', label: 'Karte' },
+  { key: 'Budget' as const, icon: '💰', label: 'Budget' },
+  { key: 'Packing' as const, icon: '🧳', label: 'Packliste' },
+];
+
+interface Props {
+  tripId: string;
+  activeTab: string;
+}
+
+export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  return (
+    <View style={styles.container}>
+      {TABS.map(tab => {
+        const active = tab.key === activeTab;
+        return (
+          <TouchableOpacity
+            key={tab.key}
+            style={styles.tab}
+            onPress={() => {
+              if (!active) {
+                navigation.replace(tab.key, { tripId });
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.icon, active && styles.iconActive]}>{tab.icon}</Text>
+            <Text style={[styles.label, active && styles.labelActive]}>{tab.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: spacing.xs,
+    ...shadows.sm,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  icon: { fontSize: 20, opacity: 0.5 },
+  iconActive: { opacity: 1 },
+  label: { ...typography.caption, fontSize: 10, marginTop: 2, color: colors.textLight },
+  labelActive: { color: colors.primary, fontWeight: '600' },
+});

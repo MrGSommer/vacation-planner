@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getDays, getActivities, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { ItineraryDay, Activity } from '../../types/database';
@@ -326,6 +326,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
   );
 };

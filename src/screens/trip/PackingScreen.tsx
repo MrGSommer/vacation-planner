@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Header, Input, Button, Card, EmptyState } from '../../components/common';
+import { Header, Input, Button, Card, EmptyState, TripBottomNav } from '../../components/common';
 import { getPackingLists, createPackingList, getPackingItems, createPackingItem, togglePackingItem, deletePackingItem } from '../../api/packing';
 import { PackingItem } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
@@ -147,6 +147,8 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <TripBottomNav tripId={tripId} activeTab="Packing" />
     </View>
   );
 };

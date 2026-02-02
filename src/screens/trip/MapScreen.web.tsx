@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
-import { Header, LoadingScreen, Button, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { Header, LoadingScreen, Button, Input, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getStops } from '../../api/stops';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
@@ -383,6 +383,8 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <TripBottomNav tripId={tripId} activeTab="Map" />
     </View>
   );
 };

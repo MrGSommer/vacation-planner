@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -413,7 +413,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
               <Text style={styles.fieldLabel}>Kategorie</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-                {ACTIVITY_CATEGORIES.map(cat => (
+                {ACTIVITY_CATEGORIES.filter(c => c.id === 'hotel' || c.id === 'stop').map(cat => (
                   <TouchableOpacity
                     key={cat.id}
                     style={[styles.catChip, newCategory === cat.id && styles.catChipActive]}
@@ -452,6 +452,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <TripBottomNav tripId={tripId} activeTab="Stops" />
     </View>
   );
 };

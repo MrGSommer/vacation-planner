@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, FlatList } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Card, Input, Button, EmptyState } from '../../components/common';
+import { Header, Card, Input, Button, EmptyState, TripBottomNav } from '../../components/common';
 import { useBudget } from '../../hooks/useBudget';
 import { RootStackParamList } from '../../types/navigation';
 import { BUDGET_CATEGORIES } from '../../utils/constants';
@@ -126,6 +126,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <TripBottomNav tripId={tripId} activeTab="Budget" />
     </View>
   );
 };

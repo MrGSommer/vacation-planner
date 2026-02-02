@@ -10,3 +10,4 @@ export { Toast } from './Toast';
 export { PlaceAutocomplete } from './PlaceAutocomplete';
 export { DatePickerInput } from './DatePickerInput';
 export { CategoryFieldsInput } from './CategoryFieldsInput';
+export { TripBottomNav } from './TripBottomNav';
