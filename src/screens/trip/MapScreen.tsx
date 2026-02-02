@@ -233,6 +233,14 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.sheetIcon}>{getCategoryIcon(selected.category)}</Text>
             <View style={styles.sheetInfo}>
               <Text style={styles.sheetTitle}>{selected.title}</Text>
+              {(() => {
+                const sortedD = [...days].sort((a, b) => a.date.localeCompare(b.date));
+                const dayIdx = sortedD.findIndex(d => d.id === selected.day_id);
+                if (dayIdx >= 0) {
+                  return <Text style={[styles.sheetTime, { fontWeight: '600' }]}>Tag {dayIdx + 1} · {formatDateShort(sortedD[dayIdx].date)}</Text>;
+                }
+                return null;
+              })()}
               {selected.location_name && <Text style={styles.sheetLocation}>📍 {selected.location_name}</Text>}
               {selected.start_time && <Text style={styles.sheetTime}>🕐 {selected.start_time}</Text>}
               {(() => {

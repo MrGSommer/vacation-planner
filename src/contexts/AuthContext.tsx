@@ -10,6 +10,8 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
+  pendingInviteToken: string | null;
+  setPendingInviteToken: (token: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -18,6 +20,8 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   refreshProfile: async () => {},
+  pendingInviteToken: null,
+  setPendingInviteToken: () => {},
 });
 
 export const useAuthContext = () => useContext(AuthContext);
@@ -27,6 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
   const refreshProfile = async () => {
     if (user) {
@@ -62,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, pendingInviteToken, setPendingInviteToken }}>
       {children}
     </AuthContext.Provider>
   );

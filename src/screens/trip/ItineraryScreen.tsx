@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
@@ -30,7 +30,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
 
-  const loadData = useCallback(async () => {
+  // Task 6: Split loadData into loadTripData (once) and loadActivities (per day)
+  const loadTripData = useCallback(async () => {
     try {
       const [trip, allTripActivities] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId)]);
       setHotelActivities(allTripActivities.filter(a => a.category === 'hotel'));
@@ -52,11 +53,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setDays(existingDays);
 
       if (!selectedDayId && existingDays.length > 0) {
-        setSelectedDayId(existingDays[0].id);
-      }
-
-      if (selectedDayId) {
-        const acts = await getActivities(selectedDayId);
+        const firstDayId = existingDays[0].id;
+        setSelectedDayId(firstDayId);
+        const acts = await getActivities(firstDayId);
         setActivities(acts);
       }
     } catch (e) {
@@ -64,10 +63,20 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
-  }, [tripId, selectedDayId]);
+  }, [tripId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-  useRealtime('activities', `trip_id=eq.${tripId}`, loadData);
+  const loadDayActivities = useCallback(async (dayId: string) => {
+    setSelectedDayId(dayId);
+    const acts = await getActivities(dayId);
+    setActivities(acts);
+  }, []);
+
+  useEffect(() => { loadTripData(); }, [loadTripData]);
+  useRealtime('activities', `trip_id=eq.${tripId}`, () => {
+    // Reload hotel activities + current day
+    getActivitiesForTrip(tripId).then(all => setHotelActivities(all.filter(a => a.category === 'hotel')));
+    if (selectedDayId) loadDayActivities(selectedDayId);
+  });
 
   // Resolve the correct day_id for a given date string
   const getDayIdForDate = (date: string | undefined): string | null => {
@@ -84,12 +93,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       case 'stop': return catData.date;
       default: return catData.date;
     }
-  };
-
-  const loadActivities = async (dayId: string) => {
-    setSelectedDayId(dayId);
-    const acts = await getActivities(dayId);
-    setActivities(acts);
   };
 
   const handleModalSave = async (data: ActivityFormData) => {
@@ -142,7 +145,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setModalActivity(null);
       const allActs = await getActivitiesForTrip(tripId);
       setHotelActivities(allActs.filter(a => a.category === 'hotel'));
-      if (selectedDayId) await loadActivities(selectedDayId);
+      if (selectedDayId) await loadDayActivities(selectedDayId);
     } catch (e) {
       Alert.alert('Fehler', modalActivity ? 'Aktivität konnte nicht aktualisiert werden' : 'Aktivität konnte nicht erstellt werden');
     }
@@ -153,7 +156,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Löschen', style: 'destructive', onPress: async () => {
         await deleteActivity(id);
-        if (selectedDayId) await loadActivities(selectedDayId);
+        if (selectedDayId) await loadDayActivities(selectedDayId);
       }},
     ]);
   };
@@ -201,6 +204,21 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     return diff > 0 ? diff : null;
   };
 
+  // Task 3: Swipe navigation between days
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 20 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+    onPanResponderRelease: (_, gs) => {
+      if (Math.abs(gs.dx) < 50) return;
+      const currentIndex = days.findIndex(d => d.id === selectedDayId);
+      if (currentIndex < 0) return;
+      if (gs.dx < -50 && currentIndex < days.length - 1) {
+        loadDayActivities(days[currentIndex + 1].id);
+      } else if (gs.dx > 50 && currentIndex > 0) {
+        loadDayActivities(days[currentIndex - 1].id);
+      }
+    },
+  }), [days, selectedDayId, loadDayActivities]);
+
   const renderHotelCard = (hotel: Activity, type: 'continuing' | 'check-in', isCheckout?: boolean) => {
     const nights = getNightsCount(hotel);
     const badgeText = type === 'check-in' ? 'Check-in' : isCheckout ? 'Check-out' : 'Unterkunft';
@@ -239,7 +257,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             <TouchableOpacity
               key={day.id}
               style={[styles.tab, selectedDayId === day.id && styles.tabActive]}
-              onPress={() => loadActivities(day.id)}
+              onPress={() => loadDayActivities(day.id)}
             >
               <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
               <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
@@ -248,49 +266,55 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         </ScrollView>
       </View>
 
-      {/* Activities Timeline */}
-      <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
-        {/* Continuing accommodation at top */}
-        {continuingStay && renderHotelCard(continuingStay, 'continuing', isCheckingOut)}
+      {/* Activities Timeline with swipe */}
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+        <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
+          {/* Continuing accommodation at top */}
+          {continuingStay && renderHotelCard(continuingStay, 'continuing', isCheckingOut)}
 
-        {activities.filter(a => a.category !== 'hotel').length === 0 && !continuingStay && !newCheckIn ? (
-          <View style={styles.emptyDay}>
-            <Text style={styles.emptyIcon}>📝</Text>
-            <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
-            <Text style={styles.emptySubtext}>Tippe auf +, um eine Aktivität hinzuzufügen</Text>
-          </View>
-        ) : (
-          activities.filter(a => a.category !== 'hotel').map((activity, i) => (
-            <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => openEdit(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
-              <View style={styles.timelineLine}>
-                <View style={[styles.timelineDot, { backgroundColor: CATEGORY_COLORS[activity.category] || colors.primary }]} />
-                {i < activities.filter(a => a.category !== 'hotel').length - 1 && <View style={styles.timelineConnector} />}
-              </View>
-              <Card style={styles.activityContent}>
-                <View style={styles.activityHeader}>
-                  <Text style={styles.activityIcon}>{getCategoryIcon(activity.category)}</Text>
-                  <View style={styles.activityInfo}>
-                    <Text style={styles.activityTitle}>{activity.title}</Text>
-                    {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
-                  </View>
+          {activities.filter(a => a.category !== 'hotel').length === 0 && !continuingStay && !newCheckIn ? (
+            <View style={styles.emptyDay}>
+              <Text style={styles.emptyIcon}>📝</Text>
+              <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
+              <Text style={styles.emptySubtext}>Tippe auf +, um eine Aktivität hinzuzufügen</Text>
+            </View>
+          ) : (
+            activities.filter(a => a.category !== 'hotel').map((activity, i) => (
+              <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => openEdit(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
+                <View style={styles.timelineLine}>
+                  <View style={[styles.timelineDot, { backgroundColor: CATEGORY_COLORS[activity.category] || colors.primary }]} />
+                  {i < activities.filter(a => a.category !== 'hotel').length - 1 && <View style={styles.timelineConnector} />}
                 </View>
-                {activity.location_name && <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>}
-                {renderActivityDetail(activity)}
-                {activity.description && <Text style={styles.activityDesc}>{activity.description}</Text>}
-              </Card>
-            </TouchableOpacity>
-          ))
-        )}
+                <Card style={styles.activityContent}>
+                  <View style={styles.activityHeader}>
+                    <Text style={styles.activityIcon}>{getCategoryIcon(activity.category)}</Text>
+                    <View style={styles.activityInfo}>
+                      <Text style={styles.activityTitle}>{activity.title}</Text>
+                      {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
+                    </View>
+                    {/* Task 4: Delete button */}
+                    <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
+                      <Text style={styles.deleteBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {activity.location_name && <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>}
+                  {renderActivityDetail(activity)}
+                  {activity.description && <Text style={styles.activityDesc}>{activity.description}</Text>}
+                </Card>
+              </TouchableOpacity>
+            ))
+          )}
 
-        {/* New check-in accommodation at bottom */}
-        {newCheckIn && renderHotelCard(newCheckIn, 'check-in')}
-        {!newCheckIn && isCheckingOut && (
-          <View style={styles.noAccommodation}>
-            <Text style={styles.noAccommodationIcon}>⚠️</Text>
-            <Text style={styles.noAccommodationText}>Keine Unterkunft geplant</Text>
-          </View>
-        )}
-      </ScrollView>
+          {/* New check-in accommodation at bottom */}
+          {newCheckIn && renderHotelCard(newCheckIn, 'check-in')}
+          {!newCheckIn && isCheckingOut && (
+            <View style={styles.noAccommodation}>
+              <Text style={styles.noAccommodationIcon}>⚠️</Text>
+              <Text style={styles.noAccommodationText}>Keine Unterkunft geplant</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
@@ -344,6 +368,8 @@ const styles = StyleSheet.create({
   activityLocation: { ...typography.bodySmall, marginTop: spacing.xs },
   activityDetail: { ...typography.bodySmall, color: colors.accent, marginTop: spacing.xs, fontWeight: '500' },
   activityDesc: { ...typography.bodySmall, color: colors.textSecondary, marginTop: spacing.xs },
+  deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
+  deleteBtnText: { fontSize: 16, color: colors.error },
   fab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },

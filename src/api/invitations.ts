@@ -56,37 +56,33 @@ export const createInviteLink = async (
   return { token: data.token, url: `${BASE_URL}/invite/${data.token}` };
 };
 
-export const getInviteByToken = async (token: string): Promise<TripInvitation> => {
-  const { data, error } = await supabase
-    .from('trip_invitations')
-    .select('*')
-    .eq('token', token)
-    .single();
-  if (error) throw error;
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+
+export interface InviteResponse {
+  invitation: TripInvitation;
+  trip: { id: string; name: string; destination: string; start_date: string; end_date: string } | null;
+}
+
+export const getInviteByToken = async (token: string): Promise<InviteResponse> => {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/invite?token=${encodeURIComponent(token)}`, {
+    headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Einladung nicht gefunden');
   return data;
 };
 
-export const acceptInvite = async (token: string, userId: string): Promise<void> => {
-  const invitation = await getInviteByToken(token);
-
-  if (invitation.status !== 'pending') {
-    throw new Error('Einladung wurde bereits verwendet');
-  }
-
-  // Add user as collaborator
-  const { error: collabError } = await supabase
-    .from('trip_collaborators')
-    .insert({
-      trip_id: invitation.trip_id,
-      user_id: userId,
-      role: invitation.role,
-    });
-  if (collabError) throw collabError;
-
-  // Mark invitation as accepted
-  const { error: updateError } = await supabase
-    .from('trip_invitations')
-    .update({ status: 'accepted', invited_email: null })
-    .eq('token', token);
-  if (updateError) throw updateError;
+export const acceptInvite = async (token: string, userId: string): Promise<{ success: boolean; trip_id: string }> => {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/invite`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ token, userId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Fehler beim Annehmen');
+  return data;
 };

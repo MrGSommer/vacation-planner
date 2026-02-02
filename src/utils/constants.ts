@@ -8,11 +8,11 @@ export const CURRENCIES = [
 export const DEFAULT_CURRENCY = 'CHF';
 
 export const ACTIVITY_CATEGORIES = [
-  { id: 'transport', label: 'Transport', icon: '✈️' },
-  { id: 'hotel', label: 'Unterkunft', icon: '🏠' },
+  { id: 'sightseeing', label: 'Sehenswürdigkeit', icon: '🏛️' },
   { id: 'food', label: 'Essen', icon: '🍽️' },
   { id: 'activity', label: 'Aktivität', icon: '🎯' },
-  { id: 'sightseeing', label: 'Sehenswürdigkeit', icon: '🏛️' },
+  { id: 'transport', label: 'Transport', icon: '✈️' },
+  { id: 'hotel', label: 'Unterkunft', icon: '🏠' },
   { id: 'shopping', label: 'Einkaufen', icon: '🛍️' },
   { id: 'relaxation', label: 'Entspannung', icon: '🧘' },
   { id: 'stop', label: 'Zwischenstopp', icon: '📍' },

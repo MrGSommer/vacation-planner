@@ -22,11 +22,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 
 const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
-function buildInfoContent(act: Activity): string {
+interface DayInfo { date: string; dayNumber: number; }
+
+function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   const icon = getCategoryIcon(act.category);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
   let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
+  if (dayInfo) html += `<br/><span style="color:${colors.primary};font-size:12px;font-weight:600">Tag ${dayInfo.dayNumber} · ${formatDateShort(dayInfo.date)}</span>`;
   if (act.location_name) html += `<br/><small>📍 ${act.location_name}</small>`;
   if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${detail}</span>`;
   if (act.description) html += `<br/><small style="color:#636E72">${act.description}</small>`;
@@ -68,6 +71,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       if (fetchedDays.length > 0 && !selectedDayId) {
         setSelectedDayId(fetchedDays[0].id);
       }
+
+      // Build dayId → dayInfo map
+      const sortedDays = [...fetchedDays].sort((a, b) => a.date.localeCompare(b.date));
+      const dayInfoMap: Record<string, DayInfo> = {};
+      sortedDays.forEach((d, i) => { dayInfoMap[d.id] = { date: d.date, dayNumber: i + 1 }; });
 
       const mapsLib = await importMapsLibrary('maps');
       const markerLib = await importMapsLibrary('marker');
@@ -113,7 +121,8 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
         const marker = new AdvancedMarkerElement({
           position: pos, map, title: stop.name,
-          content: pin,
+          content: pin.element,
+          gmpClickable: true,
         });
         const infoWindow = new google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.arrival_date && stop.departure_date ? `${stop.arrival_date} – ${stop.departure_date} (${stop.nights} N.)` : `${stop.nights} Nacht/Nächte`}` : '📍 Zwischenstopp'}<br/><small>${stop.address || ''}</small></div>`,
@@ -136,9 +145,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
         const marker = new AdvancedMarkerElement({
           position: pos, map, title: act.title,
-          content: pin,
+          content: pin.element,
+          gmpClickable: true,
         });
-        const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+        const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
         marker.addEventListener('gmp-click', () => openInfo(infoWindow, marker));
       });
 
@@ -164,9 +174,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const depMarker = new AdvancedMarkerElement({
             position: depPos, map, title: catData.departure_station_name || 'Abfahrt',
-            content: depPin,
+            content: depPin.element,
+            gmpClickable: true,
           });
-          const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+          const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
           depMarker.addEventListener('gmp-click', () => openInfo(depInfo, depMarker));
 
           const arrGlyph = document.createElement('span');
@@ -177,9 +188,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const arrMarker = new AdvancedMarkerElement({
             position: arrPos, map, title: catData.arrival_station_name || 'Ankunft',
-            content: arrPin,
+            content: arrPin.element,
+            gmpClickable: true,
           });
-          const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+          const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
           arrMarker.addEventListener('gmp-click', () => openInfo(arrInfo, arrMarker));
 
           new google.maps.Polyline({

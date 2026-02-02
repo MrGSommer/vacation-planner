@@ -3,9 +3,8 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button } from '../../components/common';
 import { getInviteByToken, acceptInvite } from '../../api/invitations';
-import { getTrip } from '../../api/trips';
 import { useAuthContext } from '../../contexts/AuthContext';
-import { TripInvitation, Trip } from '../../types/database';
+import { TripInvitation } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 
@@ -15,7 +14,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   const { token } = route.params;
   const { session } = useAuthContext();
   const [invitation, setInvitation] = useState<TripInvitation | null>(null);
-  const [trip, setTrip] = useState<Trip | null>(null);
+  const [trip, setTrip] = useState<{ id: string; name: string; destination: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +23,11 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     (async () => {
       try {
-        const inv = await getInviteByToken(token);
-        setInvitation(inv);
-        const t = await getTrip(inv.trip_id);
-        setTrip(t);
-      } catch {
-        setError('Einladung nicht gefunden oder ungültig.');
+        const data = await getInviteByToken(token);
+        setInvitation(data.invitation);
+        setTrip(data.trip);
+      } catch (e: any) {
+        setError(e.message || 'Einladung nicht gefunden oder ungültig.');
       } finally {
         setLoading(false);
       }

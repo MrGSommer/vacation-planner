@@ -4,13 +4,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTrip } from '../../api/trips';
-import { getActivitiesForTrip } from '../../api/itineraries';
+import { getActivitiesForTrip, getDays } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getTripExpenseTotal } from '../../api/budgets';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
+import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateHelpers';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
@@ -22,11 +22,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
 const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
-function buildInfoContent(act: Activity): string {
+interface DayInfo { date: string; dayNumber: number; }
+
+function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   const icon = getCategoryIcon(act.category);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
   let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
+  if (dayInfo) html += `<br/><span style="color:${colors.primary};font-size:12px;font-weight:600">Tag ${dayInfo.dayNumber} · ${formatDateShort(dayInfo.date)}</span>`;
   if (act.location_name) html += `<br/><small>📍 ${act.location_name}</small>`;
   if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${detail}</span>`;
   if (act.description) html += `<br/><small style="color:#636E72">${act.description}</small>`;
@@ -83,10 +86,15 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const initMap = async () => {
       try {
-        const [stops, activities] = await Promise.all([
+        const [stops, activities, fetchedDays] = await Promise.all([
           getStops(tripId),
           getActivitiesForTrip(tripId),
+          getDays(tripId),
         ]);
+
+        const sortedDays = [...fetchedDays].sort((a, b) => a.date.localeCompare(b.date));
+        const dayInfoMap: Record<string, DayInfo> = {};
+        sortedDays.forEach((d, i) => { dayInfoMap[d.id] = { date: d.date, dayNumber: i + 1 }; });
 
         const mapsLib = await importMapsLibrary('maps');
         const markerLib = await importMapsLibrary('marker');
@@ -132,7 +140,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: stop.name,
-            content: pin,
+            content: pin.element,
+            gmpClickable: true,
           });
           const iw = new google.maps.InfoWindow({
             content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
@@ -151,9 +160,10 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: act.title,
-            content: pin,
+            content: pin.element,
+            gmpClickable: true,
           });
-          const iw = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+          const iw = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
           marker.addEventListener('gmp-click', () => openInfo(iw, marker));
         });
 

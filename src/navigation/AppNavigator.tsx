@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthContext } from '../contexts/AuthContext';
 import { LoadingScreen } from '../components/common';
@@ -33,12 +33,36 @@ const linking = {
 };
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading } = useAuthContext();
+  const { session, loading, pendingInviteToken, setPendingInviteToken } = useAuthContext();
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+  const prevSessionRef = useRef(session);
+
+  // Extract invite token from URL when user is not logged in
+  useEffect(() => {
+    if (Platform.OS !== 'web' || session) return;
+    const path = window.location.pathname;
+    const match = path.match(/^\/invite\/(.+)$/);
+    if (match) {
+      setPendingInviteToken(match[1]);
+    }
+  }, [session, setPendingInviteToken]);
+
+  // After login: if pendingInviteToken exists, navigate to AcceptInvite
+  useEffect(() => {
+    if (!prevSessionRef.current && session && pendingInviteToken) {
+      // Small delay to let navigator mount
+      setTimeout(() => {
+        navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
+        setPendingInviteToken(null);
+      }, 100);
+    }
+    prevSessionRef.current = session;
+  }, [session, pendingInviteToken, setPendingInviteToken]);
 
   if (loading) return <LoadingScreen />;
 
   return (
-    <NavigationContainer linking={Platform.OS === 'web' ? linking : undefined}>
+    <NavigationContainer ref={navigationRef} linking={Platform.OS === 'web' ? linking : undefined}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           <>
