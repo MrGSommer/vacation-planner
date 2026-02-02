@@ -5,7 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getDays, getActivities, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
-import { ItineraryDay, Activity } from '../../types/database';
+import { getStops } from '../../api/stops';
+import { ItineraryDay, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { getDayDates, formatDateShort, formatTime } from '../../utils/dateHelpers';
 import { getTrip } from '../../api/trips';
@@ -33,6 +34,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [newNotes, setNewNotes] = useState('');
   const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+  const [stops, setStops] = useState<TripStop[]>([]);
+  const [showDayList, setShowDayList] = useState(false);
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -47,7 +50,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const loadData = useCallback(async () => {
     try {
-      const trip = await getTrip(tripId);
+      const [trip, tripStops] = await Promise.all([getTrip(tripId), getStops(tripId)]);
+      setStops(tripStops.filter(s => s.type === 'overnight'));
       const dates = getDayDates(trip.start_date, trip.end_date);
       setDayDates(dates);
 
@@ -174,6 +178,43 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
+  // Find accommodation for the selected day
+  const selectedDay = days.find(d => d.id === selectedDayId);
+  const selectedDate = selectedDay?.date;
+
+  const getAccommodationForDay = (date: string | undefined) => {
+    if (!date) return { continuing: null, checkingIn: null };
+    let continuing: TripStop | null = null;
+    let checkingIn: TripStop | null = null;
+    for (const stop of stops) {
+      if (!stop.arrival_date || !stop.departure_date) continue;
+      if (date >= stop.arrival_date && date < stop.departure_date) {
+        if (date === stop.arrival_date) {
+          checkingIn = stop;
+        } else {
+          continuing = stop;
+        }
+      }
+    }
+    return { continuing, checkingIn };
+  };
+
+  const { continuing: continuingStay, checkingIn: newCheckIn } = getAccommodationForDay(selectedDate);
+
+  const renderAccommodationCard = (stop: TripStop, isCheckIn: boolean) => (
+    <View style={styles.accommodationCard} key={`acc-${stop.id}`}>
+      <View style={[styles.accommodationBadge, isCheckIn ? styles.checkInBadge : styles.continuingBadge]}>
+        <Text style={styles.accommodationBadgeText}>{isCheckIn ? 'Check-in' : 'Unterkunft'}</Text>
+      </View>
+      <Text style={styles.accommodationIcon}>🏠</Text>
+      <View style={styles.accommodationInfo}>
+        <Text style={styles.accommodationName}>{stop.name}</Text>
+        {stop.nights && <Text style={styles.accommodationNights}>{stop.nights} {stop.nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
+        {stop.address && <Text style={styles.accommodationAddress}>📍 {stop.address}</Text>}
+      </View>
+    </View>
+  );
+
   const renderActivityDetail = (activity: Activity) => {
     const detail = formatCategoryDetail(activity.category, activity.category_data || {});
     if (detail) return <Text style={styles.activityDetail}>{detail}</Text>;
@@ -187,22 +228,57 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       <Header title="Programm" onBack={() => navigation.goBack()} />
 
       {/* Day Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
-        {days.map((day, i) => (
-          <TouchableOpacity
-            key={day.id}
-            style={[styles.tab, selectedDayId === day.id && styles.tabActive]}
-            onPress={() => loadActivities(day.id)}
-          >
-            <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
-            <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.tabBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
+          {days.map((day, i) => (
+            <TouchableOpacity
+              key={day.id}
+              style={[styles.tab, selectedDayId === day.id && styles.tabActive]}
+              onPress={() => loadActivities(day.id)}
+            >
+              <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
+              <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity style={styles.dayListBtn} onPress={() => setShowDayList(!showDayList)}>
+          <Text style={styles.dayListBtnText}>{showDayList ? '✕' : '☰'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Day List Card */}
+      {showDayList && (
+        <Card style={styles.dayListCard}>
+          <ScrollView style={styles.dayListScroll}>
+            {days.map((day, i) => {
+              const { continuing, checkingIn } = getAccommodationForDay(day.date);
+              const acc = continuing || checkingIn;
+              return (
+                <TouchableOpacity
+                  key={day.id}
+                  style={[styles.dayListItem, selectedDayId === day.id && styles.dayListItemActive]}
+                  onPress={() => { loadActivities(day.id); setShowDayList(false); }}
+                >
+                  <View style={styles.dayListLeft}>
+                    <Text style={[styles.dayListDay, selectedDayId === day.id && styles.dayListDayActive]}>Tag {i + 1}</Text>
+                    <Text style={styles.dayListDate}>{formatDateShort(day.date)}</Text>
+                  </View>
+                  {acc && (
+                    <Text style={styles.dayListAcc} numberOfLines={1}>🏠 {acc.name}</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </Card>
+      )}
 
       {/* Activities Timeline */}
       <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
-        {activities.length === 0 ? (
+        {/* Continuing accommodation at top */}
+        {continuingStay && renderAccommodationCard(continuingStay, false)}
+
+        {activities.length === 0 && !continuingStay && !newCheckIn ? (
           <View style={styles.emptyDay}>
             <Text style={styles.emptyIcon}>📝</Text>
             <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
@@ -230,6 +306,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             </TouchableOpacity>
           ))
         )}
+
+        {/* New check-in accommodation at bottom */}
+        {newCheckIn && renderAccommodationCard(newCheckIn, true)}
       </ScrollView>
 
       {/* FAB */}
@@ -334,8 +413,20 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  tabs: { maxHeight: 72, borderBottomWidth: 1, borderBottomColor: colors.border },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
+  tabs: { flex: 1, maxHeight: 72 },
   tabsContent: { paddingHorizontal: spacing.md, gap: spacing.sm, alignItems: 'center' },
+  dayListBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  dayListBtnText: { fontSize: 18, color: colors.primary },
+  dayListCard: { marginHorizontal: spacing.md, marginTop: spacing.sm, maxHeight: 250 },
+  dayListScroll: {},
+  dayListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dayListItemActive: { backgroundColor: colors.primary + '10' },
+  dayListLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dayListDay: { ...typography.bodySmall, fontWeight: '600', minWidth: 50 },
+  dayListDayActive: { color: colors.primary },
+  dayListDate: { ...typography.caption, color: colors.textLight },
+  dayListAcc: { ...typography.caption, color: colors.textSecondary, maxWidth: 160 },
   tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.card },
   tabActive: { backgroundColor: colors.primary },
   tabDay: { ...typography.bodySmall, fontWeight: '600', textAlign: 'center' },
@@ -376,4 +467,14 @@ const styles = StyleSheet.create({
   catLabelActive: { color: colors.primary, fontWeight: '600' },
   modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   modalBtn: { flex: 1 },
+  accommodationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary, ...shadows.sm },
+  accommodationBadge: { position: 'absolute', top: spacing.xs, right: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
+  checkInBadge: { backgroundColor: colors.success + '20' },
+  continuingBadge: { backgroundColor: colors.primary + '20' },
+  accommodationBadgeText: { ...typography.caption, fontSize: 10, fontWeight: '600', color: colors.primary },
+  accommodationIcon: { fontSize: 28, marginRight: spacing.md },
+  accommodationInfo: { flex: 1 },
+  accommodationName: { ...typography.body, fontWeight: '600' },
+  accommodationNights: { ...typography.caption, color: colors.primary, marginTop: 2 },
+  accommodationAddress: { ...typography.caption, color: colors.textLight, marginTop: 2 },
 });

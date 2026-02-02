@@ -258,7 +258,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.sheetInfo}>
               <Text style={styles.sheetTitle}>{selectedStop.name}</Text>
               <Text style={styles.sheetLocation}>
-                {selectedStop.type === 'overnight' ? '🏨 Übernachtung' : '📍 Zwischenstopp'}
+                {selectedStop.type === 'overnight' ? '🏠 Übernachtung' : '📍 Zwischenstopp'}
                 {selectedStop.nights ? ` · ${selectedStop.nights} Nacht/Nächte` : ''}
               </Text>
               {selectedStop.arrival_date && selectedStop.departure_date && (

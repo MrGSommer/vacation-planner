@@ -135,7 +135,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             content: pin.element,
           });
           const iw = new google.maps.InfoWindow({
-            content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏨 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
+            content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
           });
           marker.addListener('click', () => openInfo(iw, marker));
         });
