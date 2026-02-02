@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Tou
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
-import { useToast } from '../../contexts/ToastContext';
-import { colors, spacing, typography } from '../../utils/theme';
+import { colors, spacing, typography, borderRadius, shadows } from '../../utils/theme';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -14,8 +13,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const { signUp, loading, error, clearError } = useAuth();
-  const { showToast } = useToast();
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
@@ -29,11 +28,41 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLocalError(null);
       await signUp(email.trim(), password, fullName.trim());
-      showToast('Konto erstellt! Willkommen.', 'success');
+      setShowConfirmation(true);
     } catch {}
   };
 
   const displayError = localError || error;
+
+  if (showConfirmation) {
+    return (
+      <View style={styles.container}>
+        <Header title="Registrieren" onBack={() => navigation.goBack()} />
+        <View style={styles.confirmationContainer}>
+          <View style={styles.confirmationCard}>
+            <Text style={styles.confirmationIcon}>📧</Text>
+            <Text style={styles.confirmationTitle}>E-Mail bestätigen</Text>
+            <Text style={styles.confirmationText}>
+              Wir haben eine Bestätigungs-E-Mail an{'\n'}
+              <Text style={styles.confirmationEmail}>{email}</Text>
+              {'\n'}gesendet.
+            </Text>
+            <Text style={styles.confirmationHint}>
+              Bitte öffne den Link in der E-Mail, um dein Konto zu aktivieren.
+            </Text>
+            <Button
+              title="Zur Anmeldung"
+              onPress={() => navigation.navigate('Login')}
+              style={styles.confirmationButton}
+            />
+            <TouchableOpacity onPress={() => setShowConfirmation(false)} style={styles.retryLink}>
+              <Text style={styles.retryText}>Erneut registrieren</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -73,4 +102,23 @@ const styles = StyleSheet.create({
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: '600' },
+  // Confirmation screen
+  confirmationContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  confirmationCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  confirmationIcon: { fontSize: 56, marginBottom: spacing.md },
+  confirmationTitle: { ...typography.h2, textAlign: 'center', marginBottom: spacing.md },
+  confirmationText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
+  confirmationEmail: { color: colors.primary, fontWeight: '600' },
+  confirmationHint: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xl },
+  confirmationButton: { width: '100%' },
+  retryLink: { marginTop: spacing.md },
+  retryText: { ...typography.bodySmall, color: colors.textLight },
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Card, Button } from '../../components/common';
@@ -15,11 +15,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { trips } = useTrips();
   const insets = useSafeAreaInsets();
 
-  const handleSignOut = () => {
-    Alert.alert('Abmelden', 'Möchtest du dich wirklich abmelden?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Abmelden', style: 'destructive', onPress: signOut },
-    ]);
+  const handleSignOut = async () => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Möchtest du dich wirklich abmelden?')) return;
+      await signOut();
+    } else {
+      Alert.alert('Abmelden', 'Möchtest du dich wirklich abmelden?', [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abmelden', style: 'destructive', onPress: signOut },
+      ]);
+    }
   };
 
   const completedTrips = trips.filter(t => t.status === 'completed').length;

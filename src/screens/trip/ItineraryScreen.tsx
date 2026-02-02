@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
@@ -29,6 +29,18 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [hotelActivities, setHotelActivities] = useState<Activity[]>([]);
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
+  const tabScrollRef = useRef<ScrollView>(null);
+  const tabWidths = useRef<number[]>([]);
+
+  const scrollToActiveTab = useCallback((dayId: string) => {
+    const idx = days.findIndex(d => d.id === dayId);
+    if (idx < 0 || !tabScrollRef.current) return;
+    // Estimate offset: each tab ~80px wide + 8px gap
+    const estimatedWidth = 80;
+    const gap = 8;
+    const offset = Math.max(0, idx * (estimatedWidth + gap) - estimatedWidth);
+    tabScrollRef.current.scrollTo({ x: offset, animated: true });
+  }, [days]);
 
   // Task 6: Split loadData into loadTripData (once) and loadActivities (per day)
   const loadTripData = useCallback(async () => {
@@ -67,9 +79,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const loadDayActivities = useCallback(async (dayId: string) => {
     setSelectedDayId(dayId);
+    scrollToActiveTab(dayId);
     const acts = await getActivities(dayId);
     setActivities(acts);
-  }, []);
+  }, [scrollToActiveTab]);
 
   useEffect(() => { loadTripData(); }, [loadTripData]);
   useRealtime('activities', `trip_id=eq.${tripId}`, () => {
@@ -152,13 +165,19 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleDelete = async (id: string) => {
-    Alert.alert('Löschen', 'Aktivität wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Löschen', style: 'destructive', onPress: async () => {
-        await deleteActivity(id);
-        if (selectedDayId) await loadDayActivities(selectedDayId);
-      }},
-    ]);
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Aktivität wirklich löschen?')) return;
+      await deleteActivity(id);
+      if (selectedDayId) await loadDayActivities(selectedDayId);
+    } else {
+      Alert.alert('Löschen', 'Aktivität wirklich löschen?', [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: async () => {
+          await deleteActivity(id);
+          if (selectedDayId) await loadDayActivities(selectedDayId);
+        }},
+      ]);
+    }
   };
 
   const openEdit = (activity: Activity) => {
@@ -252,7 +271,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Day Tabs */}
       <View style={styles.tabBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
+        <ScrollView ref={tabScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
           {days.map((day, i) => (
             <TouchableOpacity
               key={day.id}
