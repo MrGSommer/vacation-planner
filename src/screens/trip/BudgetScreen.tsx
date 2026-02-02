@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   expenseDate: { ...typography.caption, marginTop: 2 },
   expenseAmount: { ...typography.body, fontWeight: '700', color: colors.primary },
   emptyText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl },
-  fab: { position: 'absolute', right: spacing.xl, bottom: spacing.xl, width: 56, height: 56 },
+  fab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
