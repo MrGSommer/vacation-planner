@@ -17,8 +17,8 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
   ],
   hotel: [
-    { key: 'check_in_date', label: 'Check-in', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'check_out_date', label: 'Check-out', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { key: 'check_in_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { key: 'check_out_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'confirmation_number', label: 'Buchungsnr', type: 'text', placeholder: 'Bestätigungsnummer' },
     { key: 'hotel_contact', label: 'Kontakt', type: 'text', placeholder: 'Tel / Website' },
   ],
@@ -45,10 +45,8 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
   ],
   stop: [
-    { key: 'stop_type', label: 'Typ', type: 'select', options: ['Übernachtung', 'Zwischenstopp'] },
     { key: 'arrival_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'departure_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'nights', label: 'Nächte', type: 'text', placeholder: 'z.B. 2' },
   ],
   other: [],
 };
@@ -117,13 +115,10 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
       return parts.length > 0 ? parts.join(' · ') : null;
     }
     case 'stop': {
-      const parts: string[] = [];
-      if (data.stop_type) parts.push(data.stop_type);
       if (data.arrival_date && data.departure_date) {
-        parts.push(`${formatDE(data.arrival_date)} – ${formatDE(data.departure_date)}`);
+        return `${formatDE(data.arrival_date)} – ${formatDE(data.departure_date)}`;
       }
-      if (data.nights) parts.push(`${data.nights} Nacht/Nächte`);
-      return parts.length > 0 ? parts.join(' · ') : null;
+      return null;
     }
     default:
       return null;
