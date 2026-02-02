@@ -8,6 +8,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { PACKING_CATEGORIES } from '../../utils/constants';
 import { useRealtime } from '../../hooks/useRealtime';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { PackingSkeleton } from '../../components/skeletons/PackingSkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 
@@ -96,7 +97,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         <Text style={styles.progressText}>{packed}/{totalItems} eingepackt ({progress.toFixed(0)}%)</Text>
       </View>
 
-      {items.length === 0 ? (
+      {loading ? (
+        <PackingSkeleton />
+      ) : items.length === 0 ? (
         <EmptyState icon="🧳" title="Packliste leer" message="Füge Gegenstände hinzu, die du einpacken musst" actionLabel="Hinzufügen" onAction={() => setShowModal(true)} />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>

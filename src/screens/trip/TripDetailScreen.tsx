@@ -14,7 +14,9 @@ import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateH
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
-import { LoadingScreen, Card, TripBottomNav, Avatar } from '../../components/common';
+import { Card, TripBottomNav, Avatar } from '../../components/common';
+import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleton';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 
@@ -39,6 +41,7 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
 
 export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
+  const { user } = useAuthContext();
   const insets = useSafeAreaInsets();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activityCount, setActivityCount] = useState(0);
@@ -50,6 +53,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
+  const activitiesRef = useRef<Activity[]>([]);
 
   const loadData = async () => {
     try {
@@ -60,6 +64,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         getCollaborators(tripId).catch(() => []),
       ]);
       setTrip(t);
+      activitiesRef.current = activities;
       setActivityCount(activities.length);
       setTotalSpent(spent);
       setCollaborators(collabs);
@@ -86,11 +91,11 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
     const initMap = async () => {
       try {
-        const [stops, activities, fetchedDays] = await Promise.all([
+        const [stops, fetchedDays] = await Promise.all([
           getStops(tripId),
-          getActivitiesForTrip(tripId),
           getDays(tripId),
         ]);
+        const activities = activitiesRef.current;
 
         const sortedDays = [...fetchedDays].sort((a, b) => a.date.localeCompare(b.date));
         const dayInfoMap: Record<string, DayInfo> = {};
@@ -229,10 +234,10 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     setTimeout(() => google.maps.event.trigger(mapInstanceRef.current, 'resize'), 50);
   }, [mapFullscreen]);
 
-  if (loading || !trip) return <LoadingScreen />;
+  if (loading || !trip) return <TripDetailSkeleton />;
 
   const days = getDayCount(trip.start_date, trip.end_date);
-  const nonOwnerCollabs = collaborators.filter(c => c.role !== 'owner');
+  const nonOwnerCollabs = collaborators.filter(c => c.user_id !== user?.id);
 
   const headerContent = (
     <>

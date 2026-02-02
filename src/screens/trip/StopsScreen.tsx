@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
@@ -13,6 +13,8 @@ import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { useToast } from '../../contexts/ToastContext';
+import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
@@ -41,6 +43,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Travel mode picker
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   // Extract the primary date from category data for day mapping & sorting
   const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
@@ -257,22 +260,38 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Löschen', 'Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Löschen', style: 'destructive', onPress: async () => {
+  const handleDelete = async (id: string) => {
+    const doDelete = async () => {
+      // Optimistic: remove from UI immediately
+      const prevActivities = [...activities];
+      setActivities(prev => prev.filter(a => a.id !== id));
+      try {
         // Clear next activity's cache
-        const idx = activities.findIndex(a => a.id === id);
-        if (idx >= 0 && idx < activities.length - 1) {
-          const next = activities[idx + 1];
+        const idx = prevActivities.findIndex(a => a.id === id);
+        if (idx >= 0 && idx < prevActivities.length - 1) {
+          const next = prevActivities[idx + 1];
           const nextData = { ...(next.category_data || {}) };
           delete nextData.travel_from_prev;
           await updateActivity(next.id, { category_data: nextData }).catch(() => {});
         }
         await deleteActivity(id);
+        showToast('Eintrag gelöscht', 'success');
         await loadData();
-      }},
-    ]);
+      } catch (e: any) {
+        showToast('Fehler beim Löschen', 'error');
+        setActivities(prevActivities);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Eintrag wirklich löschen?')) return;
+      await doDelete();
+    } else {
+      Alert.alert('Löschen', 'Eintrag wirklich löschen?', [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: doDelete },
+      ]);
+    }
   };
 
   return (
@@ -280,7 +299,9 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       <Header title="Route & Stops" onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        {activities.length === 0 ? (
+        {loading ? (
+          <StopsSkeleton />
+        ) : activities.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🗺️</Text>
             <Text style={styles.emptyText}>Keine Stops geplant</Text>
@@ -357,7 +378,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                     </View>
                   </View>
                   <View style={styles.stopActions}>
-                    <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
+                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
                       <Text style={styles.deleteBtnText}>✕</Text>
                     </TouchableOpacity>
                   </View>

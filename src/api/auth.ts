@@ -17,6 +17,8 @@ export const signInWithEmail = async (email: string, password: string) => {
 };
 
 export const signOut = async () => {
+  const { clearCache } = await import('../utils/queryCache');
+  clearCache();
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 };

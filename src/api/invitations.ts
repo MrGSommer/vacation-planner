@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { TripInvitation, TripCollaborator, Profile } from '../types/database';
+import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 const BASE_URL = 'https://vacation-planner-gs.netlify.app';
 
@@ -7,13 +8,31 @@ export interface CollaboratorWithProfile extends TripCollaborator {
   profile: Pick<Profile, 'id' | 'email' | 'full_name' | 'avatar_url'>;
 }
 
-export const getCollaborators = async (tripId: string): Promise<CollaboratorWithProfile[]> => {
+export const getCollaboratorsForTrips = async (tripIds: string[]): Promise<Record<string, CollaboratorWithProfile[]>> => {
+  if (tripIds.length === 0) return {};
   const { data, error } = await supabase
     .from('trip_collaborators')
     .select('*, profile:profiles!user_id(id, email, full_name, avatar_url)')
-    .eq('trip_id', tripId);
+    .in('trip_id', tripIds);
   if (error) throw error;
-  return (data || []) as unknown as CollaboratorWithProfile[];
+  const result: Record<string, CollaboratorWithProfile[]> = {};
+  for (const id of tripIds) result[id] = [];
+  for (const row of (data || []) as unknown as CollaboratorWithProfile[]) {
+    if (!result[row.trip_id]) result[row.trip_id] = [];
+    result[row.trip_id].push(row);
+  }
+  return result;
+};
+
+export const getCollaborators = async (tripId: string): Promise<CollaboratorWithProfile[]> => {
+  return cachedQuery(`collabs:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('trip_collaborators')
+      .select('*, profile:profiles!user_id(id, email, full_name, avatar_url)')
+      .eq('trip_id', tripId);
+    if (error) throw error;
+    return (data || []) as unknown as CollaboratorWithProfile[];
+  });
 };
 
 export const removeCollaborator = async (collaboratorId: string): Promise<void> => {
@@ -22,6 +41,7 @@ export const removeCollaborator = async (collaboratorId: string): Promise<void> 
     .delete()
     .eq('id', collaboratorId);
   if (error) throw error;
+  invalidateCache('collabs:');
 };
 
 export const updateCollaboratorRole = async (

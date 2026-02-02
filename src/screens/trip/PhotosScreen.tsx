@@ -10,6 +10,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
 
@@ -21,7 +22,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { user } = useAuthContext();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   const loadPhotos = useCallback(async () => {
@@ -78,7 +79,9 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         <Text style={styles.count}>{photos.length}</Text>
       } />
 
-      {photos.length === 0 ? (
+      {loading ? (
+        <PhotosSkeleton />
+      ) : photos.length === 0 ? (
         <EmptyState icon="📸" title="Keine Fotos" message="Lade Fotos hoch, um deine Reiseerinnerungen festzuhalten" actionLabel="Foto hochladen" onAction={handleUpload} />
       ) : (
         <FlatList

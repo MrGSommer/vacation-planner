@@ -6,11 +6,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
-import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
+import { getCollaboratorsForTrips, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { EmptyState, Avatar } from '../../components/common';
+import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
 import { ShareModal } from './ShareModal';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
@@ -34,10 +35,11 @@ const MAX_AVATARS = 4;
 const TripCard: React.FC<{
   trip: Trip;
   collaborators: CollaboratorWithProfile[];
+  currentUserId: string;
   onPress: () => void;
   onShare: () => void;
-}> = React.memo(({ trip, collaborators, onPress, onShare }) => {
-  const others = collaborators.filter(c => c.role !== 'owner');
+}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare }) => {
+  const others = collaborators.filter(c => c.user_id !== currentUserId);
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
 
@@ -111,23 +113,19 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [shareTrip, setShareTrip] = useState<Trip | null>(null);
   const [collabMap, setCollabMap] = useState<Record<string, CollaboratorWithProfile[]>>({});
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const loadCollaborators = useCallback(async () => {
     if (trips.length === 0) return;
-    const map: Record<string, CollaboratorWithProfile[]> = {};
-    await Promise.all(
-      trips.map(async (t) => {
-        try {
-          map[t.id] = await getCollaborators(t.id);
-        } catch {
-          map[t.id] = [];
-        }
-      }),
-    );
-    setCollabMap(map);
+    try {
+      const map = await getCollaboratorsForTrips(trips.map(t => t.id));
+      setCollabMap(map);
+    } catch {
+      // ignore
+    }
   }, [trips]);
 
-  useEffect(() => { fetchTrips(); }, [fetchTrips]);
+  useEffect(() => { fetchTrips().finally(() => setInitialLoad(false)); }, [fetchTrips]);
   useEffect(() => { loadCollaborators(); }, [loadCollaborators]);
 
   const handleTripPress = useCallback((trip: Trip) => {
@@ -147,7 +145,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
       </View>
 
-      {trips.length === 0 && !loading ? (
+      {initialLoad && loading ? (
+        <HomeScreenSkeleton />
+      ) : trips.length === 0 && !loading ? (
         <EmptyState
           icon="🌍"
           title="Noch keine Reisen"
@@ -162,6 +162,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <TripCard
               trip={item}
               collaborators={collabMap[item.id] || []}
+              currentUserId={user?.id || ''}
               onPress={() => handleTripPress(item)}
               onShare={() => setShareTrip(item)}
             />

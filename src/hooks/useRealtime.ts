@@ -4,10 +4,16 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 
 type TableName = 'activities' | 'expenses' | 'packing_items' | 'photos';
 
+export interface RealtimePayload {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: Record<string, any> | null;
+  old: Record<string, any> | null;
+}
+
 export const useRealtime = (
   table: TableName,
   filter: string,
-  callback: () => void
+  callback: (payload?: RealtimePayload) => void
 ) => {
   useEffect(() => {
     const channel: RealtimeChannel = supabase
@@ -15,7 +21,13 @@ export const useRealtime = (
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table, filter },
-        () => { callback(); }
+        (payload) => {
+          callback({
+            eventType: payload.eventType as RealtimePayload['eventType'],
+            new: payload.new as Record<string, any> | null,
+            old: payload.old as Record<string, any> | null,
+          });
+        }
       )
       .subscribe();
 

@@ -13,11 +13,14 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { useToast } from '../../contexts/ToastContext';
+import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
 export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
+  const { showToast } = useToast();
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
@@ -165,17 +168,27 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleDelete = async (id: string) => {
+    const doDelete = async () => {
+      // Optimistic: remove from UI immediately
+      setActivities(prev => prev.filter(a => a.id !== id));
+      setHotelActivities(prev => prev.filter(a => a.id !== id));
+      try {
+        await deleteActivity(id);
+        showToast('Aktivität gelöscht', 'success');
+        if (selectedDayId) await loadDayActivities(selectedDayId);
+      } catch (e: any) {
+        showToast('Fehler beim Löschen', 'error');
+        if (selectedDayId) await loadDayActivities(selectedDayId);
+      }
+    };
+
     if (Platform.OS === 'web') {
       if (!window.confirm('Aktivität wirklich löschen?')) return;
-      await deleteActivity(id);
-      if (selectedDayId) await loadDayActivities(selectedDayId);
+      await doDelete();
     } else {
       Alert.alert('Löschen', 'Aktivität wirklich löschen?', [
         { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Löschen', style: 'destructive', onPress: async () => {
-          await deleteActivity(id);
-          if (selectedDayId) await loadDayActivities(selectedDayId);
-        }},
+        { text: 'Löschen', style: 'destructive', onPress: doDelete },
       ]);
     }
   };
@@ -253,7 +266,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           {nights && <Text style={styles.accommodationNights}>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
           {hotel.location_name && <Text style={styles.accommodationAddress}>📍 {hotel.location_name}</Text>}
         </View>
-        <TouchableOpacity onPress={() => handleDelete(hotel.id)} style={styles.deleteBtn}>
+        <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(hotel.id); }} style={styles.deleteBtn}>
           <Text style={styles.deleteBtnText}>✕</Text>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -272,6 +285,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header title="Programm" onBack={() => navigation.goBack()} />
 
+      {loading && days.length === 0 ? (
+        <ItinerarySkeleton />
+      ) : (
+      <>
       {/* Day Tabs */}
       <View style={styles.tabBar}>
         <ScrollView ref={tabScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
@@ -314,8 +331,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Text style={styles.activityTitle}>{activity.title}</Text>
                       {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
                     </View>
-                    {/* Task 4: Delete button */}
-                    <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
+                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
                       <Text style={styles.deleteBtnText}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -354,6 +370,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         tripEndDate={tripEndDate}
         defaultCategoryData={modalDefaultCategoryData}
       />
+      </>
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>

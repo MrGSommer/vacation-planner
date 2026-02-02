@@ -8,6 +8,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { BUDGET_CATEGORIES } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Budget'>;
 
@@ -51,6 +52,9 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       <Header title="Budget" onBack={() => navigation.goBack()} />
+      {loading ? (
+        <BudgetSkeleton />
+      ) : (
       <ScrollView contentContainerStyle={styles.content}>
         {/* Total */}
         <Card style={styles.totalCard}>
@@ -92,6 +96,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           ))
         )}
       </ScrollView>
+      )}
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>

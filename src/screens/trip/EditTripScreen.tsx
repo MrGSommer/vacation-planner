@@ -24,7 +24,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { CURRENCIES } from '../../utils/constants';
 import { formatDate, getDayDates } from '../../utils/dateHelpers';
-import { LoadingScreen } from '../../components/common';
+import { EditTripSkeleton } from '../../components/skeletons/EditTripSkeleton';
 
 type CoverMode = 'none' | 'upload' | 'unsplash';
 
@@ -328,7 +328,12 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     } catch { showToast('Fehler', 'error'); }
   };
 
-  if (loadingTrip) return <LoadingScreen />;
+  if (loadingTrip) return (
+    <View style={styles.container}>
+      <Header title="Reise bearbeiten" onBack={() => navigation.goBack()} />
+      <EditTripSkeleton />
+    </View>
+  );
 
   const owner = members.find(m => m.role === 'owner');
   const nonOwnerMembers = members.filter(m => m.role !== 'owner');

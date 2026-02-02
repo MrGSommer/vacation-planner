@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { ItineraryDay, Activity } from '../types/database';
+import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
   const { data, error } = await supabase
@@ -32,13 +33,15 @@ export const getActivities = async (dayId: string): Promise<Activity[]> => {
 };
 
 export const getActivitiesForTrip = async (tripId: string): Promise<Activity[]> => {
-  const { data, error } = await supabase
-    .from('activities')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('sort_order');
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`activities:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('sort_order');
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 export const createActivity = async (activity: Omit<Activity, 'id' | 'created_at' | 'updated_at'>): Promise<Activity> => {
@@ -48,6 +51,7 @@ export const createActivity = async (activity: Omit<Activity, 'id' | 'created_at
     .select()
     .single();
   if (error) throw error;
+  invalidateCache(`activities:${activity.trip_id}`);
   return data;
 };
 
@@ -59,12 +63,14 @@ export const updateActivity = async (id: string, updates: Partial<Activity>): Pr
     .select()
     .single();
   if (error) throw error;
+  if (data.trip_id) invalidateCache(`activities:${data.trip_id}`);
   return data;
 };
 
 export const deleteActivity = async (id: string): Promise<void> => {
   const { error } = await supabase.from('activities').delete().eq('id', id);
   if (error) throw error;
+  invalidateCache('activities:');
 };
 
 export const deleteDay = async (dayId: string): Promise<void> => {
