@@ -56,33 +56,27 @@ export const createInviteLink = async (
   return { token: data.token, url: `${BASE_URL}/invite/${data.token}` };
 };
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
 export interface InviteResponse {
   invitation: TripInvitation;
   trip: { id: string; name: string; destination: string; start_date: string; end_date: string } | null;
 }
 
 export const getInviteByToken = async (token: string): Promise<InviteResponse> => {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/invite?token=${encodeURIComponent(token)}`, {
-    headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+  const { data, error } = await supabase.functions.invoke('invite', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    body: { token },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Einladung nicht gefunden');
+  if (error) throw new Error(error.message || 'Einladung nicht gefunden');
+  if (data?.error) throw new Error(data.error);
   return data;
 };
 
 export const acceptInvite = async (token: string, userId: string): Promise<{ success: boolean; trip_id: string }> => {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/invite`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({ token, userId }),
+  const { data, error } = await supabase.functions.invoke('invite', {
+    body: { token, userId },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Fehler beim Annehmen');
+  if (error) throw new Error(error.message || 'Fehler beim Annehmen');
+  if (data?.error) throw new Error(data.error);
   return data;
 };

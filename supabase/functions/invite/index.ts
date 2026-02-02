@@ -6,6 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -17,105 +23,59 @@ Deno.serve(async (req) => {
   );
 
   try {
-    if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const token = url.searchParams.get('token');
-      if (!token) {
-        return new Response(JSON.stringify({ error: 'Token fehlt' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    const body = await req.json().catch(() => ({}));
+    const { token, userId } = body;
 
-      const { data: invitation, error: invError } = await supabase
-        .from('trip_invitations')
-        .select('*')
-        .eq('token', token)
-        .single();
+    if (!token) {
+      return json({ error: 'Token fehlt' }, 400);
+    }
 
-      if (invError || !invitation) {
-        return new Response(JSON.stringify({ error: 'Einladung nicht gefunden' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    // Look up invitation
+    const { data: invitation, error: invError } = await supabase
+      .from('trip_invitations')
+      .select('*')
+      .eq('token', token)
+      .single();
 
+    if (invError || !invitation) {
+      return json({ error: 'Einladung nicht gefunden' }, 404);
+    }
+
+    // If no userId provided, just return invitation + trip info (lookup mode)
+    if (!userId) {
       const { data: trip } = await supabase
         .from('trips')
         .select('id, name, destination, start_date, end_date')
         .eq('id', invitation.trip_id)
         .single();
 
-      return new Response(JSON.stringify({ invitation, trip }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ invitation, trip });
     }
 
-    if (req.method === 'POST') {
-      const { token, userId } = await req.json();
-
-      if (!token || !userId) {
-        return new Response(JSON.stringify({ error: 'Token und userId erforderlich' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const { data: invitation, error: invError } = await supabase
-        .from('trip_invitations')
-        .select('*')
-        .eq('token', token)
-        .single();
-
-      if (invError || !invitation) {
-        return new Response(JSON.stringify({ error: 'Einladung nicht gefunden' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      if (invitation.status !== 'pending') {
-        return new Response(JSON.stringify({ error: 'Einladung wurde bereits verwendet' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const { error: collabError } = await supabase
-        .from('trip_collaborators')
-        .insert({
-          trip_id: invitation.trip_id,
-          user_id: userId,
-          role: invitation.role,
-        });
-
-      if (collabError) {
-        return new Response(JSON.stringify({ error: collabError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      await supabase
-        .from('trip_invitations')
-        .update({ status: 'accepted', invited_email: null })
-        .eq('token', token);
-
-      return new Response(JSON.stringify({ success: true, trip_id: invitation.trip_id }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Accept mode: userId is provided
+    if (invitation.status !== 'pending') {
+      return json({ error: 'Einladung wurde bereits verwendet' }, 400);
     }
 
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    const { error: collabError } = await supabase
+      .from('trip_collaborators')
+      .insert({
+        trip_id: invitation.trip_id,
+        user_id: userId,
+        role: invitation.role,
+      });
+
+    if (collabError) {
+      return json({ error: collabError.message }, 500);
+    }
+
+    await supabase
+      .from('trip_invitations')
+      .update({ status: 'accepted', invited_email: null })
+      .eq('token', token);
+
+    return json({ success: true, trip_id: invitation.trip_id });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ error: e.message }, 500);
   }
 });
