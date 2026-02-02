@@ -41,7 +41,7 @@ const loadGoogleMaps = (): Promise<void> => {
     if (existing) { existing.addEventListener('load', () => resolve()); return; }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&loading=async`;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('Failed to load Google Maps'));
