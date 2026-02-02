@@ -1,0 +1,137 @@
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Button } from '../../components/common';
+import { getInviteByToken, acceptInvite } from '../../api/invitations';
+import { getTrip } from '../../api/trips';
+import { useAuthContext } from '../../contexts/AuthContext';
+import { TripInvitation, Trip } from '../../types/database';
+import { RootStackParamList } from '../../types/navigation';
+import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'AcceptInvite'>;
+
+export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
+  const { token } = route.params;
+  const { session } = useAuthContext();
+  const [invitation, setInvitation] = useState<TripInvitation | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const inv = await getInviteByToken(token);
+        setInvitation(inv);
+        const t = await getTrip(inv.trip_id);
+        setTrip(t);
+      } catch {
+        setError('Einladung nicht gefunden oder ungültig.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [token]);
+
+  const handleAccept = async () => {
+    if (!session?.user?.id || !invitation) return;
+    setAccepting(true);
+    try {
+      await acceptInvite(token, session.user.id);
+      setDone(true);
+    } catch (e: any) {
+      setError(e.message || 'Fehler beim Annehmen der Einladung');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const handleGoToTrip = () => {
+    if (invitation) {
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }, { name: 'TripDetail', params: { tripId: invitation.trip_id } }] });
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Einladung wird geladen...</Text>
+      </View>
+    );
+  }
+
+  if (error && !invitation) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorIcon}>😕</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <Button title="Zur Startseite" onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })} style={styles.btn} />
+      </View>
+    );
+  }
+
+  if (done) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.successIcon}>✅</Text>
+        <Text style={styles.title}>Einladung angenommen!</Text>
+        <Text style={styles.subtitle}>Du hast jetzt Zugriff auf «{trip?.name}».</Text>
+        <Button title="Reise öffnen" onPress={handleGoToTrip} style={styles.btn} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.center}>
+      <View style={styles.card}>
+        <Text style={styles.cardIcon}>✉️</Text>
+        <Text style={styles.title}>Einladung</Text>
+        {trip && <Text style={styles.tripName}>{trip.name}</Text>}
+        {trip && <Text style={styles.subtitle}>{trip.destination}</Text>}
+        <Text style={styles.roleText}>
+          Rolle: {invitation?.role === 'editor' ? 'Bearbeiter' : 'Betrachter'}
+        </Text>
+        {invitation?.status !== 'pending' ? (
+          <>
+            <Text style={styles.usedText}>Diese Einladung wurde bereits verwendet.</Text>
+            <Button title="Zur Startseite" onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })} style={styles.btn} />
+          </>
+        ) : (
+          <>
+            {error && <Text style={styles.errorSmall}>{error}</Text>}
+            <Button title="Einladung annehmen" onPress={handleAccept} loading={accepting} style={styles.btn} />
+          </>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
+  loadingText: { ...typography.body, color: colors.textSecondary, marginTop: spacing.md },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  cardIcon: { fontSize: 48, marginBottom: spacing.md },
+  title: { ...typography.h2, textAlign: 'center', marginBottom: spacing.xs },
+  tripName: { ...typography.h3, color: colors.primary, textAlign: 'center' },
+  subtitle: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
+  roleText: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.lg },
+  btn: { marginTop: spacing.md, width: '100%' },
+  errorIcon: { fontSize: 48, marginBottom: spacing.md },
+  errorText: { ...typography.body, color: colors.error, textAlign: 'center', marginBottom: spacing.lg },
+  successIcon: { fontSize: 48, marginBottom: spacing.md },
+  usedText: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', marginBottom: spacing.md },
+  errorSmall: { ...typography.bodySmall, color: colors.error, textAlign: 'center', marginBottom: spacing.sm },
+});

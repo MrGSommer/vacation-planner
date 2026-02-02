@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -15,9 +16,19 @@ import { BudgetScreen } from '../screens/trip/BudgetScreen';
 import { PackingScreen } from '../screens/trip/PackingScreen';
 import { StopsScreen } from '../screens/trip/StopsScreen';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
+import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const linking = {
+  prefixes: ['https://vacation-planner-gs.netlify.app', 'vacation-planner://'],
+  config: {
+    screens: {
+      AcceptInvite: 'invite/:token',
+    },
+  },
+};
 
 export const AppNavigator: React.FC = () => {
   const { session, loading } = useAuthContext();
@@ -25,7 +36,7 @@ export const AppNavigator: React.FC = () => {
   if (loading) return <LoadingScreen />;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={Platform.OS === 'web' ? linking : undefined}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           <>
@@ -40,6 +51,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Packing" component={PackingScreen} />
             <Stack.Screen name="Stops" component={StopsScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
