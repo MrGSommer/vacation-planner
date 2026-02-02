@@ -8,3 +8,5 @@ export { EmptyState } from './EmptyState';
 export { LoadingScreen } from './LoadingScreen';
 export { Toast } from './Toast';
 export { PlaceAutocomplete } from './PlaceAutocomplete';
+export { DatePickerInput } from './DatePickerInput';
+export { CategoryFieldsInput } from './CategoryFieldsInput';

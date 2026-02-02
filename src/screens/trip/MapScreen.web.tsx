@@ -8,6 +8,8 @@ import { getActivitiesForTrip } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { TripStop, Activity, Trip } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors } from '../../utils/theme';
 
 const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -15,6 +17,20 @@ const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || '';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
+
+const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+
+function buildInfoContent(act: Activity): string {
+  const icon = getCategoryIcon(act.category);
+  const catData = act.category_data || {};
+  const detail = formatCategoryDetail(act.category, catData);
+  let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
+  if (act.location_name) html += `<br/><small>📍 ${act.location_name}</small>`;
+  if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${detail}</span>`;
+  if (act.description) html += `<br/><small style="color:#636E72">${act.description}</small>`;
+  html += '</div>';
+  return html;
+}
 
 const loadGoogleMaps = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -86,27 +102,96 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         marker.addListener('click', () => infoWindow.open(map, marker));
       });
 
-      // Activity markers
+      // Activity markers with category-specific styling
       a.filter((act: Activity) => act.location_lat && act.location_lng).forEach((act: Activity) => {
         const pos = { lat: act.location_lat!, lng: act.location_lng! };
         bounds.extend(pos);
+        const catColor = CATEGORY_COLORS[act.category] || colors.accent;
+        const icon = getCategoryIcon(act.category);
+
         const marker = new google.maps.Marker({
           position: pos,
           map,
           title: act.title,
+          label: { text: icon, fontSize: '14px' },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: colors.accent,
+            scale: 16,
+            fillColor: catColor,
             fillOpacity: 1,
             strokeColor: '#FFFFFF',
             strokeWeight: 2,
           },
         });
-        const infoWindow = new google.maps.InfoWindow({
-          content: `<div style="font-family:sans-serif"><strong>${act.title}</strong><br/><small>${act.location_name || ''}</small></div>`,
-        });
+
+        const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act) });
         marker.addListener('click', () => infoWindow.open(map, marker));
+      });
+
+      // Transport routes: draw lines between departure and arrival stations
+      a.filter((act: Activity) => act.category === 'transport').forEach((act: Activity) => {
+        const catData = act.category_data || {};
+        const depLat = catData.departure_station_lat;
+        const depLng = catData.departure_station_lng;
+        const arrLat = catData.arrival_station_lat;
+        const arrLng = catData.arrival_station_lng;
+
+        if (depLat && depLng && arrLat && arrLng) {
+          const depPos = { lat: depLat, lng: depLng };
+          const arrPos = { lat: arrLat, lng: arrLng };
+          bounds.extend(depPos);
+          bounds.extend(arrPos);
+
+          // Departure marker
+          const depMarker = new google.maps.Marker({
+            position: depPos,
+            map,
+            title: catData.departure_station_name || 'Abfahrt',
+            label: { text: '🛫', fontSize: '14px' },
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: CATEGORY_COLORS.transport,
+              fillOpacity: 0.8,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 2,
+            },
+          });
+          const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+          depMarker.addListener('click', () => depInfo.open(map, depMarker));
+
+          // Arrival marker
+          const arrMarker = new google.maps.Marker({
+            position: arrPos,
+            map,
+            title: catData.arrival_station_name || 'Ankunft',
+            label: { text: '🛬', fontSize: '14px' },
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: CATEGORY_COLORS.transport,
+              fillOpacity: 0.8,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 2,
+            },
+          });
+          const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
+          arrMarker.addListener('click', () => arrInfo.open(map, arrMarker));
+
+          // Dashed line between departure and arrival
+          new google.maps.Polyline({
+            path: [depPos, arrPos],
+            map,
+            strokeColor: CATEGORY_COLORS.transport,
+            strokeWeight: 3,
+            strokeOpacity: 0,
+            icons: [{
+              icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: CATEGORY_COLORS.transport },
+              offset: '0',
+              repeat: '15px',
+            }],
+          });
+        }
       });
 
       // Route via Directions

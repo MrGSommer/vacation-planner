@@ -56,6 +56,9 @@ export interface Activity {
   cost: number | null;
   currency: string;
   sort_order: number;
+  check_in_date: string | null;
+  check_out_date: string | null;
+  category_data: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
