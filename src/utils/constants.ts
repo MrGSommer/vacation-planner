@@ -15,6 +15,7 @@ export const ACTIVITY_CATEGORIES = [
   { id: 'sightseeing', label: 'Sehenswürdigkeit', icon: '🏛️' },
   { id: 'shopping', label: 'Einkaufen', icon: '🛍️' },
   { id: 'relaxation', label: 'Entspannung', icon: '🧘' },
+  { id: 'stop', label: 'Zwischenstopp', icon: '📍' },
   { id: 'other', label: 'Sonstiges', icon: '📌' },
 ] as const;
 

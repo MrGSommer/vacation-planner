@@ -44,6 +44,12 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'facility_type', label: 'Art', type: 'select', options: ['Spa', 'Strand', 'Pool', 'Therme', 'Sonstiges'] },
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
   ],
+  stop: [
+    { key: 'stop_type', label: 'Typ', type: 'select', options: ['Übernachtung', 'Zwischenstopp'] },
+    { key: 'arrival_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { key: 'departure_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { key: 'nights', label: 'Nächte', type: 'text', placeholder: 'z.B. 2' },
+  ],
   other: [],
 };
 
@@ -55,6 +61,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   sightseeing: '#E74C3C',
   shopping: '#E84393',
   relaxation: '#00CEC9',
+  stop: '#2D3436',
   other: '#636E72',
 };
 
@@ -107,6 +114,15 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
       const parts: string[] = [];
       if (data.facility_type) parts.push(data.facility_type);
       if (data.reservation_time) parts.push(data.reservation_time);
+      return parts.length > 0 ? parts.join(' · ') : null;
+    }
+    case 'stop': {
+      const parts: string[] = [];
+      if (data.stop_type) parts.push(data.stop_type);
+      if (data.arrival_date && data.departure_date) {
+        parts.push(`${formatDE(data.arrival_date)} – ${formatDE(data.departure_date)}`);
+      }
+      if (data.nights) parts.push(`${data.nights} Nacht/Nächte`);
       return parts.length > 0 ? parts.join(' · ') : null;
     }
     default:
