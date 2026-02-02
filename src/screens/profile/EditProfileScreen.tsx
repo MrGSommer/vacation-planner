@@ -28,32 +28,50 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || null);
   const [saving, setSaving] = useState(false);
 
+  const resizeForWeb = async (uri: string, maxSize: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, maxSize, maxSize);
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('Canvas toBlob failed'))),
+          'image/jpeg',
+          0.7,
+        );
+      };
+      img.onerror = reject;
+      img.src = uri;
+    });
+  };
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: 0.5,
     });
 
     if (result.canceled || !result.assets[0]) return;
 
     const uri = result.assets[0].uri;
-    const ext = uri.split('.').pop() || 'jpg';
-    const path = `${user!.id}.${ext}`;
+    const path = `${user!.id}.jpg`;
 
     try {
       let body: any;
       if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        body = await response.blob();
+        body = await resizeForWeb(uri, 200);
       } else {
-        body = { uri, type: `image/${ext}`, name: `avatar.${ext}` } as any;
+        body = { uri, type: 'image/jpeg', name: 'avatar.jpg' } as any;
       }
 
       const { error } = await supabase.storage
         .from('avatars')
-        .upload(path, body, { upsert: true, contentType: `image/${ext}` });
+        .upload(path, body, { upsert: true, contentType: 'image/jpeg' });
       if (error) throw error;
 
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
