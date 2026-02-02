@@ -20,7 +20,6 @@ interface Props {
 // Maps end-date keys to their corresponding start-date keys (for minDate constraint)
 const DATE_PAIRS: Record<string, string> = {
   check_out_date: 'check_in_date',
-  arrival_date: 'departure_date',
 };
 
 export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange, tripStartDate, tripEndDate }) => {

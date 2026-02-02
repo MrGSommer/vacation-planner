@@ -52,8 +52,7 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
   ],
   stop: [
-    { key: 'arrival_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'departure_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
   ],
   other: [
     { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
@@ -124,8 +123,8 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
       return parts.length > 0 ? parts.join(' · ') : null;
     }
     case 'stop': {
-      if (data.arrival_date && data.departure_date) {
-        return `${formatDE(data.arrival_date)} – ${formatDE(data.departure_date)}`;
+      if (data.date) {
+        return formatDE(data.date);
       }
       return null;
     }

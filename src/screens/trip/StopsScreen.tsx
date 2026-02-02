@@ -12,7 +12,6 @@ import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
-import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
@@ -39,7 +38,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
-  const [selectedDayId, setSelectedDayId] = useState<string>('');
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('hotel');
   const [newStartTime, setNewStartTime] = useState('');
@@ -53,6 +51,22 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   // Travel mode picker
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
 
+  // Extract the primary date from category data for day mapping & sorting
+  const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
+    switch (category) {
+      case 'hotel': return catData.check_in_date;
+      case 'stop': return catData.date;
+      default: return catData.date;
+    }
+  };
+
+  // Resolve the correct day_id for a given date string
+  const getDayIdForDate = (date: string | undefined): string | null => {
+    if (!date) return null;
+    const day = days.find(d => d.date === date);
+    return day?.id || null;
+  };
+
   const loadData = useCallback(async () => {
     try {
       const [t, acts, fetchedDays] = await Promise.all([
@@ -62,11 +76,14 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       ]);
       setTrip(t);
       setDays(fetchedDays);
-      if (fetchedDays.length > 0 && !selectedDayId) {
-        setSelectedDayId(fetchedDays[0].id);
-      }
 
-      const filtered = acts.filter(a => a.category === 'hotel' || a.category === 'stop');
+      const filtered = acts
+        .filter(a => a.category === 'hotel' || a.category === 'stop')
+        .sort((a, b) => {
+          const dateA = getActivityDate(a.category, a.category_data || {}) || '';
+          const dateB = getActivityDate(b.category, b.category_data || {}) || '';
+          return dateA.localeCompare(dateB);
+        });
       setActivities(filtered);
 
       // Load cached travel info from category_data
@@ -203,7 +220,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const openEditModal = (activity: Activity) => {
     setEditingActivity(activity);
-    setSelectedDayId(activity.day_id);
     setNewTitle(activity.title);
     setNewCategory(activity.category);
     setNewStartTime(activity.start_time || '');
@@ -217,10 +233,12 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleSave = async () => {
-    if (!newTitle.trim() || !selectedDayId) return;
+    const actDate = getActivityDate(newCategory, newCategoryData);
+    const resolvedDayId = getDayIdForDate(actDate) || (days.length > 0 ? days[0].id : '');
+    if (!newTitle.trim() || !resolvedDayId) return;
     try {
       const payload = {
-        day_id: selectedDayId,
+        day_id: resolvedDayId,
         title: newTitle.trim(),
         description: newNotes.trim() || null,
         category: newCategory,
@@ -395,21 +413,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{editingActivity ? 'Stop bearbeiten' : 'Stop hinzufügen'}</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={styles.fieldLabel}>Tag</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-                {days.map(day => (
-                  <TouchableOpacity
-                    key={day.id}
-                    style={[styles.catChip, selectedDayId === day.id && styles.catChipActive]}
-                    onPress={() => setSelectedDayId(day.id)}
-                  >
-                    <Text style={[styles.catLabel, selectedDayId === day.id && styles.catLabelActive]}>
-                      {formatDateShort(day.date)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
               <Input label="Titel" placeholder="z.B. Hotel Schweizerhof" value={newTitle} onChangeText={setNewTitle} />
 
               <Text style={styles.fieldLabel}>Kategorie</Text>
@@ -428,7 +431,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
               <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
 
-              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
+              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} tripStartDate={trip?.start_date} tripEndDate={trip?.end_date} />
 
               <PlaceAutocomplete
                 label="Ort"
@@ -448,7 +451,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
             <View style={styles.modalButtons}>
               <Button title="Abbrechen" onPress={() => { setShowModal(false); resetForm(); }} variant="ghost" style={styles.modalBtn} />
-              <Button title={editingActivity ? 'Speichern' : 'Hinzufügen'} onPress={handleSave} disabled={!newTitle.trim() || !selectedDayId} style={styles.modalBtn} />
+              <Button title={editingActivity ? 'Speichern' : 'Hinzufügen'} onPress={handleSave} disabled={!newTitle.trim()} style={styles.modalBtn} />
             </View>
           </View>
         </View>

@@ -99,7 +99,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     switch (category) {
       case 'hotel': return catData.check_in_date;
       case 'transport': return catData.departure_date;
-      case 'stop': return catData.arrival_date;
+      case 'stop': return catData.date;
       default: return catData.date;
     }
   };
