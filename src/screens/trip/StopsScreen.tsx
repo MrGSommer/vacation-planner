@@ -2,67 +2,62 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Card } from '../../components/common';
-import { PlaceAutocomplete, PlaceResult } from '../../components/common/PlaceAutocomplete';
-import { Input } from '../../components/common';
-import { getStops, createStop, deleteStop, reorderStops, updateStop } from '../../api/stops';
+import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { getActivitiesForTrip, getDays, createActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { calculateRouteForStops, formatDuration, formatDistance } from '../../services/directions';
-import { TripStop, Trip } from '../../types/database';
+import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
+import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
-const calcNights = (arrival: string | null, departure: string | null): number | null => {
-  if (!arrival || !departure) return null;
-  const a = new Date(arrival);
-  const d = new Date(departure);
-  const diff = Math.round((d.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : null;
-};
-
-const formatDateShort = (d: string) => {
-  const date = new Date(d + 'T00:00:00');
-  return date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' });
-};
-
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
-  const [stops, setStops] = useState<TripStop[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
-  const [stopType, setStopType] = useState<'overnight' | 'waypoint'>('overnight');
-  const [arrivalDate, setArrivalDate] = useState('');
-  const [departureDate, setDepartureDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [travelInfo, setTravelInfo] = useState<Map<string, { duration: number; distance: number }>>(new Map());
 
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [selectedDayId, setSelectedDayId] = useState<string>('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState('hotel');
+  const [newStartTime, setNewStartTime] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newLocationLat, setNewLocationLat] = useState<number | null>(null);
+  const [newLocationLng, setNewLocationLng] = useState<number | null>(null);
+  const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
+  const [newNotes, setNewNotes] = useState('');
+  const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
+
   const loadData = useCallback(async () => {
     try {
-      const [t, s] = await Promise.all([getTrip(tripId), getStops(tripId)]);
+      const [t, acts, fetchedDays] = await Promise.all([
+        getTrip(tripId),
+        getActivitiesForTrip(tripId),
+        getDays(tripId),
+      ]);
       setTrip(t);
-      setStops(s);
-      // Use saved travel info from DB first
-      const infoMap = new Map<string, { duration: number; distance: number }>();
-      s.forEach(st => {
-        if (st.travel_duration_from_prev != null && st.travel_distance_from_prev != null) {
-          infoMap.set(st.id, { duration: st.travel_duration_from_prev, distance: st.travel_distance_from_prev });
-        }
-      });
-      setTravelInfo(infoMap);
+      setDays(fetchedDays);
+      if (fetchedDays.length > 0 && !selectedDayId) {
+        setSelectedDayId(fetchedDays[0].id);
+      }
 
-      // Recalculate in background if 2+ stops
-      if (s.length >= 2) {
-        calculateRouteForStops(s.map(st => ({ id: st.id, lat: st.lat, lng: st.lng }))).then(info => {
+      const filtered = acts.filter(a => a.category === 'hotel' || a.category === 'stop');
+      setActivities(filtered);
+
+      // Calculate travel info between stops that have coordinates
+      const withCoords = filtered.filter(a => a.location_lat && a.location_lng);
+      if (withCoords.length >= 2) {
+        calculateRouteForStops(withCoords.map(a => ({ id: a.id, lat: a.location_lat!, lng: a.location_lng! }))).then(info => {
           setTravelInfo(info);
-          for (const [stopId, result] of info.entries()) {
-            updateStop(stopId, {
-              travel_duration_from_prev: result.duration,
-              travel_distance_from_prev: result.distance,
-            }).catch(() => {});
-          }
         });
       }
     } catch (e) {
@@ -74,54 +69,58 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleAdd = async () => {
-    if (!selectedPlace) return;
-    const nights = calcNights(arrivalDate, departureDate);
+  const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+
+  const resetForm = () => {
+    setNewTitle('');
+    setNewNotes('');
+    setNewLocation('');
+    setNewLocationLat(null);
+    setNewLocationLng(null);
+    setNewLocationAddress(null);
+    setNewStartTime('');
+    setNewCategory('hotel');
+    setNewCategoryData({});
+  };
+
+  const handleAddActivity = async () => {
+    if (!newTitle.trim() || !selectedDayId) return;
     try {
-      await createStop({
+      await createActivity({
+        day_id: selectedDayId,
         trip_id: tripId,
-        name: selectedPlace.name,
-        place_id: selectedPlace.place_id,
-        address: selectedPlace.address,
-        lat: selectedPlace.lat,
-        lng: selectedPlace.lng,
-        type: stopType,
-        nights: stopType === 'overnight' ? (nights || 1) : 0,
-        arrival_date: arrivalDate || null,
-        departure_date: stopType === 'overnight' ? (departureDate || null) : null,
-        sort_order: stops.length,
-        travel_duration_from_prev: null,
-        travel_distance_from_prev: null,
+        title: newTitle.trim(),
+        description: newNotes.trim() || null,
+        category: newCategory,
+        start_time: newStartTime || null,
+        end_time: null,
+        location_name: newLocation.trim() || null,
+        location_lat: newLocationLat,
+        location_lng: newLocationLng,
+        location_address: newLocationAddress,
+        cost: null,
+        currency: 'CHF',
+        sort_order: activities.length,
+        check_in_date: newCategoryData.check_in_date || null,
+        check_out_date: newCategoryData.check_out_date || null,
+        category_data: newCategoryData,
       });
       setShowModal(false);
-      setSelectedPlace(null);
-      setStopType('overnight');
-      setArrivalDate('');
-      setDepartureDate('');
+      resetForm();
       await loadData();
     } catch (e) {
-      Alert.alert('Fehler', 'Stop konnte nicht erstellt werden');
+      Alert.alert('Fehler', 'Aktivität konnte nicht erstellt werden');
     }
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert('Löschen', 'Stop wirklich löschen?', [
+    Alert.alert('Löschen', 'Eintrag wirklich löschen?', [
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Löschen', style: 'destructive', onPress: async () => {
-        await deleteStop(id);
+        await deleteActivity(id);
         await loadData();
       }},
     ]);
-  };
-
-  const handleMove = async (index: number, direction: -1 | 1) => {
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= stops.length) return;
-    const newStops = [...stops];
-    [newStops[index], newStops[newIndex]] = [newStops[newIndex], newStops[index]];
-    setStops(newStops);
-    await reorderStops(tripId, newStops.map(s => s.id));
-    await loadData();
   };
 
   return (
@@ -129,24 +128,24 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       <Header title="Route & Stops" onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        {stops.length === 0 ? (
+        {activities.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🗺️</Text>
             <Text style={styles.emptyText}>Keine Stops geplant</Text>
             <Text style={styles.emptySubtext}>Füge Übernachtungen und Zwischenstopps hinzu</Text>
           </View>
         ) : (
-          stops.map((stop, i) => (
-            <View key={stop.id}>
-              {i > 0 && travelInfo.has(stop.id) && (
+          activities.map((activity, i) => (
+            <View key={activity.id}>
+              {i > 0 && travelInfo.has(activity.id) && (
                 <View style={styles.travelBadge}>
                   <Text style={styles.travelIcon}>🚗</Text>
                   <Text style={styles.travelText}>
-                    {formatDuration(travelInfo.get(stop.id)!.duration)} · {formatDistance(travelInfo.get(stop.id)!.distance)}
+                    {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
                   </Text>
                 </View>
               )}
-              {i > 0 && !travelInfo.has(stop.id) && (
+              {i > 0 && !travelInfo.has(activity.id) && activity.location_lat && (
                 <View style={styles.travelBadge}>
                   <Text style={styles.travelIcon}>🚗</Text>
                   <Text style={styles.travelText}>Berechne...</Text>
@@ -155,40 +154,29 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
               <Card style={styles.stopCard}>
                 <View style={styles.stopHeader}>
-                  <Text style={styles.stopIcon}>{stop.type === 'overnight' ? '🏨' : '📍'}</Text>
+                  <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
                   <View style={styles.stopInfo}>
-                    <Text style={styles.stopName}>{stop.name}</Text>
-                    {stop.address && <Text style={styles.stopAddress} numberOfLines={1}>{stop.address}</Text>}
+                    <Text style={styles.stopName}>{activity.title}</Text>
+                    {(activity.location_name || activity.location_address) && (
+                      <Text style={styles.stopAddress} numberOfLines={1}>
+                        {activity.location_name || activity.location_address}
+                      </Text>
+                    )}
                     <View style={styles.stopMeta}>
-                      {stop.type === 'overnight' && stop.arrival_date && stop.departure_date && (
-                        <Text style={styles.stopNights}>
-                          {formatDateShort(stop.arrival_date)} – {formatDateShort(stop.departure_date)} ({stop.nights} {stop.nights === 1 ? 'Nacht' : 'Nächte'})
-                        </Text>
+                      {activity.start_time && (
+                        <Text style={styles.stopTime}>🕐 {activity.start_time}</Text>
                       )}
-                      {stop.type === 'overnight' && (!stop.arrival_date || !stop.departure_date) && (
-                        <Text style={styles.stopNights}>{stop.nights} {stop.nights === 1 ? 'Nacht' : 'Nächte'}</Text>
-                      )}
-                      {stop.type === 'waypoint' && (
-                        <Text style={styles.stopTypeLabel}>Zwischenstopp</Text>
-                      )}
-                      {stop.type === 'waypoint' && stop.arrival_date && (
-                        <Text style={styles.stopDate}>{formatDateShort(stop.arrival_date)}</Text>
-                      )}
+                      {(() => {
+                        const detail = formatCategoryDetail(activity.category, activity.category_data || {});
+                        return detail ? (
+                          <Text style={[styles.stopDetail, { color: CATEGORY_COLORS[activity.category] || colors.primary }]}>{detail}</Text>
+                        ) : null;
+                      })()}
                     </View>
                   </View>
                 </View>
                 <View style={styles.stopActions}>
-                  {i > 0 && (
-                    <TouchableOpacity onPress={() => handleMove(i, -1)} style={styles.moveBtn}>
-                      <Text style={styles.moveBtnText}>▲</Text>
-                    </TouchableOpacity>
-                  )}
-                  {i < stops.length - 1 && (
-                    <TouchableOpacity onPress={() => handleMove(i, 1)} style={styles.moveBtn}>
-                      <Text style={styles.moveBtnText}>▼</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity onPress={() => handleDelete(stop.id)} style={styles.deleteBtn}>
+                  <TouchableOpacity onPress={() => handleDelete(activity.id)} style={styles.deleteBtn}>
                     <Text style={styles.deleteBtnText}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -209,48 +197,61 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Stop hinzufügen</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
+              {/* Day Picker */}
+              <Text style={styles.fieldLabel}>Tag</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
+                {days.map(day => (
+                  <TouchableOpacity
+                    key={day.id}
+                    style={[styles.catChip, selectedDayId === day.id && styles.catChipActive]}
+                    onPress={() => setSelectedDayId(day.id)}
+                  >
+                    <Text style={[styles.catLabel, selectedDayId === day.id && styles.catLabelActive]}>
+                      {formatDateShort(day.date)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Input label="Titel" placeholder="z.B. Hotel Schweizerhof" value={newTitle} onChangeText={setNewTitle} />
+
+              <Text style={styles.fieldLabel}>Kategorie</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
+                {ACTIVITY_CATEGORIES.map(cat => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[styles.catChip, newCategory === cat.id && styles.catChipActive]}
+                    onPress={() => { setNewCategory(cat.id); setNewCategoryData({}); }}
+                  >
+                    <Text style={styles.catIcon}>{cat.icon}</Text>
+                    <Text style={[styles.catLabel, newCategory === cat.id && styles.catLabelActive]}>{cat.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
+
+              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
+
               <PlaceAutocomplete
-                label="Ort / Hotel"
+                label="Ort"
                 placeholder="z.B. Hotel Schweizerhof, Luzern"
-                onSelect={setSelectedPlace}
+                value={newLocation}
+                onChangeText={setNewLocation}
+                onSelect={(place: PlaceResult) => {
+                  setNewLocation(place.name);
+                  setNewLocationLat(place.lat);
+                  setNewLocationLng(place.lng);
+                  setNewLocationAddress(place.address);
+                }}
               />
 
-              <Text style={styles.fieldLabel}>Typ</Text>
-              <View style={styles.typeRow}>
-                <TouchableOpacity
-                  style={[styles.typeChip, stopType === 'overnight' && styles.typeChipActive]}
-                  onPress={() => setStopType('overnight')}
-                >
-                  <Text style={styles.typeIcon}>🏨</Text>
-                  <Text style={[styles.typeLabel, stopType === 'overnight' && styles.typeLabelActive]}>Übernachtung</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.typeChip, stopType === 'waypoint' && styles.typeChipActive]}
-                  onPress={() => setStopType('waypoint')}
-                >
-                  <Text style={styles.typeIcon}>📍</Text>
-                  <Text style={[styles.typeLabel, stopType === 'waypoint' && styles.typeLabelActive]}>Zwischenstopp</Text>
-                </TouchableOpacity>
-              </View>
-
-              {stopType === 'overnight' ? (
-                <>
-                  <Input label="Check-in (Anreise)" placeholder="YYYY-MM-DD" value={arrivalDate} onChangeText={setArrivalDate} />
-                  <Input label="Check-out (Abreise)" placeholder="YYYY-MM-DD" value={departureDate} onChangeText={setDepartureDate} />
-                  {arrivalDate && departureDate && calcNights(arrivalDate, departureDate) && (
-                    <Text style={styles.nightsPreview}>
-                      = {calcNights(arrivalDate, departureDate)} {calcNights(arrivalDate, departureDate) === 1 ? 'Nacht' : 'Nächte'}
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <Input label="Datum" placeholder="YYYY-MM-DD" value={arrivalDate} onChangeText={setArrivalDate} />
-              )}
+              <Input label="Notizen" placeholder="Optionale Notizen..." value={newNotes} onChangeText={setNewNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
             </ScrollView>
 
             <View style={styles.modalButtons}>
-              <Button title="Abbrechen" onPress={() => { setShowModal(false); setSelectedPlace(null); setArrivalDate(''); setDepartureDate(''); }} variant="ghost" style={styles.modalBtn} />
-              <Button title="Hinzufügen" onPress={handleAdd} disabled={!selectedPlace} style={styles.modalBtn} />
+              <Button title="Abbrechen" onPress={() => { setShowModal(false); resetForm(); }} variant="ghost" style={styles.modalBtn} />
+              <Button title="Hinzufügen" onPress={handleAddActivity} disabled={!newTitle.trim() || !selectedDayId} style={styles.modalBtn} />
             </View>
           </View>
         </View>
@@ -286,12 +287,9 @@ const styles = StyleSheet.create({
   stopName: { ...typography.body, fontWeight: '600' },
   stopAddress: { ...typography.caption, marginTop: 2 },
   stopMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
-  stopNights: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  stopTypeLabel: { ...typography.caption, color: colors.secondary, fontWeight: '600' },
-  stopDate: { ...typography.caption, color: colors.textSecondary },
+  stopTime: { ...typography.caption, color: colors.primary, fontWeight: '600' },
+  stopDetail: { ...typography.caption, fontWeight: '600' },
   stopActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  moveBtn: { padding: spacing.xs },
-  moveBtnText: { fontSize: 16, color: colors.textSecondary },
   deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
   deleteBtnText: { fontSize: 16, color: colors.error },
   fab: { position: 'absolute', right: spacing.xl, bottom: spacing.xl, width: 56, height: 56 },
@@ -301,13 +299,21 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: colors.card, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.xl, maxHeight: '80%' },
   modalTitle: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
-  typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  typeChip: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1.5, borderColor: colors.border },
-  typeChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-  typeIcon: { fontSize: 16, marginRight: spacing.xs },
-  typeLabel: { ...typography.bodySmall },
-  typeLabelActive: { color: colors.primary, fontWeight: '600' },
-  nightsPreview: { ...typography.bodySmall, color: colors.primary, fontWeight: '600', textAlign: 'center', marginBottom: spacing.md },
+  categoryRow: { marginBottom: spacing.md },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginRight: spacing.sm,
+  },
+  catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
+  catIcon: { fontSize: 16, marginRight: spacing.xs },
+  catLabel: { ...typography.bodySmall },
+  catLabelActive: { color: colors.primary, fontWeight: '600' },
   modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   modalBtn: { flex: 1 },
 });
