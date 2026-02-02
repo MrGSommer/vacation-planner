@@ -25,20 +25,23 @@ let mapsLoading: Promise<void> | null = null;
 const ensureGoogleMaps = (): Promise<void> => {
   if (Platform.OS !== 'web') return Promise.resolve();
   if (mapsLoading) return mapsLoading;
-  mapsLoading = new Promise((resolve, reject) => {
-    if ((window as any).google?.maps?.places?.AutocompleteService) { resolve(); return; }
+  mapsLoading = new Promise<void>((resolve, reject) => {
+    const waitForApi = () => {
+      // Wait until importLibrary is available (needed for loading=async)
+      if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
+      setTimeout(waitForApi, 50);
+    };
+    if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
     const existing = document.getElementById('google-maps-script');
     if (existing) {
-      // Script tag exists but may still be loading
-      if ((window as any).google?.maps) { resolve(); return; }
-      existing.addEventListener('load', () => resolve());
+      waitForApi();
       return;
     }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,marker&loading=async`;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => waitForApi();
     script.onerror = () => reject(new Error('Failed to load Google Maps'));
     document.head.appendChild(script);
   });

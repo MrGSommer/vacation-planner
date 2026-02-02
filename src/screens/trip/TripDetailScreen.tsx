@@ -44,6 +44,9 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [collaborators, setCollaborators] = useState<CollaboratorWithProfile[]>([]);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
+  const mapInstanceRef = useRef<any>(null);
+  const mapInitializedRef = useRef(false);
 
   const loadData = async () => {
     try {
@@ -72,9 +75,10 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     return unsubscribe;
   }, [navigation, tripId]);
 
-  // Initialize map after trip loads
+  // Initialize map after trip loads (only once per tripId)
   useEffect(() => {
     if (!trip || Platform.OS !== 'web') return;
+    if (mapInitializedRef.current) return;
     let cancelled = false;
 
     const initMap = async () => {
@@ -84,7 +88,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           getActivitiesForTrip(tripId),
         ]);
 
-        // Use importLibrary to properly load the maps core
         const mapsLib = await importMapsLibrary('maps');
         const markerLib = await importMapsLibrary('marker');
         await importMapsLibrary('routes');
@@ -98,14 +101,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             ? { lat: trip.destination_lat, lng: trip.destination_lng }
             : { lat: 47.37, lng: 8.54 };
 
-        const MapClass = mapsLib.Map || google.maps.Map;
-        const map = new MapClass(mapRef.current, {
+        const map = new mapsLib.Map(mapRef.current, {
           center,
           zoom: 8,
           mapTypeControl: false,
           streetViewControl: false,
           mapId: 'vacation-planner-map',
         });
+        mapInstanceRef.current = map;
 
         const bounds = new google.maps.LatLngBounds();
         let openInfoWindow: google.maps.InfoWindow | null = null;
@@ -118,7 +121,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         const { AdvancedMarkerElement, PinElement } = markerLib;
 
-        // Stop markers
         stops.forEach((stop: TripStop, i: number) => {
           const pos = { lat: stop.lat, lng: stop.lng };
           bounds.extend(pos);
@@ -138,7 +140,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           marker.addListener('click', () => openInfo(iw, marker));
         });
 
-        // Activity markers
         activities.filter((a: Activity) => a.location_lat && a.location_lng).forEach((act: Activity) => {
           const pos = { lat: act.location_lat!, lng: act.location_lng! };
           bounds.extend(pos);
@@ -159,7 +160,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           marker.addListener('click', () => openInfo(iw, marker));
         });
 
-        // Route
         if (stops.length >= 2) {
           const ds = new google.maps.DirectionsService();
           const waypoints = stops.slice(1, -1).map((s: TripStop) => ({
@@ -181,15 +181,46 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         const hasPoints = stops.length > 0 || activities.some((a: Activity) => a.location_lat);
         if (hasPoints) map.fitBounds(bounds, 60);
+        mapInitializedRef.current = true;
         setMapReady(true);
       } catch (e) {
         console.error('Map init error:', e);
       }
     };
 
-    const timer = setTimeout(initMap, 100);
-    return () => { cancelled = true; clearTimeout(timer); };
+    initMap();
+    return () => { cancelled = true; };
   }, [trip, tripId]);
+
+  // Reset map init flag when tripId changes
+  useEffect(() => {
+    mapInitializedRef.current = false;
+    setMapReady(false);
+  }, [tripId]);
+
+  // Handle fullscreen toggle
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !mapRef.current || !mapInstanceRef.current) return;
+    const el = mapRef.current;
+    if (mapFullscreen) {
+      el.style.position = 'fixed';
+      el.style.top = '0';
+      el.style.left = '0';
+      el.style.width = '100vw';
+      el.style.height = '100vh';
+      el.style.zIndex = '9999';
+      el.style.borderRadius = '0';
+    } else {
+      el.style.position = '';
+      el.style.top = '';
+      el.style.left = '';
+      el.style.width = '100%';
+      el.style.height = '300px';
+      el.style.zIndex = '';
+      el.style.borderRadius = '12px';
+    }
+    setTimeout(() => google.maps.event.trigger(mapInstanceRef.current, 'resize'), 50);
+  }, [mapFullscreen]);
 
   if (loading || !trip) return <LoadingScreen />;
 
@@ -296,7 +327,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           {/* Map */}
           {Platform.OS === 'web' && (
             <Card style={styles.mapCard}>
-              <Text style={styles.mapTitle}>Karte</Text>
+              <View style={styles.mapHeader}>
+                <Text style={styles.mapTitle}>Karte</Text>
+                {mapReady && (
+                  <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.fullscreenBtn}>
+                    <Text style={styles.fullscreenBtnText}>⛶</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <div ref={mapRef} style={{ width: '100%', height: 300, borderRadius: 12 }} />
             </Card>
           )}
@@ -311,6 +349,15 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       </ScrollView>
 
       <TripBottomNav tripId={tripId} activeTab="TripDetail" />
+
+      {Platform.OS === 'web' && mapFullscreen && (
+        <TouchableOpacity
+          onPress={() => setMapFullscreen(false)}
+          style={[styles.fullscreenCloseBtn, { top: insets.top + spacing.sm }]}
+        >
+          <Text style={styles.fullscreenCloseText}>← Schliessen</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -346,7 +393,12 @@ const styles = StyleSheet.create({
   photosSubtitle: { ...typography.caption, color: colors.textLight },
   photosArrow: { fontSize: 24, color: colors.textLight },
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
-  mapTitle: { ...typography.h3, marginBottom: spacing.sm },
+  mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  mapTitle: { ...typography.h3 },
+  fullscreenBtn: { padding: spacing.xs },
+  fullscreenBtnText: { fontSize: 20, color: colors.primary },
+  fullscreenCloseBtn: { position: 'absolute' as any, left: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
+  fullscreenCloseText: { ...typography.body, fontWeight: '600' as const, color: colors.primary },
   notesCard: { marginBottom: spacing.lg },
   notesTitle: { ...typography.h3, marginBottom: spacing.sm },
   notesText: { ...typography.body, color: colors.textSecondary },

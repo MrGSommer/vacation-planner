@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FlashList } from '@shopify/flash-list';
@@ -36,8 +36,7 @@ const TripCard: React.FC<{
   collaborators: CollaboratorWithProfile[];
   onPress: () => void;
   onShare: () => void;
-}> = ({ trip, collaborators, onPress, onShare }) => {
-  // Exclude owner, show only other collaborators
+}> = React.memo(({ trip, collaborators, onPress, onShare }) => {
   const others = collaborators.filter(c => c.role !== 'owner');
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
@@ -58,7 +57,7 @@ const TripCard: React.FC<{
             {shown.length > 0 && (
               <View style={styles.avatarRow}>
                 {shown.map((c, i) => (
-                  <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }]}>
+                  <View key={c.id} style={[styles.avatarWrap, i > 0 && styles.avatarOverlap]}>
                     <Avatar
                       uri={c.profile.avatar_url}
                       name={c.profile.full_name || c.profile.email}
@@ -67,7 +66,7 @@ const TripCard: React.FC<{
                   </View>
                 ))}
                 {overflow > 0 && (
-                  <View style={[styles.avatarWrap, { marginLeft: -8 }]}>
+                  <View style={[styles.avatarWrap, styles.avatarOverlap]}>
                     <View style={styles.avatarOverflow}>
                       <Text style={styles.avatarOverflowText}>+{overflow}</Text>
                     </View>
@@ -102,7 +101,9 @@ const TripCard: React.FC<{
       )}
     </TouchableOpacity>
   );
-};
+});
+
+const Separator = () => <View style={styles.separator} />;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips } = useTrips();
@@ -165,8 +166,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               onShare={() => setShareTrip(item)}
             />
           )}
-          contentContainerStyle={{ padding: spacing.md }}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={Separator}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchTrips} tintColor={colors.primary} />}
         />
       )}
@@ -209,6 +210,9 @@ const styles = StyleSheet.create({
   badgeText: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' },
   avatarRow: { flexDirection: 'row', alignItems: 'center' },
   avatarWrap: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', borderRadius: 15, overflow: 'hidden' },
+  avatarOverlap: { marginLeft: -8 },
+  listContent: { padding: spacing.md },
+  separator: { height: spacing.md },
   avatarOverflow: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   avatarOverflowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   cardBottom: {},
