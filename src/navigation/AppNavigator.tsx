@@ -16,6 +16,8 @@ import { BudgetScreen } from '../screens/trip/BudgetScreen';
 import { PackingScreen } from '../screens/trip/PackingScreen';
 import { StopsScreen } from '../screens/trip/StopsScreen';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
+import { NotificationsScreen } from '../screens/profile/NotificationsScreen';
+import { LanguageCurrencyScreen } from '../screens/profile/LanguageCurrencyScreen';
 import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
 import { RootStackParamList } from '../types/navigation';
 
@@ -51,6 +53,8 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Packing" component={PackingScreen} />
             <Stack.Screen name="Stops" component={StopsScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="LanguageCurrency" component={LanguageCurrencyScreen} />
             <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
           </>
         ) : (

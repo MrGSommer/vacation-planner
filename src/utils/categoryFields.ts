@@ -13,7 +13,9 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'reference_number', label: 'Buchungsnr / Flugnr', type: 'text', placeholder: 'z.B. LX1234' },
     { key: 'departure_station', label: 'Abfahrt', type: 'place', placeholder: 'Abfahrtsort' },
     { key: 'arrival_station', label: 'Ankunft', type: 'place', placeholder: 'Ankunftsort' },
+    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM' },
+    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
   ],
   hotel: [
@@ -23,24 +25,29 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'hotel_contact', label: 'Kontakt', type: 'text', placeholder: 'Tel / Website' },
   ],
   food: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'cuisine_type', label: 'Küche', type: 'text', placeholder: 'z.B. Italienisch' },
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
     { key: 'reservation_name', label: 'Reserviert auf', type: 'text', placeholder: 'Name' },
   ],
   activity: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'booking_reference', label: 'Buchungsreferenz', type: 'text', placeholder: 'Buchungsnr' },
     { key: 'duration', label: 'Dauer', type: 'text', placeholder: 'z.B. 2h' },
     { key: 'participants', label: 'Teilnehmer', type: 'text', placeholder: 'Anzahl' },
   ],
   sightseeing: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'opening_hours', label: 'Öffnungszeiten', type: 'text', placeholder: 'z.B. 09:00–18:00' },
     { key: 'ticket_price', label: 'Eintritt', type: 'text', placeholder: 'z.B. 15 EUR' },
     { key: 'website_url', label: 'Website', type: 'text', placeholder: 'https://...' },
   ],
   shopping: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'shop_type', label: 'Art', type: 'select', options: ['Mall', 'Markt', 'Boutique', 'Outlet', 'Sonstiges'] },
   ],
   relaxation: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'facility_type', label: 'Art', type: 'select', options: ['Spa', 'Strand', 'Pool', 'Therme', 'Sonstiges'] },
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
   ],
@@ -48,7 +55,9 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'arrival_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'departure_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
   ],
-  other: [],
+  other: [
+    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
+  ],
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {

@@ -10,6 +10,8 @@ export interface PlaceResult {
   address: string;
   lat: number;
   lng: number;
+  opening_hours?: string;
+  website?: string;
 }
 
 interface Props {
@@ -115,15 +117,22 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     try {
       const placesLib = await importMapsLibrary('places');
       const place = new placesLib.Place({ id: prediction.place_id });
-      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'regularOpeningHours', 'websiteURI'] });
       const loc = place.location;
       if (loc) {
+        // Format opening hours as readable string
+        let opening_hours: string | undefined;
+        if (place.regularOpeningHours?.weekdayDescriptions) {
+          opening_hours = place.regularOpeningHours.weekdayDescriptions.join('\n');
+        }
         onSelect({
           name: place.displayName || prediction.structured_formatting?.main_text || prediction.description,
           place_id: prediction.place_id,
           address: place.formattedAddress || prediction.description,
           lat: loc.lat(),
           lng: loc.lng(),
+          opening_hours,
+          website: place.websiteURI || undefined,
         });
       }
     } catch {

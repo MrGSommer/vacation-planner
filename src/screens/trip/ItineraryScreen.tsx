@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
+import { Header, Button, Input, Card, PlaceAutocomplete, CategoryFieldsInput, TimePickerInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
-import { getDays, getActivities, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
-import { getStops } from '../../api/stops';
-import { ItineraryDay, Activity, TripStop } from '../../types/database';
+import { getDays, getActivities, getActivitiesForTrip, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
+import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { getDayDates, formatDateShort, formatTime } from '../../utils/dateHelpers';
 import { getTrip } from '../../api/trips';
@@ -34,8 +33,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [newNotes, setNewNotes] = useState('');
   const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [stops, setStops] = useState<TripStop[]>([]);
-  const [showDayList, setShowDayList] = useState(false);
+  const [hotelActivities, setHotelActivities] = useState<Activity[]>([]);
+  const [tripStartDate, setTripStartDate] = useState<string>('');
+  const [tripEndDate, setTripEndDate] = useState<string>('');
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -50,8 +50,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const loadData = useCallback(async () => {
     try {
-      const [trip, tripStops] = await Promise.all([getTrip(tripId), getStops(tripId)]);
-      setStops(tripStops.filter(s => s.type === 'overnight'));
+      const [trip, allTripActivities] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId)]);
+      setHotelActivities(allTripActivities.filter(a => a.category === 'hotel'));
+      setTripStartDate(trip.start_date);
+      setTripEndDate(trip.end_date);
       const dates = getDayDates(trip.start_date, trip.end_date);
       setDayDates(dates);
 
@@ -85,6 +87,23 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => { loadData(); }, [loadData]);
   useRealtime('activities', `trip_id=eq.${tripId}`, loadData);
 
+  // Resolve the correct day_id for a given date string
+  const getDayIdForDate = (date: string | undefined): string | null => {
+    if (!date) return null;
+    const day = days.find(d => d.date === date);
+    return day?.id || null;
+  };
+
+  // Extract the primary date from category data for day mapping
+  const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
+    switch (category) {
+      case 'hotel': return catData.check_in_date;
+      case 'transport': return catData.departure_date;
+      case 'stop': return catData.arrival_date;
+      default: return catData.date;
+    }
+  };
+
   const loadActivities = async (dayId: string) => {
     setSelectedDayId(dayId);
     const acts = await getActivities(dayId);
@@ -94,8 +113,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleAddActivity = async () => {
     if (!newTitle.trim() || !selectedDayId) return;
     try {
+      const actDate = getActivityDate(newCategory, newCategoryData);
+      const targetDayId = getDayIdForDate(actDate) || selectedDayId;
       await createActivity({
-        day_id: selectedDayId,
+        day_id: targetDayId,
         trip_id: tripId,
         title: newTitle.trim(),
         description: newNotes.trim() || null,
@@ -155,6 +176,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleEditSave = async () => {
     if (!editActivity || !editTitle.trim()) return;
     try {
+      const actDate = getActivityDate(editCategory, editCategoryData);
+      const newDayId = getDayIdForDate(actDate);
       await updateActivity(editActivity.id, {
         title: editTitle.trim(),
         category: editCategory,
@@ -167,9 +190,13 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         check_in_date: editCategoryData.check_in_date || null,
         check_out_date: editCategoryData.check_out_date || null,
         category_data: editCategoryData,
+        ...(newDayId ? { day_id: newDayId } : {}),
       });
       setShowEditModal(false);
       setEditActivity(null);
+      // Refresh hotel activities and current day
+      const allActs = await getActivitiesForTrip(tripId);
+      setHotelActivities(allActs.filter(a => a.category === 'hotel'));
       if (selectedDayId) await loadActivities(selectedDayId);
     } catch {
       Alert.alert('Fehler', 'Aktivität konnte nicht aktualisiert werden');
@@ -178,42 +205,60 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
-  // Find accommodation for the selected day
+  // Find accommodation for the selected day based on hotel activities
   const selectedDay = days.find(d => d.id === selectedDayId);
   const selectedDate = selectedDay?.date;
 
   const getAccommodationForDay = (date: string | undefined) => {
-    if (!date) return { continuing: null, checkingIn: null };
-    let continuing: TripStop | null = null;
-    let checkingIn: TripStop | null = null;
-    for (const stop of stops) {
-      if (!stop.arrival_date || !stop.departure_date) continue;
-      if (date >= stop.arrival_date && date < stop.departure_date) {
-        if (date === stop.arrival_date) {
-          checkingIn = stop;
-        } else {
-          continuing = stop;
-        }
+    if (!date) return { continuing: null, checkingOut: false, checkingIn: null };
+    let continuing: Activity | null = null;
+    let checkingOut = false;
+    let checkingIn: Activity | null = null;
+    for (const hotel of hotelActivities) {
+      const ci = hotel.category_data?.check_in_date || hotel.check_in_date;
+      const co = hotel.category_data?.check_out_date || hotel.check_out_date;
+      if (!ci || !co) continue;
+      // Continuing stay: checked in before today, checkout today or later
+      if (ci < date && co >= date) {
+        continuing = hotel;
+        if (co === date) checkingOut = true;
+      }
+      // New check-in: check_in_date matches today
+      if (ci === date) {
+        checkingIn = hotel;
       }
     }
-    return { continuing, checkingIn };
+    return { continuing, checkingOut, checkingIn };
   };
 
-  const { continuing: continuingStay, checkingIn: newCheckIn } = getAccommodationForDay(selectedDate);
+  const { continuing: continuingStay, checkingOut: isCheckingOut, checkingIn: newCheckIn } = getAccommodationForDay(selectedDate);
 
-  const renderAccommodationCard = (stop: TripStop, isCheckIn: boolean) => (
-    <View style={styles.accommodationCard} key={`acc-${stop.id}`}>
-      <View style={[styles.accommodationBadge, isCheckIn ? styles.checkInBadge : styles.continuingBadge]}>
-        <Text style={styles.accommodationBadgeText}>{isCheckIn ? 'Check-in' : 'Unterkunft'}</Text>
-      </View>
-      <Text style={styles.accommodationIcon}>🏠</Text>
-      <View style={styles.accommodationInfo}>
-        <Text style={styles.accommodationName}>{stop.name}</Text>
-        {stop.nights && <Text style={styles.accommodationNights}>{stop.nights} {stop.nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
-        {stop.address && <Text style={styles.accommodationAddress}>📍 {stop.address}</Text>}
-      </View>
-    </View>
-  );
+  const getNightsCount = (hotel: Activity) => {
+    const ci = hotel.category_data?.check_in_date || hotel.check_in_date;
+    const co = hotel.category_data?.check_out_date || hotel.check_out_date;
+    if (!ci || !co) return null;
+    const diff = Math.round((new Date(co).getTime() - new Date(ci).getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : null;
+  };
+
+  const renderHotelCard = (hotel: Activity, type: 'continuing' | 'check-in', isCheckout?: boolean) => {
+    const nights = getNightsCount(hotel);
+    const badgeText = type === 'check-in' ? 'Check-in' : isCheckout ? 'Check-out' : 'Unterkunft';
+    const badgeStyle = type === 'check-in' ? styles.checkInBadge : isCheckout ? styles.checkOutBadge : styles.continuingBadge;
+    return (
+      <TouchableOpacity style={styles.accommodationCard} key={`acc-${hotel.id}-${type}`} onPress={() => openEdit(hotel)} activeOpacity={0.7}>
+        <View style={[styles.accommodationBadge, badgeStyle]}>
+          <Text style={[styles.accommodationBadgeText, isCheckout && { color: colors.error }]}>{badgeText}</Text>
+        </View>
+        <Text style={styles.accommodationIcon}>🏠</Text>
+        <View style={styles.accommodationInfo}>
+          <Text style={styles.accommodationName}>{hotel.title}</Text>
+          {nights && <Text style={styles.accommodationNights}>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
+          {hotel.location_name && <Text style={styles.accommodationAddress}>📍 {hotel.location_name}</Text>}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderActivityDetail = (activity: Activity) => {
     const detail = formatCategoryDetail(activity.category, activity.category_data || {});
@@ -241,55 +286,25 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             </TouchableOpacity>
           ))}
         </ScrollView>
-        <TouchableOpacity style={styles.dayListBtn} onPress={() => setShowDayList(!showDayList)}>
-          <Text style={styles.dayListBtnText}>{showDayList ? '✕' : '☰'}</Text>
-        </TouchableOpacity>
       </View>
-
-      {/* Day List Card */}
-      {showDayList && (
-        <Card style={styles.dayListCard}>
-          <ScrollView style={styles.dayListScroll}>
-            {days.map((day, i) => {
-              const { continuing, checkingIn } = getAccommodationForDay(day.date);
-              const acc = continuing || checkingIn;
-              return (
-                <TouchableOpacity
-                  key={day.id}
-                  style={[styles.dayListItem, selectedDayId === day.id && styles.dayListItemActive]}
-                  onPress={() => { loadActivities(day.id); setShowDayList(false); }}
-                >
-                  <View style={styles.dayListLeft}>
-                    <Text style={[styles.dayListDay, selectedDayId === day.id && styles.dayListDayActive]}>Tag {i + 1}</Text>
-                    <Text style={styles.dayListDate}>{formatDateShort(day.date)}</Text>
-                  </View>
-                  {acc && (
-                    <Text style={styles.dayListAcc} numberOfLines={1}>🏠 {acc.name}</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </Card>
-      )}
 
       {/* Activities Timeline */}
       <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
         {/* Continuing accommodation at top */}
-        {continuingStay && renderAccommodationCard(continuingStay, false)}
+        {continuingStay && renderHotelCard(continuingStay, 'continuing', isCheckingOut)}
 
-        {activities.length === 0 && !continuingStay && !newCheckIn ? (
+        {activities.filter(a => a.category !== 'hotel').length === 0 && !continuingStay && !newCheckIn ? (
           <View style={styles.emptyDay}>
             <Text style={styles.emptyIcon}>📝</Text>
             <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
             <Text style={styles.emptySubtext}>Tippe auf +, um eine Aktivität hinzuzufügen</Text>
           </View>
         ) : (
-          activities.map((activity, i) => (
+          activities.filter(a => a.category !== 'hotel').map((activity, i) => (
             <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => openEdit(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
               <View style={styles.timelineLine}>
                 <View style={[styles.timelineDot, { backgroundColor: CATEGORY_COLORS[activity.category] || colors.primary }]} />
-                {i < activities.length - 1 && <View style={styles.timelineConnector} />}
+                {i < activities.filter(a => a.category !== 'hotel').length - 1 && <View style={styles.timelineConnector} />}
               </View>
               <Card style={styles.activityContent}>
                 <View style={styles.activityHeader}>
@@ -308,11 +323,17 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
 
         {/* New check-in accommodation at bottom */}
-        {newCheckIn && renderAccommodationCard(newCheckIn, true)}
+        {newCheckIn && renderHotelCard(newCheckIn, 'check-in')}
+        {!newCheckIn && isCheckingOut && (
+          <View style={styles.noAccommodation}>
+            <Text style={styles.noAccommodationIcon}>⚠️</Text>
+            <Text style={styles.noAccommodationText}>Keine Unterkunft geplant</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.fab} onPress={() => { setNewCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
@@ -331,15 +352,15 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                   <TouchableOpacity
                     key={cat.id}
                     style={[styles.catChip, newCategory === cat.id && styles.catChipActive]}
-                    onPress={() => { setNewCategory(cat.id); setNewCategoryData({}); }}
+                    onPress={() => { setNewCategory(cat.id); setNewCategoryData(selectedDate ? { date: selectedDate } : {}); }}
                   >
                     <Text style={styles.catIcon}>{cat.icon}</Text>
                     <Text style={[styles.catLabel, newCategory === cat.id && styles.catLabelActive]}>{cat.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
-              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
+              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
+              <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} tripStartDate={tripStartDate} tripEndDate={tripEndDate} />
               <PlaceAutocomplete
                 label="Ort"
                 placeholder="z.B. Sagrada Familia"
@@ -350,6 +371,13 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                   setNewLocationLat(place.lat);
                   setNewLocationLng(place.lng);
                   setNewLocationAddress(place.address);
+                  // Auto-fill sightseeing/food fields from Google Places
+                  const updates: Record<string, any> = {};
+                  if (place.opening_hours) updates.opening_hours = place.opening_hours;
+                  if (place.website) updates.website_url = place.website;
+                  if (Object.keys(updates).length > 0) {
+                    setNewCategoryData(prev => ({ ...prev, ...updates }));
+                  }
                 }}
               />
               <Input label="Notizen" placeholder="Optionale Notizen..." value={newNotes} onChangeText={setNewNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
@@ -382,8 +410,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={editStartTime} onChangeText={setEditStartTime} />
-              <CategoryFieldsInput category={editCategory} data={editCategoryData} onChange={setEditCategoryData} />
+              <TimePickerInput label="Uhrzeit" value={editStartTime} onChange={setEditStartTime} placeholder="z.B. 09:00" />
+              <CategoryFieldsInput category={editCategory} data={editCategoryData} onChange={setEditCategoryData} tripStartDate={tripStartDate} tripEndDate={tripEndDate} />
               <PlaceAutocomplete
                 label="Ort"
                 placeholder="z.B. Sagrada Familia"
@@ -394,6 +422,12 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                   setEditLocationLat(place.lat);
                   setEditLocationLng(place.lng);
                   setEditLocationAddress(place.address);
+                  const updates: Record<string, any> = {};
+                  if (place.opening_hours) updates.opening_hours = place.opening_hours;
+                  if (place.website) updates.website_url = place.website;
+                  if (Object.keys(updates).length > 0) {
+                    setEditCategoryData(prev => ({ ...prev, ...updates }));
+                  }
                 }}
               />
               <Input label="Notizen" placeholder="Optionale Notizen..." value={editNotes} onChangeText={setEditNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
@@ -416,17 +450,6 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
   tabs: { flex: 1, maxHeight: 72 },
   tabsContent: { paddingHorizontal: spacing.md, gap: spacing.sm, alignItems: 'center' },
-  dayListBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  dayListBtnText: { fontSize: 18, color: colors.primary },
-  dayListCard: { marginHorizontal: spacing.md, marginTop: spacing.sm, maxHeight: 250 },
-  dayListScroll: {},
-  dayListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  dayListItemActive: { backgroundColor: colors.primary + '10' },
-  dayListLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dayListDay: { ...typography.bodySmall, fontWeight: '600', minWidth: 50 },
-  dayListDayActive: { color: colors.primary },
-  dayListDate: { ...typography.caption, color: colors.textLight },
-  dayListAcc: { ...typography.caption, color: colors.textSecondary, maxWidth: 160 },
   tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.card },
   tabActive: { backgroundColor: colors.primary },
   tabDay: { ...typography.bodySmall, fontWeight: '600', textAlign: 'center' },
@@ -470,6 +493,7 @@ const styles = StyleSheet.create({
   accommodationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary, ...shadows.sm },
   accommodationBadge: { position: 'absolute', top: spacing.xs, right: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
   checkInBadge: { backgroundColor: colors.success + '20' },
+  checkOutBadge: { backgroundColor: colors.error + '20' },
   continuingBadge: { backgroundColor: colors.primary + '20' },
   accommodationBadgeText: { ...typography.caption, fontSize: 10, fontWeight: '600', color: colors.primary },
   accommodationIcon: { fontSize: 28, marginRight: spacing.md },
@@ -477,4 +501,7 @@ const styles = StyleSheet.create({
   accommodationName: { ...typography.body, fontWeight: '600' },
   accommodationNights: { ...typography.caption, color: colors.primary, marginTop: 2 },
   accommodationAddress: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  noAccommodation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8E1', borderRadius: borderRadius.lg, padding: spacing.md, marginTop: spacing.md, borderLeftWidth: 3, borderLeftColor: '#E67E22' },
+  noAccommodationIcon: { fontSize: 20, marginRight: spacing.sm },
+  noAccommodationText: { ...typography.bodySmall, color: '#E67E22', fontWeight: '500' },
 });

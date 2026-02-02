@@ -132,32 +132,29 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: stop.name,
-            content: pin.element,
+            content: pin,
           });
           const iw = new google.maps.InfoWindow({
             content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
           });
-          marker.addListener('click', () => openInfo(iw, marker));
+          marker.addEventListener('gmp-click', () => openInfo(iw, marker));
         });
 
         activities.filter((a: Activity) => a.location_lat && a.location_lng).forEach((act: Activity) => {
           const pos = { lat: act.location_lat!, lng: act.location_lng! };
           bounds.extend(pos);
           const catColor = CATEGORY_COLORS[act.category] || colors.accent;
-          const glyphEl = document.createElement('span');
-          glyphEl.textContent = getCategoryIcon(act.category);
-          glyphEl.style.fontSize = '14px';
           const pin = new PinElement({
             background: catColor,
             borderColor: '#FFFFFF',
-            glyph: glyphEl,
+            glyphColor: '#FFFFFF',
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: act.title,
-            content: pin.element,
+            content: pin,
           });
           const iw = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-          marker.addListener('click', () => openInfo(iw, marker));
+          marker.addEventListener('gmp-click', () => openInfo(iw, marker));
         });
 
         if (stops.length >= 2) {

@@ -12,6 +12,8 @@ interface DatePickerInputProps {
   initialDate?: string;
   /** Dates before this are disabled */
   minDate?: string;
+  /** Dates after this are disabled */
+  maxDate?: string;
 }
 
 function formatDisplay(dateStr: string): string {
@@ -20,7 +22,7 @@ function formatDisplay(dateStr: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder, initialDate, minDate }) => {
+export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder, initialDate, minDate, maxDate }) => {
   const [visible, setVisible] = useState(false);
 
   const calendarCurrent = value || initialDate || undefined;
@@ -40,6 +42,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, 
             <Calendar
               current={calendarCurrent}
               minDate={minDate || undefined}
+              maxDate={maxDate || undefined}
               markedDates={value ? { [value]: { selected: true, selectedColor: colors.primary } } : {}}
               onDayPress={(day: any) => {
                 onChange(day.dateString);

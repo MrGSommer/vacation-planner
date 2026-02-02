@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { Header, Card, Button, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { Header, Card, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
@@ -308,7 +308,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
                 ))}
               </ScrollView>
 
-              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
+              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
 
               <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
 

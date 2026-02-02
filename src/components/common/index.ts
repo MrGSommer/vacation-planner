@@ -9,5 +9,6 @@ export { LoadingScreen } from './LoadingScreen';
 export { Toast } from './Toast';
 export { PlaceAutocomplete } from './PlaceAutocomplete';
 export { DatePickerInput } from './DatePickerInput';
+export { TimePickerInput } from './TimePickerInput';
 export { CategoryFieldsInput } from './CategoryFieldsInput';
 export { TripBottomNav } from './TripBottomNav';

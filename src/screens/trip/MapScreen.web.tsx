@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
-import { Header, LoadingScreen, Button, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
+import { Header, LoadingScreen, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult, importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 import { getStops } from '../../api/stops';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
@@ -113,12 +113,12 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
         const marker = new AdvancedMarkerElement({
           position: pos, map, title: stop.name,
-          content: pin.element,
+          content: pin,
         });
         const infoWindow = new google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.arrival_date && stop.departure_date ? `${stop.arrival_date} – ${stop.departure_date} (${stop.nights} N.)` : `${stop.nights} Nacht/Nächte`}` : '📍 Zwischenstopp'}<br/><small>${stop.address || ''}</small></div>`,
         });
-        marker.addListener('click', () => openInfo(infoWindow, marker));
+        marker.addEventListener('gmp-click', () => openInfo(infoWindow, marker));
       });
 
       // Activity markers
@@ -136,10 +136,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
         const marker = new AdvancedMarkerElement({
           position: pos, map, title: act.title,
-          content: pin.element,
+          content: pin,
         });
         const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-        marker.addListener('click', () => openInfo(infoWindow, marker));
+        marker.addEventListener('gmp-click', () => openInfo(infoWindow, marker));
       });
 
       // Transport routes
@@ -164,10 +164,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const depMarker = new AdvancedMarkerElement({
             position: depPos, map, title: catData.departure_station_name || 'Abfahrt',
-            content: depPin.element,
+            content: depPin,
           });
           const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-          depMarker.addListener('click', () => openInfo(depInfo, depMarker));
+          depMarker.addEventListener('gmp-click', () => openInfo(depInfo, depMarker));
 
           const arrGlyph = document.createElement('span');
           arrGlyph.textContent = '🛬';
@@ -177,10 +177,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const arrMarker = new AdvancedMarkerElement({
             position: arrPos, map, title: catData.arrival_station_name || 'Ankunft',
-            content: arrPin.element,
+            content: arrPin,
           });
           const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
-          arrMarker.addListener('click', () => openInfo(arrInfo, arrMarker));
+          arrMarker.addEventListener('gmp-click', () => openInfo(arrInfo, arrMarker));
 
           new google.maps.Polyline({
             path: [depPos, arrPos],
@@ -331,7 +331,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
                 ))}
               </ScrollView>
 
-              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
+              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
 
               <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
 

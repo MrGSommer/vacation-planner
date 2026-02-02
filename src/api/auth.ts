@@ -42,7 +42,13 @@ export const getProfile = async (userId: string) => {
   return data;
 };
 
-export const updateProfile = async (userId: string, updates: { full_name?: string; avatar_url?: string }) => {
+export const updateProfile = async (userId: string, updates: {
+  full_name?: string;
+  avatar_url?: string;
+  preferred_language?: string;
+  preferred_currency?: string;
+  notifications_enabled?: boolean;
+}) => {
   const { data, error } = await supabase
     .from('profiles')
     .update({ ...updates, updated_at: new Date().toISOString() })

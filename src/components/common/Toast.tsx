@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Animated, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../utils/theme';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -26,14 +26,14 @@ export const Toast: React.FC<ToastProps> = ({ visible, message, type = 'info', d
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 250, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(translateY, { toValue: 0, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
       ]).start();
 
       const timer = setTimeout(() => {
         Animated.parallel([
-          Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-          Animated.timing(translateY, { toValue: -20, duration: 200, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(translateY, { toValue: -20, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
         ]).start(() => onDismiss());
       }, duration);
 

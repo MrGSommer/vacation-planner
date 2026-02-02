@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
+import { Header, Button, Card, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput, TripBottomNav } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -426,7 +426,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                 ))}
               </ScrollView>
 
-              <Input label="Uhrzeit" placeholder="z.B. 09:00" value={newStartTime} onChangeText={setNewStartTime} />
+              <TimePickerInput label="Uhrzeit" value={newStartTime} onChange={setNewStartTime} placeholder="z.B. 09:00" />
 
               <CategoryFieldsInput category={newCategory} data={newCategoryData} onChange={setNewCategoryData} />
 

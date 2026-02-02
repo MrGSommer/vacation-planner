@@ -11,6 +11,8 @@ export type RootStackParamList = {
   Packing: { tripId: string };
   Stops: { tripId: string };
   EditProfile: undefined;
+  Notifications: undefined;
+  LanguageCurrency: undefined;
   AcceptInvite: { token: string };
 };
 

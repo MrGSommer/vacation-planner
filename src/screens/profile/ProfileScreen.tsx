@@ -6,6 +6,7 @@ import { Avatar, Card, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useTrips } from '../../hooks/useTrips';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import appJson from '../../../app.json';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -56,13 +57,13 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        <TouchableOpacity style={styles.settingsRow}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Notifications')}>
           <Text style={styles.settingsIcon}>🔔</Text>
           <Text style={styles.settingsText}>Benachrichtigungen</Text>
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        <TouchableOpacity style={styles.settingsRow}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('LanguageCurrency')}>
           <Text style={styles.settingsIcon}>🌐</Text>
           <Text style={styles.settingsText}>Sprache & Währung</Text>
           <Text style={styles.arrow}>›</Text>
@@ -70,6 +71,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       </Card>
 
       <Button title="Abmelden" onPress={handleSignOut} variant="secondary" style={styles.logoutButton} />
+
+      <Text style={styles.version}>Version {appJson.expo.version}</Text>
     </ScrollView>
   );
 };
@@ -92,4 +95,5 @@ const styles = StyleSheet.create({
   arrow: { fontSize: 20, color: colors.textLight },
   divider: { height: 1, backgroundColor: colors.border },
   logoutButton: { marginTop: spacing.md },
+  version: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.xl, marginBottom: spacing.md },
 });

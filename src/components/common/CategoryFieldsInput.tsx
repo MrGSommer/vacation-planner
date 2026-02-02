@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Input } from './Input';
 import { DatePickerInput } from './DatePickerInput';
+import { TimePickerInput } from './TimePickerInput';
 import { PlaceAutocomplete } from './PlaceAutocomplete';
 import { PlaceResult } from './PlaceAutocomplete';
 import { CATEGORY_FIELDS, CategoryField } from '../../utils/categoryFields';
@@ -11,15 +12,18 @@ interface Props {
   category: string;
   data: Record<string, any>;
   onChange: (data: Record<string, any>) => void;
+  tripStartDate?: string;
+  tripEndDate?: string;
 }
 
 // Maps end-date keys to their corresponding start-date keys
+// Maps end-date keys to their corresponding start-date keys (for minDate constraint)
 const DATE_PAIRS: Record<string, string> = {
   check_out_date: 'check_in_date',
-  departure_date: 'arrival_date',
+  arrival_date: 'departure_date',
 };
 
-export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange }) => {
+export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange, tripStartDate, tripEndDate }) => {
   const fields = CATEGORY_FIELDS[category];
   if (!fields || fields.length === 0) return null;
 
@@ -44,12 +48,12 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange 
             );
           case 'time':
             return (
-              <Input
+              <TimePickerInput
                 key={field.key}
                 label={field.label}
-                placeholder={field.placeholder || 'HH:MM'}
                 value={data[field.key] || ''}
-                onChangeText={(v: string) => update(field.key, v)}
+                onChange={(v: string) => update(field.key, v)}
+                placeholder={field.placeholder}
               />
             );
           case 'date': {
@@ -62,8 +66,9 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange 
                 value={data[field.key] || ''}
                 onChange={(v: string) => update(field.key, v)}
                 placeholder={field.placeholder}
-                initialDate={startValue || undefined}
-                minDate={startValue || undefined}
+                initialDate={startValue || tripStartDate || undefined}
+                minDate={startValue || tripStartDate || undefined}
+                maxDate={tripEndDate || undefined}
               />
             );
           }
