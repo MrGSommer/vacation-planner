@@ -53,3 +53,21 @@ export const deleteTrip = async (tripId: string): Promise<void> => {
   const { error } = await supabase.from('trips').delete().eq('id', tripId);
   if (error) throw error;
 };
+
+export const uploadCoverImage = async (tripId: string, uri: string): Promise<string> => {
+  const path = `covers/${tripId}_${Date.now()}.jpg`;
+  const response = await fetch(uri);
+  const blob = await response.blob();
+
+  const { error: uploadError } = await supabase.storage
+    .from('trip-photos')
+    .upload(path, blob, { contentType: 'image/jpeg' });
+  if (uploadError) throw uploadError;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('trip-photos')
+    .getPublicUrl(path);
+
+  await updateTrip(tripId, { cover_image_url: publicUrl });
+  return publicUrl;
+};

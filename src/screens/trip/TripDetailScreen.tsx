@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -200,19 +200,36 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} bounces={false}>
-        <LinearGradient colors={[...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-              <Text style={styles.backText}>←</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
-              <Text style={styles.editText}>✏️</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.tripName}>{trip.name}</Text>
-          <Text style={styles.destination}>{trip.destination}</Text>
-          <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
-        </LinearGradient>
+        {trip.cover_image_url ? (
+          <ImageBackground source={{ uri: trip.cover_image_url }} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+            <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.65)']} style={StyleSheet.absoluteFillObject} />
+            <View style={styles.headerRow}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <Text style={styles.backText}>←</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
+                <Text style={styles.editText}>✏️</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.tripName}>{trip.name}</Text>
+            <Text style={styles.destination}>{trip.destination}</Text>
+            <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+          </ImageBackground>
+        ) : (
+          <LinearGradient colors={[...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+            <View style={styles.headerRow}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <Text style={styles.backText}>←</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
+                <Text style={styles.editText}>✏️</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.tripName}>{trip.name}</Text>
+            <Text style={styles.destination}>{trip.destination}</Text>
+            <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+          </LinearGradient>
+        )}
 
         <View style={styles.content}>
           {/* Stats */}
@@ -230,6 +247,20 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={styles.statLabel}>{trip.currency}</Text>
             </View>
           </View>
+
+          {/* Photos */}
+          <TouchableOpacity
+            style={styles.photosCard}
+            onPress={() => navigation.navigate('Photos', { tripId })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.photosIcon}>📸</Text>
+            <View style={styles.photosInfo}>
+              <Text style={styles.photosTitle}>Fotos</Text>
+              <Text style={styles.photosSubtitle}>Reiseerinnerungen festhalten</Text>
+            </View>
+            <Text style={styles.photosArrow}>›</Text>
+          </TouchableOpacity>
 
           {/* Map */}
           {Platform.OS === 'web' && (
@@ -262,14 +293,20 @@ const styles = StyleSheet.create({
   backText: { fontSize: 24, color: '#FFFFFF' },
   editBtn: {},
   editText: { fontSize: 22, color: '#FFFFFF' },
-  tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs },
-  destination: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginBottom: spacing.xs },
-  dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.8)' },
+  tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   content: { padding: spacing.md, marginTop: -spacing.lg },
   statsRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, ...shadows.md, marginBottom: spacing.lg },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { ...typography.h2, color: colors.primary },
   statLabel: { ...typography.caption, marginTop: 2 },
+  photosCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.lg, ...shadows.sm },
+  photosIcon: { fontSize: 28, marginRight: spacing.md },
+  photosInfo: { flex: 1 },
+  photosTitle: { ...typography.body, fontWeight: '600' },
+  photosSubtitle: { ...typography.caption, color: colors.textLight },
+  photosArrow: { fontSize: 24, color: colors.textLight },
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
   mapTitle: { ...typography.h3, marginBottom: spacing.sm },
   notesCard: { marginBottom: spacing.lg },

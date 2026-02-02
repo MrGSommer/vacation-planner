@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Image } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Calendar, DateData } from 'react-native-calendars';
+import * as ImagePicker from 'expo-image-picker';
 import { Header, Input, Button, PlaceAutocomplete } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { useTrips } from '../../hooks/useTrips';
-import { getTrip } from '../../api/trips';
+import { getTrip, uploadCoverImage } from '../../api/trips';
 import { getDays, getActivities, deleteDay, moveActivitiesToDay } from '../../api/itineraries';
 import { Trip } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
@@ -30,6 +31,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState('');
   const [notes, setNotes] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const steps = ['Details', 'Daten', 'Optionen'];
 
@@ -46,6 +49,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         setEndDate(trip.end_date);
         setCurrency(trip.currency);
         setNotes(trip.notes || '');
+        setCoverImageUrl(trip.cover_image_url);
       } catch (e) {
         console.error(e);
       } finally {
@@ -233,6 +237,48 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                   setDestinationLng(place.lng);
                 }}
               />
+              <Text style={styles.fieldLabel}>Headerbild</Text>
+              <TouchableOpacity
+                style={styles.coverPicker}
+                onPress={async () => {
+                  const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    quality: 0.7,
+                    allowsEditing: true,
+                    aspect: [16, 9],
+                  });
+                  if (result.canceled) return;
+                  setUploadingCover(true);
+                  try {
+                    const url = await uploadCoverImage(tripId, result.assets[0].uri);
+                    setCoverImageUrl(url);
+                  } catch (e) {
+                    Alert.alert('Fehler', 'Bild konnte nicht hochgeladen werden');
+                  } finally {
+                    setUploadingCover(false);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                {coverImageUrl ? (
+                  <Image source={{ uri: coverImageUrl }} style={styles.coverPreview} />
+                ) : (
+                  <View style={styles.coverPlaceholder}>
+                    <Text style={styles.coverPlaceholderIcon}>📷</Text>
+                    <Text style={styles.coverPlaceholderText}>Bild auswählen</Text>
+                  </View>
+                )}
+                {uploadingCover && (
+                  <View style={styles.coverUploading}>
+                    <Text style={styles.coverUploadingText}>Wird hochgeladen...</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {coverImageUrl && (
+                <TouchableOpacity onPress={() => { setCoverImageUrl(null); update(tripId, { cover_image_url: null }); }}>
+                  <Text style={styles.coverRemove}>Bild entfernen</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
@@ -312,6 +358,14 @@ const styles = StyleSheet.create({
   currencyChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   currencyText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   currencyTextActive: { color: '#FFFFFF' },
+  coverPicker: { borderRadius: borderRadius.lg, overflow: 'hidden', marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  coverPreview: { width: '100%', height: 160, borderRadius: borderRadius.lg },
+  coverPlaceholder: { height: 120, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  coverPlaceholderIcon: { fontSize: 32, marginBottom: spacing.xs },
+  coverPlaceholderText: { ...typography.bodySmall, color: colors.textLight },
+  coverUploading: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', borderRadius: borderRadius.lg },
+  coverUploadingText: { color: '#fff', ...typography.bodySmall, fontWeight: '600' },
+  coverRemove: { ...typography.bodySmall, color: colors.error, marginBottom: spacing.md },
   footer: { flexDirection: 'row', padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   footerButton: { flex: 1 },
   footerNext: { marginLeft: spacing.sm },
