@@ -19,6 +19,7 @@ import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { NotificationsScreen } from '../screens/profile/NotificationsScreen';
 import { LanguageCurrencyScreen } from '../screens/profile/LanguageCurrencyScreen';
 import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
+import { TripShareScreen } from '../screens/share/TripShareScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -28,6 +29,7 @@ const linking = {
   config: {
     screens: {
       AcceptInvite: 'invite/:token',
+      TripShare: 'share/:token',
     },
   },
 };
@@ -64,6 +66,7 @@ export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer ref={navigationRef} linking={Platform.OS === 'web' ? linking : undefined}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="TripShare" component={TripShareScreen} />
         {session ? (
           <>
             <Stack.Screen name="Main" component={MainNavigator} />

@@ -14,6 +14,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   LanguageCurrency: undefined;
   AcceptInvite: { token: string };
+  TripShare: { token: string };
 };
 
 export type MainTabParamList = {

@@ -53,7 +53,8 @@ export const createInviteLink = async (
     .select()
     .single();
   if (error) throw error;
-  return { token: data.token, url: `${BASE_URL}/invite/${data.token}` };
+  const prefix = type === 'info' ? 'share' : 'invite';
+  return { token: data.token, url: `${BASE_URL}/${prefix}/${data.token}` };
 };
 
 export interface InviteResponse {
@@ -62,21 +63,30 @@ export interface InviteResponse {
 }
 
 export const getInviteByToken = async (token: string): Promise<InviteResponse> => {
-  const { data, error } = await supabase.functions.invoke('invite', {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    body: { token },
-  });
-  if (error) throw new Error(error.message || 'Einladung nicht gefunden');
+  const { data, error } = await supabase.rpc('lookup_invite', { invite_token: token });
+  if (error || !data) throw new Error('Einladung nicht gefunden');
+  if (data.error) throw new Error(data.error);
+  return data;
+};
+
+export const acceptInvite = async (token: string): Promise<{ success: boolean; trip_id: string }> => {
+  const { data, error } = await supabase.rpc('accept_invite', { invite_token: token });
+  if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
   return data;
 };
 
-export const acceptInvite = async (token: string, userId: string): Promise<{ success: boolean; trip_id: string }> => {
-  const { data, error } = await supabase.functions.invoke('invite', {
-    body: { token, userId },
+export interface ShareTripData {
+  trip: { id: string; name: string; destination: string; start_date: string; end_date: string; cover_image_url: string | null };
+  stops: Array<{ id: string; name: string; latitude: number; longitude: number; order_index: number; arrival_date: string | null; departure_date: string | null }>;
+  activities: Array<{ id: string; title: string; description: string | null; category: string; date: string; start_time: string | null; end_time: string | null; location_name: string | null; latitude: number | null; longitude: number | null; stop_id: string | null; is_checked_in: boolean }>;
+}
+
+export const getSharedTrip = async (token: string): Promise<ShareTripData> => {
+  const { data, error } = await supabase.functions.invoke('share-trip', {
+    body: { token },
   });
-  if (error) throw new Error(error.message || 'Fehler beim Annehmen');
+  if (error) throw new Error(error.message || 'Share-Link nicht gefunden');
   if (data?.error) throw new Error(data.error);
   return data;
 };

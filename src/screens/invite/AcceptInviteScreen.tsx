@@ -38,7 +38,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!session?.user?.id || !invitation) return;
     setAccepting(true);
     try {
-      await acceptInvite(token, session.user.id);
+      await acceptInvite(token);
       setDone(true);
     } catch (e: any) {
       setError(e.message || 'Fehler beim Annehmen der Einladung');
