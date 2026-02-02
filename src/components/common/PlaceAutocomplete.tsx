@@ -1,11 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import Constants from 'expo-constants';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 
-const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || '';
+const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export interface PlaceResult {
   name: string;
@@ -23,20 +20,40 @@ interface Props {
   onChangeText?: (text: string) => void;
 }
 
-const loadGoogleMaps = (): Promise<void> => {
+let mapsLoading: Promise<void> | null = null;
+
+const ensureGoogleMaps = (): Promise<void> => {
   if (Platform.OS !== 'web') return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    if ((window as any).google?.maps) { resolve(); return; }
+  if (mapsLoading) return mapsLoading;
+  mapsLoading = new Promise((resolve, reject) => {
+    if ((window as any).google?.maps?.places?.AutocompleteService) { resolve(); return; }
     const existing = document.getElementById('google-maps-script');
-    if (existing) { existing.addEventListener('load', () => resolve()); return; }
+    if (existing) {
+      // Script tag exists but may still be loading
+      if ((window as any).google?.maps) { resolve(); return; }
+      existing.addEventListener('load', () => resolve());
+      return;
+    }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,marker&loading=async`;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('Failed to load Google Maps'));
     document.head.appendChild(script);
   });
+  return mapsLoading;
+};
+
+/** Import a Google Maps library, waiting for the core script first. */
+export const importMapsLibrary = async (lib: string): Promise<any> => {
+  await ensureGoogleMaps();
+  // google.maps.importLibrary is the new async way to load libraries
+  if (google.maps.importLibrary) {
+    return google.maps.importLibrary(lib);
+  }
+  // Fallback for older API versions
+  return (google.maps as any)[lib] || google.maps;
 };
 
 export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, onSelect, onChangeText }) => {
@@ -44,16 +61,19 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [ready, setReady] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null);
+  const autocompleteServiceRef = useRef<any>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    loadGoogleMaps().then(() => {
-      autocompleteServiceRef.current = new google.maps.places.AutocompleteService();
-      setReady(true);
-    }).catch(console.error);
+    (async () => {
+      try {
+        const placesLib = await importMapsLibrary('places');
+        autocompleteServiceRef.current = new placesLib.AutocompleteService();
+      } catch (e) {
+        console.error('Places init error:', e);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -67,8 +87,8 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     }
     autocompleteServiceRef.current.getPlacePredictions(
       { input: text, language: 'de' },
-      (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+      (results: any, status: string) => {
+        if (status === 'OK' && results) {
           setPredictions(results);
           setShowDropdown(true);
         } else {
@@ -85,12 +105,13 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     debounceRef.current = setTimeout(() => search(text), 300);
   };
 
-  const handleSelect = async (prediction: google.maps.places.AutocompletePrediction) => {
+  const handleSelect = async (prediction: any) => {
     setShowDropdown(false);
     setQuery(prediction.description);
 
     try {
-      const place = new google.maps.places.Place({ id: prediction.place_id });
+      const placesLib = await importMapsLibrary('places');
+      const place = new placesLib.Place({ id: prediction.place_id });
       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
       const loc = place.location;
       if (loc) {
@@ -103,7 +124,6 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
         });
       }
     } catch {
-      // Fallback: use prediction data without coordinates
       onSelect({
         name: prediction.structured_formatting?.main_text || prediction.description,
         place_id: prediction.place_id,

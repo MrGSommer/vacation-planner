@@ -1,27 +1,24 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground, Linking } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
 import { getTrip } from '../../api/trips';
 import { getActivitiesForTrip } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getTripExpenseTotal } from '../../api/budgets';
+import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
-import { LoadingScreen, Card, TripBottomNav } from '../../components/common';
+import { LoadingScreen, Card, TripBottomNav, Avatar } from '../../components/common';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
+import { importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
-
-const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || '';
 
 const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
@@ -37,21 +34,6 @@ function buildInfoContent(act: Activity): string {
   return html;
 }
 
-const loadGoogleMaps = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if ((window as any).google?.maps) { resolve(); return; }
-    const existing = document.getElementById('google-maps-script');
-    if (existing) { existing.addEventListener('load', () => resolve()); return; }
-    const script = document.createElement('script');
-    script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&loading=async`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps'));
-    document.head.appendChild(script);
-  });
-};
-
 export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const insets = useSafeAreaInsets();
@@ -59,19 +41,22 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [activityCount, setActivityCount] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [collaborators, setCollaborators] = useState<CollaboratorWithProfile[]>([]);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
   const loadData = async () => {
     try {
-      const [t, activities, spent] = await Promise.all([
+      const [t, activities, spent, collabs] = await Promise.all([
         getTrip(tripId),
         getActivitiesForTrip(tripId),
         getTripExpenseTotal(tripId),
+        getCollaborators(tripId).catch(() => []),
       ]);
       setTrip(t);
       setActivityCount(activities.length);
       setTotalSpent(spent);
+      setCollaborators(collabs);
     } catch (e) {
       console.error(e);
     } finally {
@@ -99,7 +84,12 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           getActivitiesForTrip(tripId),
         ]);
 
-        await loadGoogleMaps();
+        // Use importLibrary to properly load the maps core
+        const mapsLib = await importMapsLibrary('maps');
+        const markerLib = await importMapsLibrary('marker');
+        await importMapsLibrary('routes');
+        await importMapsLibrary('core');
+
         if (cancelled || !mapRef.current) return;
 
         const center = stops.length > 0
@@ -108,34 +98,39 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             ? { lat: trip.destination_lat, lng: trip.destination_lng }
             : { lat: 47.37, lng: 8.54 };
 
-        const map = new google.maps.Map(mapRef.current, {
+        const MapClass = mapsLib.Map || google.maps.Map;
+        const map = new MapClass(mapRef.current, {
           center,
           zoom: 8,
           mapTypeControl: false,
           streetViewControl: false,
+          mapId: 'vacation-planner-map',
         });
 
         const bounds = new google.maps.LatLngBounds();
         let openInfoWindow: google.maps.InfoWindow | null = null;
 
-        const openInfo = (iw: google.maps.InfoWindow, marker: google.maps.Marker) => {
+        const openInfo = (iw: google.maps.InfoWindow, anchor: any) => {
           if (openInfoWindow) openInfoWindow.close();
-          iw.open(map, marker);
+          iw.open({ map, anchor });
           openInfoWindow = iw;
         };
+
+        const { AdvancedMarkerElement, PinElement } = markerLib;
 
         // Stop markers
         stops.forEach((stop: TripStop, i: number) => {
           const pos = { lat: stop.lat, lng: stop.lng };
           bounds.extend(pos);
-          const marker = new google.maps.Marker({
+          const pin = new PinElement({
+            background: stop.type === 'overnight' ? colors.primary : colors.secondary,
+            borderColor: '#FFFFFF',
+            glyph: `${i + 1}`,
+            glyphColor: '#FFFFFF',
+          });
+          const marker = new AdvancedMarkerElement({
             position: pos, map, title: stop.name,
-            label: { text: `${i + 1}`, color: '#FFFFFF', fontWeight: 'bold' },
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE, scale: 14,
-              fillColor: stop.type === 'overnight' ? colors.primary : colors.secondary,
-              fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
-            },
+            content: pin.element,
           });
           const iw = new google.maps.InfoWindow({
             content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏨 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
@@ -148,13 +143,17 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           const pos = { lat: act.location_lat!, lng: act.location_lng! };
           bounds.extend(pos);
           const catColor = CATEGORY_COLORS[act.category] || colors.accent;
-          const marker = new google.maps.Marker({
+          const glyphEl = document.createElement('span');
+          glyphEl.textContent = getCategoryIcon(act.category);
+          glyphEl.style.fontSize = '14px';
+          const pin = new PinElement({
+            background: catColor,
+            borderColor: '#FFFFFF',
+            glyph: glyphEl,
+          });
+          const marker = new AdvancedMarkerElement({
             position: pos, map, title: act.title,
-            label: { text: getCategoryIcon(act.category), fontSize: '14px' },
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE, scale: 16,
-              fillColor: catColor, fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
-            },
+            content: pin.element,
           });
           const iw = new google.maps.InfoWindow({ content: buildInfoContent(act) });
           marker.addListener('click', () => openInfo(iw, marker));
@@ -188,7 +187,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     };
 
-    // Small delay to ensure the div is mounted
     const timer = setTimeout(initMap, 100);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [trip, tripId]);
@@ -196,6 +194,45 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   if (loading || !trip) return <LoadingScreen />;
 
   const days = getDayCount(trip.start_date, trip.end_date);
+  const nonOwnerCollabs = collaborators.filter(c => c.role !== 'owner');
+
+  const headerContent = (
+    <>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backText}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {nonOwnerCollabs.length > 0 && (
+            <View style={styles.avatarRow}>
+              {nonOwnerCollabs.slice(0, 4).map((c, i) => (
+                <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }]}>
+                  <Avatar
+                    uri={c.profile.avatar_url}
+                    name={c.profile.full_name || c.profile.email}
+                    size={28}
+                  />
+                </View>
+              ))}
+              {nonOwnerCollabs.length > 4 && (
+                <View style={[styles.avatarWrap, { marginLeft: -8 }]}>
+                  <View style={styles.avatarOverflow}>
+                    <Text style={styles.avatarOverflowText}>+{nonOwnerCollabs.length - 4}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+          <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
+            <Text style={styles.editText}>✏️</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      <Text style={styles.tripName}>{trip.name}</Text>
+      <Text style={styles.destination}>{trip.destination}</Text>
+      <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -203,31 +240,25 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         {trip.cover_image_url ? (
           <ImageBackground source={{ uri: trip.cover_image_url }} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
             <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.65)']} style={StyleSheet.absoluteFillObject} />
-            <View style={styles.headerRow}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <Text style={styles.backText}>←</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
-                <Text style={styles.editText}>✏️</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.tripName}>{trip.name}</Text>
-            <Text style={styles.destination}>{trip.destination}</Text>
-            <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+            {headerContent}
+            {trip.cover_image_attribution && (() => {
+              const parts = trip.cover_image_attribution.split('|');
+              const userName = parts[0];
+              const userLink = parts[1] ? `${parts[1]}?utm_source=vacation_planner&utm_medium=referral` : '';
+              const unsplashLink = 'https://unsplash.com/?utm_source=vacation_planner&utm_medium=referral';
+              return (
+                <Text style={styles.attribution}>
+                  {'Foto: '}
+                  <Text style={styles.attributionLink} onPress={() => userLink && Linking.openURL(userLink)}>{userName}</Text>
+                  {' / '}
+                  <Text style={styles.attributionLink} onPress={() => Linking.openURL(unsplashLink)}>Unsplash</Text>
+                </Text>
+              );
+            })()}
           </ImageBackground>
         ) : (
           <LinearGradient colors={[...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-            <View style={styles.headerRow}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                <Text style={styles.backText}>←</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
-                <Text style={styles.editText}>✏️</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.tripName}>{trip.name}</Text>
-            <Text style={styles.destination}>{trip.destination}</Text>
-            <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+            {headerContent}
           </LinearGradient>
         )}
 
@@ -291,11 +322,18 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   backBtn: {},
   backText: { fontSize: 24, color: '#FFFFFF' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  avatarRow: { flexDirection: 'row', alignItems: 'center' },
+  avatarWrap: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', borderRadius: 16, overflow: 'hidden' },
+  avatarOverflow: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  avatarOverflowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   editBtn: {},
   editText: { fontSize: 22, color: '#FFFFFF' },
   tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  attribution: { ...typography.caption, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: spacing.xs },
+  attributionLink: { textDecorationLine: 'underline' },
   content: { padding: spacing.md, marginTop: -spacing.lg },
   statsRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, ...shadows.md, marginBottom: spacing.lg },
   stat: { flex: 1, alignItems: 'center' },

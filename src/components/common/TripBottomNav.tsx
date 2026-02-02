@@ -6,9 +6,9 @@ import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, typography, shadows } from '../../utils/theme';
 
 const TABS = [
+  { key: 'TripDetail' as const, icon: '🏠', label: 'Dashboard' },
   { key: 'Itinerary' as const, icon: '📋', label: 'Programm' },
   { key: 'Stops' as const, icon: '🛣️', label: 'Route' },
-  { key: 'Map' as const, icon: '🗺️', label: 'Karte' },
   { key: 'Budget' as const, icon: '💰', label: 'Budget' },
   { key: 'Packing' as const, icon: '🧳', label: 'Packliste' },
 ];
@@ -17,6 +17,8 @@ interface Props {
   tripId: string;
   activeTab: string;
 }
+
+export const BOTTOM_NAV_HEIGHT = 56;
 
 export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -51,13 +53,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingBottom: spacing.xs,
+    height: BOTTOM_NAV_HEIGHT,
     ...shadows.sm,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
   },
   icon: { fontSize: 20, opacity: 0.5 },
   iconActive: { opacity: 1 },

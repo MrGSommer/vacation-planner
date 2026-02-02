@@ -28,7 +28,9 @@
       "Bash(curl:*)",
       "Bash(claude mcp add:*)",
       "WebFetch(domain:supabase.com)",
-      "WebFetch(domain:vacation-planner-gs.netlify.app)"
+      "WebFetch(domain:vacation-planner-gs.netlify.app)",
+      "WebFetch(domain:developers.google.com)",
+      "WebSearch"
     ]
   },
   "enableAllProjectMcpServers": true,

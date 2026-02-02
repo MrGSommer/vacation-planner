@@ -15,6 +15,7 @@ export interface Trip {
   destination_lat: number | null;
   destination_lng: number | null;
   cover_image_url: string | null;
+  cover_image_attribution: string | null;
   start_date: string;
   end_date: string;
   status: 'planning' | 'upcoming' | 'active' | 'completed';

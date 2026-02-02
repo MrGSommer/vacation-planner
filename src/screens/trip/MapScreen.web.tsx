@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } fr
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { Header, LoadingScreen, Button, Input, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
-import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { PlaceResult, importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 import { getStops } from '../../api/stops';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -34,20 +34,6 @@ function buildInfoContent(act: Activity): string {
   return html;
 }
 
-const loadGoogleMaps = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if ((window as any).google?.maps) { resolve(); return; }
-    const existing = document.getElementById('google-maps-script');
-    if (existing) { existing.addEventListener('load', () => resolve()); return; }
-    const script = document.createElement('script');
-    script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&loading=async`;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps'));
-    document.head.appendChild(script);
-  });
-};
 
 export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
@@ -83,7 +69,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         setSelectedDayId(fetchedDays[0].id);
       }
 
-      await loadGoogleMaps();
+      const mapsLib = await importMapsLibrary('maps');
+      const markerLib = await importMapsLibrary('marker');
+      await importMapsLibrary('routes');
+      await importMapsLibrary('core');
       if (!mapRef.current) return;
 
       const center = s.length > 0
@@ -92,20 +81,23 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           ? { lat: t.destination_lat, lng: t.destination_lng }
           : { lat: 47.37, lng: 8.54 };
 
-      const map = new google.maps.Map(mapRef.current, {
+      const MapClass = mapsLib.Map || google.maps.Map;
+      const map = new MapClass(mapRef.current, {
         center,
         zoom: 8,
         mapTypeControl: false,
         streetViewControl: false,
+        mapId: 'vacation-planner-map',
       });
       googleMapRef.current = map;
 
+      const { AdvancedMarkerElement, PinElement } = markerLib;
       const bounds = new google.maps.LatLngBounds();
       let openInfoWindow: google.maps.InfoWindow | null = null;
 
-      const openInfo = (infoWindow: google.maps.InfoWindow, marker: google.maps.Marker) => {
+      const openInfo = (infoWindow: google.maps.InfoWindow, anchor: any) => {
         if (openInfoWindow) openInfoWindow.close();
-        infoWindow.open(map, marker);
+        infoWindow.open({ map, anchor });
         openInfoWindow = infoWindow;
       };
 
@@ -113,19 +105,15 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       s.forEach((stop: TripStop, i: number) => {
         const pos = { lat: stop.lat, lng: stop.lng };
         bounds.extend(pos);
-        const marker = new google.maps.Marker({
-          position: pos,
-          map,
-          title: stop.name,
-          label: { text: `${i + 1}`, color: '#FFFFFF', fontWeight: 'bold' },
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 14,
-            fillColor: stop.type === 'overnight' ? colors.primary : colors.secondary,
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 2,
-          },
+        const pin = new PinElement({
+          background: stop.type === 'overnight' ? colors.primary : colors.secondary,
+          borderColor: '#FFFFFF',
+          glyph: `${i + 1}`,
+          glyphColor: '#FFFFFF',
+        });
+        const marker = new AdvancedMarkerElement({
+          position: pos, map, title: stop.name,
+          content: pin.element,
         });
         const infoWindow = new google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏨 ${stop.arrival_date && stop.departure_date ? `${stop.arrival_date} – ${stop.departure_date} (${stop.nights} N.)` : `${stop.nights} Nacht/Nächte`}` : '📍 Zwischenstopp'}<br/><small>${stop.address || ''}</small></div>`,
@@ -133,33 +121,28 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         marker.addListener('click', () => openInfo(infoWindow, marker));
       });
 
-      // Activity markers with category-specific styling
+      // Activity markers
       a.filter((act: Activity) => act.location_lat && act.location_lng).forEach((act: Activity) => {
         const pos = { lat: act.location_lat!, lng: act.location_lng! };
         bounds.extend(pos);
         const catColor = CATEGORY_COLORS[act.category] || colors.accent;
-        const icon = getCategoryIcon(act.category);
-
-        const marker = new google.maps.Marker({
-          position: pos,
-          map,
-          title: act.title,
-          label: { text: icon, fontSize: '14px' },
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 16,
-            fillColor: catColor,
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 2,
-          },
+        const glyphEl = document.createElement('span');
+        glyphEl.textContent = getCategoryIcon(act.category);
+        glyphEl.style.fontSize = '14px';
+        const pin = new PinElement({
+          background: catColor,
+          borderColor: '#FFFFFF',
+          glyph: glyphEl,
         });
-
+        const marker = new AdvancedMarkerElement({
+          position: pos, map, title: act.title,
+          content: pin.element,
+        });
         const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act) });
         marker.addListener('click', () => openInfo(infoWindow, marker));
       });
 
-      // Transport routes: draw lines between departure and arrival stations
+      // Transport routes
       a.filter((act: Activity) => act.category === 'transport').forEach((act: Activity) => {
         const catData = act.category_data || {};
         const depLat = catData.departure_station_lat;
@@ -173,36 +156,28 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           bounds.extend(depPos);
           bounds.extend(arrPos);
 
-          const depMarker = new google.maps.Marker({
-            position: depPos,
-            map,
-            title: catData.departure_station_name || 'Abfahrt',
-            label: { text: '🛫', fontSize: '14px' },
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 14,
-              fillColor: CATEGORY_COLORS.transport,
-              fillOpacity: 0.8,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 2,
-            },
+          const depGlyph = document.createElement('span');
+          depGlyph.textContent = '🛫';
+          depGlyph.style.fontSize = '14px';
+          const depPin = new PinElement({
+            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF', glyph: depGlyph,
+          });
+          const depMarker = new AdvancedMarkerElement({
+            position: depPos, map, title: catData.departure_station_name || 'Abfahrt',
+            content: depPin.element,
           });
           const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
           depMarker.addListener('click', () => openInfo(depInfo, depMarker));
 
-          const arrMarker = new google.maps.Marker({
-            position: arrPos,
-            map,
-            title: catData.arrival_station_name || 'Ankunft',
-            label: { text: '🛬', fontSize: '14px' },
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 14,
-              fillColor: CATEGORY_COLORS.transport,
-              fillOpacity: 0.8,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 2,
-            },
+          const arrGlyph = document.createElement('span');
+          arrGlyph.textContent = '🛬';
+          arrGlyph.style.fontSize = '14px';
+          const arrPin = new PinElement({
+            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF', glyph: arrGlyph,
+          });
+          const arrMarker = new AdvancedMarkerElement({
+            position: arrPos, map, title: catData.arrival_station_name || 'Ankunft',
+            content: arrPin.element,
           });
           const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act) });
           arrMarker.addListener('click', () => openInfo(arrInfo, arrMarker));

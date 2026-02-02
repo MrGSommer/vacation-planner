@@ -7,6 +7,7 @@ import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { getDirections, formatDuration, formatDistance, TRAVEL_MODES, TravelMode, DirectionsResult } from '../../services/directions';
+import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
@@ -512,7 +513,7 @@ const styles = StyleSheet.create({
   stopActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
   deleteBtnText: { fontSize: 16, color: colors.error },
-  fab: { position: 'absolute', right: spacing.xl, bottom: spacing.xl, width: 56, height: 56 },
+  fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
