@@ -253,6 +253,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           {nights && <Text style={styles.accommodationNights}>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
           {hotel.location_name && <Text style={styles.accommodationAddress}>📍 {hotel.location_name}</Text>}
         </View>
+        <TouchableOpacity onPress={() => handleDelete(hotel.id)} style={styles.deleteBtn}>
+          <Text style={styles.deleteBtnText}>✕</Text>
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
