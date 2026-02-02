@@ -21,17 +21,38 @@ const ensureGoogleMaps = (): Promise<void> => {
   });
 };
 
-interface DirectionsResult {
+export type TravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
+
+export const TRAVEL_MODES: { id: TravelMode; label: string; icon: string }[] = [
+  { id: 'driving', label: 'Auto', icon: '🚗' },
+  { id: 'transit', label: 'ÖV', icon: '🚆' },
+  { id: 'walking', label: 'Zu Fuss', icon: '🚶' },
+  { id: 'bicycling', label: 'Velo', icon: '🚲' },
+];
+
+export interface DirectionsResult {
   duration: number; // minutes
   distance: number; // meters
+  mode: TravelMode;
 }
+
+const modeToGoogleMode = (mode: TravelMode): string => {
+  switch (mode) {
+    case 'driving': return 'driving';
+    case 'walking': return 'walking';
+    case 'bicycling': return 'bicycling';
+    case 'transit': return 'transit';
+    default: return 'driving';
+  }
+};
 
 const getDirectionsRest = async (
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode: TravelMode = 'driving'
 ): Promise<DirectionsResult | null> => {
   try {
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=driving&key=${API_KEY}`;
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=${modeToGoogleMode(mode)}&key=${API_KEY}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.status !== 'OK' || !data.routes?.length) return null;
@@ -39,6 +60,7 @@ const getDirectionsRest = async (
     return {
       duration: Math.round(leg.duration.value / 60),
       distance: leg.distance.value,
+      mode,
     };
   } catch {
     return null;
@@ -47,23 +69,31 @@ const getDirectionsRest = async (
 
 const getDirectionsWeb = async (
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode: TravelMode = 'driving'
 ): Promise<DirectionsResult | null> => {
   try {
     await ensureGoogleMaps();
     const google = (window as any).google;
     if (!google?.maps) return null;
+    const modeMap: Record<string, any> = {
+      driving: google.maps.TravelMode.DRIVING,
+      walking: google.maps.TravelMode.WALKING,
+      bicycling: google.maps.TravelMode.BICYCLING,
+      transit: google.maps.TravelMode.TRANSIT,
+    };
     const service = new google.maps.DirectionsService();
     const result = await service.route({
       origin: new google.maps.LatLng(origin.lat, origin.lng),
       destination: new google.maps.LatLng(destination.lat, destination.lng),
-      travelMode: google.maps.TravelMode.DRIVING,
+      travelMode: modeMap[mode] || modeMap.driving,
     });
     if (result.routes?.length) {
       const leg = result.routes[0].legs[0];
       return {
         duration: Math.round(leg.duration.value / 60),
         distance: leg.distance.value,
+        mode,
       };
     }
     return null;
@@ -74,23 +104,13 @@ const getDirectionsWeb = async (
 
 export const getDirections = async (
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  mode: TravelMode = 'driving'
 ): Promise<DirectionsResult | null> => {
   if (Platform.OS === 'web') {
-    return getDirectionsWeb(origin, destination);
+    return getDirectionsWeb(origin, destination, mode);
   }
-  return getDirectionsRest(origin, destination);
-};
-
-export const calculateRouteForStops = async (
-  stops: Array<{ id: string; lat: number; lng: number }>
-): Promise<Map<string, DirectionsResult>> => {
-  const results = new Map<string, DirectionsResult>();
-  for (let i = 1; i < stops.length; i++) {
-    const result = await getDirections(stops[i - 1], stops[i]);
-    if (result) results.set(stops[i].id, result);
-  }
-  return results;
+  return getDirectionsRest(origin, destination, mode);
 };
 
 export const formatDuration = (minutes: number): string => {

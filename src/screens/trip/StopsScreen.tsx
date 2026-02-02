@@ -6,7 +6,7 @@ import { Header, Button, Card, Input, PlaceAutocomplete, CategoryFieldsInput } f
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
-import { calculateRouteForStops, formatDuration, formatDistance } from '../../services/directions';
+import { getDirections, formatDuration, formatDistance, TRAVEL_MODES, TravelMode, DirectionsResult } from '../../services/directions';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
@@ -16,13 +16,24 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../utils/
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
+interface CachedTravel {
+  duration: number;
+  distance: number;
+  mode: TravelMode;
+  origin_lat: number;
+  origin_lng: number;
+  dest_lat: number;
+  dest_lng: number;
+}
+
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const [activities, setActivities] = useState<Activity[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
-  const [travelInfo, setTravelInfo] = useState<Map<string, { duration: number; distance: number }>>(new Map());
+  const [travelInfo, setTravelInfo] = useState<Map<string, DirectionsResult>>(new Map());
+  const [calculating, setCalculating] = useState<Set<string>>(new Set());
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -37,6 +48,9 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
   const [newNotes, setNewNotes] = useState('');
   const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
+
+  // Travel mode picker
+  const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -54,11 +68,61 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       const filtered = acts.filter(a => a.category === 'hotel' || a.category === 'stop');
       setActivities(filtered);
 
-      const withCoords = filtered.filter(a => a.location_lat && a.location_lng);
-      if (withCoords.length >= 2) {
-        calculateRouteForStops(withCoords.map(a => ({ id: a.id, lat: a.location_lat!, lng: a.location_lng! }))).then(info => {
-          setTravelInfo(info);
-        });
+      // Load cached travel info from category_data
+      const cached = new Map<string, DirectionsResult>();
+      const needsCalc: { actId: string; prev: Activity; curr: Activity }[] = [];
+
+      for (let i = 1; i < filtered.length; i++) {
+        const prev = filtered[i - 1];
+        const curr = filtered[i];
+        if (!prev.location_lat || !prev.location_lng || !curr.location_lat || !curr.location_lng) continue;
+
+        const cd = curr.category_data || {};
+        const c: CachedTravel | undefined = cd.travel_from_prev;
+
+        // Check if cache is valid (same origin + dest coordinates)
+        if (c && c.origin_lat === prev.location_lat && c.origin_lng === prev.location_lng
+          && c.dest_lat === curr.location_lat && c.dest_lng === curr.location_lng) {
+          cached.set(curr.id, { duration: c.duration, distance: c.distance, mode: c.mode });
+        } else {
+          needsCalc.push({ actId: curr.id, prev, curr });
+        }
+      }
+      setTravelInfo(cached);
+
+      // Calculate missing routes in background
+      if (needsCalc.length > 0) {
+        setCalculating(new Set(needsCalc.map(n => n.actId)));
+        for (const { actId, prev, curr } of needsCalc) {
+          const mode: TravelMode = curr.category_data?.travel_from_prev?.mode || 'driving';
+          const result = await getDirections(
+            { lat: prev.location_lat!, lng: prev.location_lng! },
+            { lat: curr.location_lat!, lng: curr.location_lng! },
+            mode,
+          );
+          if (result) {
+            cached.set(actId, result);
+            setTravelInfo(new Map(cached));
+            // Persist to DB
+            const cacheData: CachedTravel = {
+              duration: result.duration,
+              distance: result.distance,
+              mode: result.mode,
+              origin_lat: prev.location_lat!,
+              origin_lng: prev.location_lng!,
+              dest_lat: curr.location_lat!,
+              dest_lng: curr.location_lng!,
+            };
+            updateActivity(actId, {
+              category_data: { ...curr.category_data, travel_from_prev: cacheData },
+            }).catch(() => {});
+          }
+          setCalculating(prev => {
+            const next = new Set(prev);
+            next.delete(actId);
+            return next;
+          });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -70,6 +134,53 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => { loadData(); }, [loadData]);
 
   const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+  const getTravelIcon = (mode: TravelMode) => TRAVEL_MODES.find(m => m.id === mode)?.icon || '🚗';
+
+  const handleChangeTravelMode = async (activityId: string, newMode: TravelMode) => {
+    setShowTravelModePicker(null);
+    const idx = activities.findIndex(a => a.id === activityId);
+    if (idx < 1) return;
+
+    const prev = activities[idx - 1];
+    const curr = activities[idx];
+    if (!prev.location_lat || !prev.location_lng || !curr.location_lat || !curr.location_lng) return;
+
+    // Mark as calculating
+    setCalculating(p => new Set(p).add(activityId));
+
+    const result = await getDirections(
+      { lat: prev.location_lat, lng: prev.location_lng },
+      { lat: curr.location_lat, lng: curr.location_lng },
+      newMode,
+    );
+
+    if (result) {
+      setTravelInfo(prev => {
+        const next = new Map(prev);
+        next.set(activityId, result);
+        return next;
+      });
+      // Persist
+      const cacheData: CachedTravel = {
+        duration: result.duration,
+        distance: result.distance,
+        mode: result.mode,
+        origin_lat: prev.location_lat!,
+        origin_lng: prev.location_lng!,
+        dest_lat: curr.location_lat!,
+        dest_lng: curr.location_lng!,
+      };
+      await updateActivity(activityId, {
+        category_data: { ...curr.category_data, travel_from_prev: cacheData },
+      }).catch(() => {});
+    }
+
+    setCalculating(p => {
+      const next = new Set(p);
+      next.delete(activityId);
+      return next;
+    });
+  };
 
   const resetForm = () => {
     setNewTitle('');
@@ -123,7 +234,26 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       };
 
       if (editingActivity) {
+        // If location changed, clear travel cache for this and next activity
+        const locChanged = editingActivity.location_lat !== newLocationLat || editingActivity.location_lng !== newLocationLng;
+        if (locChanged) {
+          // Clear own cache
+          const cleanData = { ...newCategoryData };
+          delete cleanData.travel_from_prev;
+          payload.category_data = cleanData;
+        }
         await updateActivity(editingActivity.id, payload);
+
+        // Also clear next activity's cache if location changed
+        if (locChanged) {
+          const idx = activities.findIndex(a => a.id === editingActivity.id);
+          if (idx >= 0 && idx < activities.length - 1) {
+            const next = activities[idx + 1];
+            const nextData = { ...(next.category_data || {}) };
+            delete nextData.travel_from_prev;
+            await updateActivity(next.id, { category_data: nextData }).catch(() => {});
+          }
+        }
       } else {
         await createActivity({
           ...payload,
@@ -146,6 +276,14 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     Alert.alert('Löschen', 'Eintrag wirklich löschen?', [
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Löschen', style: 'destructive', onPress: async () => {
+        // Clear next activity's cache
+        const idx = activities.findIndex(a => a.id === id);
+        if (idx >= 0 && idx < activities.length - 1) {
+          const next = activities[idx + 1];
+          const nextData = { ...(next.category_data || {}) };
+          delete nextData.travel_from_prev;
+          await updateActivity(next.id, { category_data: nextData }).catch(() => {});
+        }
         await deleteActivity(id);
         await loadData();
       }},
@@ -166,18 +304,46 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         ) : (
           activities.map((activity, i) => (
             <View key={activity.id}>
-              {i > 0 && travelInfo.has(activity.id) && (
-                <View style={styles.travelBadge}>
-                  <Text style={styles.travelIcon}>🚗</Text>
-                  <Text style={styles.travelText}>
-                    {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
-                  </Text>
-                </View>
-              )}
-              {i > 0 && !travelInfo.has(activity.id) && activity.location_lat && (
-                <View style={styles.travelBadge}>
-                  <Text style={styles.travelIcon}>🚗</Text>
-                  <Text style={styles.travelText}>Berechne...</Text>
+              {i > 0 && activity.location_lat && activities[i - 1].location_lat && (
+                <View style={styles.travelSection}>
+                  {calculating.has(activity.id) ? (
+                    <View style={styles.travelBadge}>
+                      <Text style={styles.travelIcon}>⏳</Text>
+                      <Text style={styles.travelText}>Berechne...</Text>
+                    </View>
+                  ) : travelInfo.has(activity.id) ? (
+                    <TouchableOpacity
+                      style={styles.travelBadge}
+                      onPress={() => setShowTravelModePicker(
+                        showTravelModePicker === activity.id ? null : activity.id
+                      )}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.travelIcon}>{getTravelIcon(travelInfo.get(activity.id)!.mode)}</Text>
+                      <Text style={styles.travelText}>
+                        {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
+                      </Text>
+                      <Text style={styles.travelChevron}>▾</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {showTravelModePicker === activity.id && (
+                    <View style={styles.travelModeRow}>
+                      {TRAVEL_MODES.map(tm => {
+                        const current = travelInfo.get(activity.id)?.mode || 'driving';
+                        return (
+                          <TouchableOpacity
+                            key={tm.id}
+                            style={[styles.travelModeChip, current === tm.id && styles.travelModeChipActive]}
+                            onPress={() => handleChangeTravelMode(activity.id, tm.id)}
+                          >
+                            <Text style={styles.travelModeIcon}>{tm.icon}</Text>
+                            <Text style={[styles.travelModeLabel, current === tm.id && styles.travelModeLabelActive]}>{tm.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -228,7 +394,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{editingActivity ? 'Stop bearbeiten' : 'Stop hinzufügen'}</Text>
             <ScrollView keyboardShouldPersistTaps="handled">
-              {/* Day Picker */}
               <Text style={styles.fieldLabel}>Tag</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
                 {days.map(day => (
@@ -299,18 +464,40 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { ...typography.h3, marginBottom: spacing.xs },
   emptySubtext: { ...typography.bodySmall },
+  travelSection: { alignItems: 'center', marginVertical: spacing.sm },
   travelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     backgroundColor: colors.sky + '20',
     borderRadius: borderRadius.full,
-    marginVertical: spacing.sm,
   },
   travelIcon: { fontSize: 14, marginRight: spacing.xs },
   travelText: { ...typography.caption, color: colors.sky, fontWeight: '600' },
+  travelChevron: { fontSize: 10, color: colors.sky, marginLeft: spacing.xs },
+  travelModeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  travelModeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  travelModeChipActive: {
+    borderColor: colors.sky,
+    backgroundColor: colors.sky + '20',
+  },
+  travelModeIcon: { fontSize: 12, marginRight: 3 },
+  travelModeLabel: { ...typography.caption, fontSize: 11 },
+  travelModeLabelActive: { color: colors.sky, fontWeight: '600' },
   stopCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stopHeader: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   stopIcon: { fontSize: 28, marginRight: spacing.sm },
