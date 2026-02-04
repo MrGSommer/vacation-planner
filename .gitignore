@@ -41,4 +41,7 @@ nul
 # generated native folders
 /ios
 /android
-/supabase
+/supabase/*
+!/supabase/migrations/
+!/supabase/functions/
+!/supabase/schema.sql
