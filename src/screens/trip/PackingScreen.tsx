@@ -28,6 +28,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState<string>(PACKING_CATEGORIES[0]);
+  const [newQuantity, setNewQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
 
   // Selection mode (bulk edits)
@@ -139,9 +140,10 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleAdd = async () => {
     if (!newName.trim() || !listId) return;
     try {
-      await createPackingItem(listId, newName.trim(), newCategory);
+      await createPackingItem(listId, newName.trim(), newCategory, newQuantity);
       setShowModal(false);
       setNewName('');
+      setNewQuantity(1);
       await loadData();
     } catch {
       Alert.alert('Fehler', 'Gegenstand konnte nicht hinzugefügt werden');
@@ -351,8 +353,24 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.fieldLabel}>Menge</Text>
+            <View style={styles.quantityRow}>
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => setNewQuantity(q => Math.max(1, q - 1))}
+              >
+                <Text style={styles.quantityBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityValue}>{newQuantity}</Text>
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => setNewQuantity(q => q + 1)}
+              >
+                <Text style={styles.quantityBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.modalButtons}>
-              <Button title="Abbrechen" onPress={() => setShowModal(false)} variant="ghost" style={styles.modalBtn} />
+              <Button title="Abbrechen" onPress={() => { setShowModal(false); setNewQuantity(1); }} variant="ghost" style={styles.modalBtn} />
               <Button title="Hinzufügen" onPress={handleAdd} disabled={!newName.trim()} style={styles.modalBtn} />
             </View>
           </View>
@@ -502,6 +520,19 @@ const styles = StyleSheet.create({
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   catText: { ...typography.caption, fontWeight: '600' },
   catTextActive: { color: '#fff' },
+  quantityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
+  quantityBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityBtnText: { fontSize: 18, fontWeight: '600', color: colors.text },
+  quantityValue: { ...typography.body, fontWeight: '600', minWidth: 40, textAlign: 'center' },
   modalButtons: { flexDirection: 'row', gap: spacing.md },
   modalBtn: { flex: 1 },
 
