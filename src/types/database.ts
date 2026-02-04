@@ -67,6 +67,19 @@ export interface Activity {
   updated_at: string;
 }
 
+export interface ActivityDocument {
+  id: string;
+  activity_id: string;
+  trip_id: string;
+  user_id: string;
+  storage_path: string;
+  url: string;
+  file_name: string;
+  file_type: string;
+  file_size: number | null;
+  created_at: string;
+}
+
 export interface Photo {
   id: string;
   trip_id: string;
@@ -115,6 +128,7 @@ export interface PackingItem {
   category: string;
   is_packed: boolean;
   quantity: number;
+  assigned_to: string | null;
   created_at: string;
 }
 

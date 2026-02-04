@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   separator: { ...typography.h2, color: colors.textLight, marginHorizontal: spacing.sm, marginTop: spacing.lg },
   cell: {
     width: 52,
-    height: 40,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: borderRadius.md,
@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
   cellText: { ...typography.body, color: colors.text },
   cellTextActive: { color: '#FFFFFF', fontWeight: '600' },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.lg, gap: spacing.md },
-  cancelBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  cancelBtn: { paddingVertical: spacing.sm + 4, paddingHorizontal: spacing.md, minHeight: 44, justifyContent: 'center' as const },
   cancelText: { ...typography.body, color: colors.textLight },
-  confirmBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.primary, borderRadius: borderRadius.md },
+  confirmBtn: { paddingVertical: spacing.sm + 4, paddingHorizontal: spacing.md, minHeight: 44, justifyContent: 'center' as const, backgroundColor: colors.primary, borderRadius: borderRadius.md },
   confirmText: { ...typography.body, color: '#FFFFFF', fontWeight: '600' },
 });

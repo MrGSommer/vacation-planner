@@ -73,6 +73,17 @@ export const deleteActivity = async (id: string): Promise<void> => {
   invalidateCache('activities:');
 };
 
+export const createActivities = async (activities: Omit<Activity, 'id' | 'created_at' | 'updated_at'>[]): Promise<Activity[]> => {
+  if (activities.length === 0) return [];
+  const { data, error } = await supabase
+    .from('activities')
+    .insert(activities)
+    .select();
+  if (error) throw error;
+  if (activities.length > 0) invalidateCache(`activities:${activities[0].trip_id}`);
+  return data || [];
+};
+
 export const deleteDay = async (dayId: string): Promise<void> => {
   const { error } = await supabase.from('itinerary_days').delete().eq('id', dayId);
   if (error) throw error;

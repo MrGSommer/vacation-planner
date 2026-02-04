@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Keyboard, Platform, TouchableWithoutFeedback } from 'react-native';
 import { Button } from './Button';
 import { Input } from './Input';
 import { TimePickerInput } from './TimePickerInput';
@@ -35,6 +35,13 @@ interface Props {
   /** Default category data for new activities */
   defaultCategoryData?: Record<string, any>;
 }
+
+const CATEGORY_BASE_CONFIG: Record<string, { showTime: boolean; showPlace: boolean }> = {
+  transport: { showTime: false, showPlace: false },
+  hotel: { showTime: false, showPlace: true },
+  stop: { showTime: false, showPlace: true },
+};
+const DEFAULT_BASE_CONFIG = { showTime: true, showPlace: true };
 
 export const ActivityModal: React.FC<Props> = ({
   visible, activity, onSave, onCancel,
@@ -96,8 +103,11 @@ export const ActivityModal: React.FC<Props> = ({
     ? ACTIVITY_CATEGORIES.filter(c => categoryFilter.includes(c.id))
     : ACTIVITY_CATEGORIES;
 
+  const baseConfig = CATEGORY_BASE_CONFIG[category] || DEFAULT_BASE_CONFIG;
+
   return (
     <Modal visible={visible} animationType="slide" transparent>
+      <TouchableWithoutFeedback onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); }}>
       <View style={styles.overlay}>
         <View style={styles.content}>
           <Text style={styles.title}>
@@ -120,7 +130,9 @@ export const ActivityModal: React.FC<Props> = ({
               ))}
             </ScrollView>
 
-            <TimePickerInput label="Uhrzeit" value={startTime} onChange={setStartTime} placeholder="z.B. 09:00" />
+            {baseConfig.showTime && (
+              <TimePickerInput label="Uhrzeit" value={startTime} onChange={setStartTime} placeholder="z.B. 09:00" />
+            )}
 
             <CategoryFieldsInput
               category={category}
@@ -130,24 +142,25 @@ export const ActivityModal: React.FC<Props> = ({
               tripEndDate={tripEndDate}
             />
 
-            <PlaceAutocomplete
-              label="Ort"
-              placeholder="z.B. Sagrada Familia"
-              value={location}
-              onChangeText={setLocation}
-              onSelect={(place: PlaceResult) => {
-                setLocation(place.name);
-                setLocationLat(place.lat);
-                setLocationLng(place.lng);
-                setLocationAddress(place.address);
-                const updates: Record<string, any> = {};
-                if (place.opening_hours) updates.opening_hours = place.opening_hours;
-                if (place.website) updates.website_url = place.website;
-                if (Object.keys(updates).length > 0) {
-                  setCategoryData(prev => ({ ...prev, ...updates }));
-                }
-              }}
-            />
+            {baseConfig.showPlace && (
+              <PlaceAutocomplete
+                label="Ort"
+                placeholder="z.B. Sagrada Familia"
+                value={location}
+                onChangeText={setLocation}
+                onSelect={(place: PlaceResult) => {
+                  setLocation(place.name);
+                  setLocationLat(place.lat);
+                  setLocationLng(place.lng);
+                  setLocationAddress(place.address);
+                  const updates: Record<string, any> = {};
+                  if (place.website) updates.website_url = place.website;
+                  if (Object.keys(updates).length > 0) {
+                    setCategoryData(prev => ({ ...prev, ...updates }));
+                  }
+                }}
+              />
+            )}
 
             <Input
               label="Notizen"
@@ -171,6 +184,7 @@ export const ActivityModal: React.FC<Props> = ({
           </View>
         </View>
       </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 };
@@ -181,7 +195,7 @@ const styles = StyleSheet.create({
   title: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
   categoryRow: { marginBottom: spacing.md },
-  catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
+  catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm, minHeight: 44, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
   catIcon: { fontSize: 16, marginRight: 4 },
   catLabel: { ...typography.caption },

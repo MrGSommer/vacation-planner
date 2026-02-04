@@ -101,7 +101,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {step === 0 && (
             <>
               <Text style={styles.stepTitle}>Wohin geht die Reise?</Text>

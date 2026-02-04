@@ -25,38 +25,28 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
     { key: 'hotel_contact', label: 'Kontakt', type: 'text', placeholder: 'Tel / Website' },
   ],
   food: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'cuisine_type', label: 'Küche', type: 'text', placeholder: 'z.B. Italienisch' },
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
     { key: 'reservation_name', label: 'Reserviert auf', type: 'text', placeholder: 'Name' },
   ],
   activity: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'booking_reference', label: 'Buchungsreferenz', type: 'text', placeholder: 'Buchungsnr' },
     { key: 'duration', label: 'Dauer', type: 'text', placeholder: 'z.B. 2h' },
     { key: 'participants', label: 'Teilnehmer', type: 'text', placeholder: 'Anzahl' },
   ],
   sightseeing: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'opening_hours', label: 'Öffnungszeiten', type: 'text', placeholder: 'z.B. 09:00–18:00' },
     { key: 'ticket_price', label: 'Eintritt', type: 'text', placeholder: 'z.B. 15 EUR' },
     { key: 'website_url', label: 'Website', type: 'text', placeholder: 'https://...' },
   ],
   shopping: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'shop_type', label: 'Art', type: 'select', options: ['Mall', 'Markt', 'Boutique', 'Outlet', 'Sonstiges'] },
   ],
   relaxation: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
     { key: 'facility_type', label: 'Art', type: 'select', options: ['Spa', 'Strand', 'Pool', 'Therme', 'Sonstiges'] },
     { key: 'reservation_time', label: 'Reservierung', type: 'time', placeholder: 'HH:MM' },
   ],
-  stop: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
-  ],
-  other: [
-    { key: 'date', label: 'Datum', type: 'date', placeholder: 'YYYY-MM-DD' },
-  ],
+  stop: [],
+  other: [],
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
@@ -110,8 +100,8 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
     }
     case 'sightseeing': {
       const parts: string[] = [];
-      if (data.opening_hours) parts.push(data.opening_hours);
       if (data.ticket_price) parts.push(data.ticket_price);
+      if (data.website_url) parts.push(data.website_url);
       return parts.length > 0 ? parts.join(' · ') : null;
     }
     case 'shopping':
@@ -122,12 +112,8 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
       if (data.reservation_time) parts.push(data.reservation_time);
       return parts.length > 0 ? parts.join(' · ') : null;
     }
-    case 'stop': {
-      if (data.date) {
-        return formatDE(data.date);
-      }
+    case 'stop':
       return null;
-    }
     default:
       return null;
   }

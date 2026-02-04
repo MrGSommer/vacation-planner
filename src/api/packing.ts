@@ -46,6 +46,25 @@ export const createPackingItem = async (
   return data;
 };
 
+export const createPackingItems = async (
+  listId: string,
+  items: { name: string; category: string; quantity: number }[],
+): Promise<PackingItem[]> => {
+  const rows = items.map(item => ({
+    list_id: listId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    is_packed: false,
+  }));
+  const { data, error } = await supabase
+    .from('packing_items')
+    .insert(rows)
+    .select();
+  if (error) throw error;
+  return data || [];
+};
+
 export const togglePackingItem = async (id: string, isPacked: boolean): Promise<PackingItem> => {
   const { data, error } = await supabase
     .from('packing_items')
@@ -57,7 +76,34 @@ export const togglePackingItem = async (id: string, isPacked: boolean): Promise<
   return data;
 };
 
+export const togglePackingItems = async (ids: string[], isPacked: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from('packing_items')
+    .update({ is_packed: isPacked })
+    .in('id', ids);
+  if (error) throw error;
+};
+
 export const deletePackingItem = async (id: string): Promise<void> => {
   const { error } = await supabase.from('packing_items').delete().eq('id', id);
   if (error) throw error;
+};
+
+export const deletePackingItems = async (ids: string[]): Promise<void> => {
+  const { error } = await supabase.from('packing_items').delete().in('id', ids);
+  if (error) throw error;
+};
+
+export const updatePackingItemAssignment = async (
+  id: string,
+  userId: string | null,
+): Promise<PackingItem> => {
+  const { data, error } = await supabase
+    .from('packing_items')
+    .update({ assigned_to: userId })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 };

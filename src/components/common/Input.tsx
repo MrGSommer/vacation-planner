@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   },
   focused: { borderColor: colors.primary },
   errorBorder: { borderColor: colors.error },
-  input: { flex: 1, height: 48, ...typography.body, color: colors.text },
+  input: { flex: 1, height: 48, ...typography.body, color: colors.text, outlineStyle: 'none' as any },
   icon: { marginLeft: spacing.sm },
   error: { ...typography.caption, color: colors.error, marginTop: spacing.xs },
 });

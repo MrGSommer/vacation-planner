@@ -120,8 +120,10 @@ const styles = StyleSheet.create({
   selectContainer: { marginBottom: spacing.md },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
   chip: {
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    minHeight: 44,
+    justifyContent: 'center' as const,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,

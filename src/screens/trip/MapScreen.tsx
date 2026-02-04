@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
   modalTitle: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
   categoryRow: { marginBottom: spacing.md },
-  catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
+  catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm, minHeight: 44, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
   catIcon: { fontSize: 16, marginRight: 4 },
   catLabel: { ...typography.caption },

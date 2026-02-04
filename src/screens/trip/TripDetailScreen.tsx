@@ -16,6 +16,7 @@ import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryField
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Card, TripBottomNav, Avatar } from '../../components/common';
 import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleton';
+import { ShareModal } from '../home/ShareModal';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { importMapsLibrary } from '../../components/common/PlaceAutocomplete';
@@ -51,6 +52,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
@@ -247,7 +249,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
         <View style={styles.headerRight}>
           {nonOwnerCollabs.length > 0 && (
-            <View style={styles.avatarRow}>
+            <TouchableOpacity onPress={() => setShowShareModal(true)} activeOpacity={0.7} style={styles.avatarRow}>
               {nonOwnerCollabs.slice(0, 4).map((c, i) => (
                 <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }]}>
                   <Avatar
@@ -264,7 +266,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                   </View>
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
           )}
           <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
             <Text style={styles.editText}>✏️</Text>
@@ -369,6 +371,19 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         >
           <Text style={styles.fullscreenCloseText}>← Schliessen</Text>
         </TouchableOpacity>
+      )}
+
+      {showShareModal && trip && user && (
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => {
+            setShowShareModal(false);
+            loadData();
+          }}
+          tripId={trip.id}
+          tripName={trip.name}
+          userId={user.id}
+        />
       )}
     </View>
   );

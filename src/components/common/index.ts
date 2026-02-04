@@ -14,4 +14,6 @@ export { CategoryFieldsInput } from './CategoryFieldsInput';
 export { TripBottomNav } from './TripBottomNav';
 export { ActivityModal } from './ActivityModal';
 export type { ActivityFormData } from './ActivityModal';
+export { ActivityViewModal } from './ActivityViewModal';
+export { DocumentPicker } from './DocumentPicker';
 export { Skeleton } from './Skeleton';

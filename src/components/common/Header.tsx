@@ -30,8 +30,8 @@ export const Header: React.FC<HeaderProps> = ({ title, onBack, rightAction }) =>
 const styles = StyleSheet.create({
   container: { backgroundColor: colors.card, paddingBottom: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center' },
-  backButton: { width: 40 },
+  backButton: { width: 44, height: 44, justifyContent: 'center' },
   backText: { fontSize: 24, color: colors.primary },
   title: { ...typography.h3, flex: 1, textAlign: 'center' },
-  rightAction: { width: 40, alignItems: 'flex-end' },
+  rightAction: { minWidth: 44, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
 });

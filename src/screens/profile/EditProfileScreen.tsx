@@ -185,6 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    outlineStyle: 'none' as any,
   },
   inputDisabled: { backgroundColor: colors.background, color: colors.textLight },
   saveBtn: { marginHorizontal: spacing.xl, marginTop: spacing.xl },

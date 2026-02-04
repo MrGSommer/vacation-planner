@@ -57,7 +57,7 @@ const TripCard: React.FC<{
           </View>
           <View style={styles.cardTopRight}>
             {shown.length > 0 && (
-              <View style={styles.avatarRow}>
+              <TouchableOpacity onPress={onShare} activeOpacity={0.7} style={styles.avatarRow}>
                 {shown.map((c, i) => (
                   <View key={c.id} style={[styles.avatarWrap, i > 0 && styles.avatarOverlap]}>
                     <Avatar
@@ -74,7 +74,7 @@ const TripCard: React.FC<{
                     </View>
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.shareIcon}>↗</Text>

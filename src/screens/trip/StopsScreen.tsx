@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
+import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
 import type { ActivityFormData } from '../../components/common';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -12,9 +12,11 @@ import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
+import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { useToast } from '../../contexts/ToastContext';
 import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
+import { RouteMapModal } from '../../components/map/RouteMapModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
@@ -40,6 +42,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [viewActivity, setViewActivity] = useState<Activity | null>(null);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // Travel mode picker
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
@@ -74,8 +78,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       const filtered = acts
         .filter(a => a.category === 'hotel' || a.category === 'stop')
         .sort((a, b) => {
-          const dateA = getActivityDate(a.category, a.category_data || {}) || '';
-          const dateB = getActivityDate(b.category, b.category_data || {}) || '';
+          const dateA = getActivityDate(a.category, a.category_data || {}) || '9999-12-31';
+          const dateB = getActivityDate(b.category, b.category_data || {}) || '9999-12-31';
           return dateA.localeCompare(dateB);
         });
       setActivities(filtered);
@@ -296,9 +300,19 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Route & Stops" onBack={() => navigation.goBack()} />
+      <Header
+        title="Route & Stops"
+        onBack={() => navigation.goBack()}
+        rightAction={
+          activities.length >= 2 ? (
+            <TouchableOpacity onPress={() => setShowMapModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ fontSize: 20 }}>🗺️</Text>
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardDismissMode="on-drag">
         {loading ? (
           <StopsSkeleton />
         ) : activities.length === 0 ? (
@@ -353,16 +367,23 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
               )}
 
-              <TouchableOpacity activeOpacity={0.7} onPress={() => openEditModal(activity)}>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => setViewActivity(activity)}>
                 <Card style={styles.stopCard}>
                   <View style={styles.stopHeader}>
                     <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
                     <View style={styles.stopInfo}>
                       <Text style={styles.stopName}>{activity.title}</Text>
                       {(activity.location_name || activity.location_address) && (
-                        <Text style={styles.stopAddress} numberOfLines={1}>
-                          {activity.location_name || activity.location_address}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={[styles.stopAddress, { flex: 1 }]} numberOfLines={1}>
+                            {activity.location_name || activity.location_address}
+                          </Text>
+                          {activity.location_lat && activity.location_lng && (
+                            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       )}
                       <View style={styles.stopMeta}>
                         {activity.start_time && (
@@ -395,6 +416,14 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         </LinearGradient>
       </TouchableOpacity>
 
+      <ActivityViewModal
+        visible={!!viewActivity}
+        activity={viewActivity}
+        onClose={() => setViewActivity(null)}
+        onEdit={(a) => { setViewActivity(null); openEditModal(a); }}
+        onDelete={(id) => { setViewActivity(null); handleDelete(id); }}
+      />
+
       <ActivityModal
         visible={showModal}
         activity={editingActivity}
@@ -404,6 +433,13 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         tripEndDate={trip?.end_date}
         categoryFilter={['hotel', 'stop']}
         defaultCategory="hotel"
+      />
+
+      <RouteMapModal
+        visible={showMapModal}
+        onClose={() => setShowMapModal(false)}
+        stops={activities}
+        travelInfo={travelInfo}
       />
 
       <TripBottomNav tripId={tripId} activeTab="Stops" />

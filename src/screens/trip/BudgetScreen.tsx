@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   modalTitle: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  catChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1.5, borderColor: colors.border },
+  catChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center' as const, borderRadius: borderRadius.full, borderWidth: 1.5, borderColor: colors.border },
   catText: { ...typography.caption, fontWeight: '600' },
   modalButtons: { flexDirection: 'row', gap: spacing.md },
   modalBtn: { flex: 1 },

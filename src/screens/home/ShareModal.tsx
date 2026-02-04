@@ -106,26 +106,30 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const handleRemoveMember = (member: CollaboratorWithProfile) => {
     const name = member.profile.full_name || member.profile.email;
-    Alert.alert(
-      'Teilnehmer entfernen',
-      `${name} wirklich aus der Reise entfernen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Entfernen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await removeCollaborator(member.id);
-              setMembers(prev => prev.filter(m => m.id !== member.id));
-              showToast(`${name} entfernt`, 'success');
-            } catch {
-              showToast('Fehler beim Entfernen', 'error');
-            }
-          },
-        },
-      ],
-    );
+    const doRemove = async () => {
+      try {
+        await removeCollaborator(member.id);
+        setMembers(prev => prev.filter(m => m.id !== member.id));
+        showToast(`${name} entfernt`, 'success');
+      } catch {
+        showToast('Fehler beim Entfernen', 'error');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${name} wirklich aus der Reise entfernen?`)) {
+        doRemove();
+      }
+    } else {
+      Alert.alert(
+        'Teilnehmer entfernen',
+        `${name} wirklich aus der Reise entfernen?`,
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Entfernen', style: 'destructive', onPress: doRemove },
+        ],
+      );
+    }
   };
 
   const handleToggleRole = async (member: CollaboratorWithProfile) => {

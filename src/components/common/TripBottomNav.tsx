@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, typography, shadows } from '../../utils/theme';
@@ -22,9 +23,10 @@ export const BOTTOM_NAV_HEIGHT = 56;
 
 export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       {TABS.map(tab => {
         const active = tab.key === activeTab;
         return (

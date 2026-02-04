@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Card, TripBottomNav, ActivityModal } from '../../components/common';
+import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
 import type { ActivityFormData } from '../../components/common';
 import { getDays, getActivities, getActivitiesForTrip, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { ItineraryDay, Activity } from '../../types/database';
@@ -12,9 +12,13 @@ import { getTrip } from '../../api/trips';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
+import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { useToast } from '../../contexts/ToastContext';
 import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton';
+import { ImportPlacesModal } from '../../components/common/ImportPlacesModal';
+import { createActivities } from '../../api/itineraries';
+import { exportGeoJSON, ImportedPlace } from '../../utils/geoImport';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -30,6 +34,11 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [modalDefaultCategoryData, setModalDefaultCategoryData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [hotelActivities, setHotelActivities] = useState<Activity[]>([]);
+  const [allTripActivities, setAllTripActivities] = useState<Activity[]>([]);
+  const [viewActivity, setViewActivity] = useState<Activity | null>(null);
+  const [modalDefaultCategory, setModalDefaultCategory] = useState<string | undefined>(undefined);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
   const tabScrollRef = useRef<ScrollView>(null);
@@ -48,8 +57,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   // Task 6: Split loadData into loadTripData (once) and loadActivities (per day)
   const loadTripData = useCallback(async () => {
     try {
-      const [trip, allTripActivities] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId)]);
-      setHotelActivities(allTripActivities.filter(a => a.category === 'hotel'));
+      const [trip, fetchedAllActivities] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId)]);
+      setAllTripActivities(fetchedAllActivities);
+      setHotelActivities(fetchedAllActivities.filter(a => a.category === 'hotel'));
       setTripStartDate(trip.start_date);
       setTripEndDate(trip.end_date);
       const dates = getDayDates(trip.start_date, trip.end_date);
@@ -90,7 +100,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => { loadTripData(); }, [loadTripData]);
   useRealtime('activities', `trip_id=eq.${tripId}`, () => {
     // Reload hotel activities + current day
-    getActivitiesForTrip(tripId).then(all => setHotelActivities(all.filter(a => a.category === 'hotel')));
+    getActivitiesForTrip(tripId).then(all => {
+      setAllTripActivities(all);
+      setHotelActivities(all.filter(a => a.category === 'hotel'));
+    });
     if (selectedDayId) loadDayActivities(selectedDayId);
   });
 
@@ -160,6 +173,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setShowModal(false);
       setModalActivity(null);
       const allActs = await getActivitiesForTrip(tripId);
+      setAllTripActivities(allActs);
       setHotelActivities(allActs.filter(a => a.category === 'hotel'));
       if (selectedDayId) await loadDayActivities(selectedDayId);
     } catch (e) {
@@ -228,6 +242,17 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const { continuing: continuingStay, checkingOut: isCheckingOut, checkingIn: newCheckIn } = getAccommodationForDay(selectedDate);
 
+  // Anreise/Abreise detection
+  const isFirstDay = selectedDate === tripStartDate;
+  const isLastDay = selectedDate === tripEndDate;
+
+  const arrivalTransport = isFirstDay
+    ? allTripActivities.find(a => a.category === 'transport' && a.category_data?.is_arrival)
+    : null;
+  const departureTransport = isLastDay
+    ? allTripActivities.find(a => a.category === 'transport' && a.category_data?.is_departure)
+    : null;
+
   const getNightsCount = (hotel: Activity) => {
     const ci = hotel.category_data?.check_in_date || hotel.check_in_date;
     const co = hotel.category_data?.check_out_date || hotel.check_out_date;
@@ -235,6 +260,12 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     const diff = Math.round((new Date(co).getTime() - new Date(ci).getTime()) / (1000 * 60 * 60 * 24));
     return diff > 0 ? diff : null;
   };
+
+  // Filter out hotels and arrival/departure from the normal activity list
+  const filteredActivities = useMemo(
+    () => activities.filter(a => a.category !== 'hotel' && !a.category_data?.is_arrival && !a.category_data?.is_departure),
+    [activities],
+  );
 
   // Task 3: Swipe navigation between days
   const panResponder = useMemo(() => PanResponder.create({
@@ -256,7 +287,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     const badgeText = type === 'check-in' ? 'Check-in' : isCheckout ? 'Check-out' : 'Unterkunft';
     const badgeStyle = type === 'check-in' ? styles.checkInBadge : isCheckout ? styles.checkOutBadge : styles.continuingBadge;
     return (
-      <TouchableOpacity style={styles.accommodationCard} key={`acc-${hotel.id}-${type}`} onPress={() => openEdit(hotel)} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.accommodationCard} key={`acc-${hotel.id}-${type}`} onPress={() => setViewActivity(hotel)} activeOpacity={0.7}>
         <View style={[styles.accommodationBadge, badgeStyle]}>
           <Text style={[styles.accommodationBadgeText, isCheckout && { color: colors.error }]}>{badgeText}</Text>
         </View>
@@ -273,6 +304,112 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
+  const handleImportPlaces = async (places: ImportedPlace[]) => {
+    if (!selectedDayId) return;
+    const batch = places.map((place, i) => ({
+      day_id: selectedDayId,
+      trip_id: tripId,
+      title: place.name,
+      description: place.description || null,
+      category: 'sightseeing' as string,
+      start_time: null,
+      end_time: null,
+      location_name: place.name,
+      location_lat: place.lat,
+      location_lng: place.lng,
+      location_address: place.address || null,
+      cost: null,
+      currency: 'CHF',
+      sort_order: activities.length + i,
+      check_in_date: null,
+      check_out_date: null,
+      category_data: selectedDate ? { date: selectedDate } : {},
+    }));
+    await createActivities(batch);
+    const allActs = await getActivitiesForTrip(tripId);
+    setAllTripActivities(allActs);
+    setHotelActivities(allActs.filter(a => a.category === 'hotel'));
+    if (selectedDayId) await loadDayActivities(selectedDayId);
+  };
+
+  const handleExport = () => {
+    setShowMoreMenu(false);
+    const withCoords = allTripActivities.filter(a => a.location_lat && a.location_lng);
+    if (withCoords.length === 0) {
+      showToast('Keine Orte mit Koordinaten vorhanden', 'error');
+      return;
+    }
+    const geojson = exportGeoJSON(withCoords.map(a => ({
+      title: a.title,
+      lat: a.location_lat!,
+      lng: a.location_lng!,
+      category: a.category,
+      description: a.description,
+    })));
+
+    if (Platform.OS === 'web') {
+      const blob = new Blob([geojson], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'trip-export.geojson';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Export heruntergeladen', 'success');
+    } else {
+      // Native: use expo-sharing
+      showToast('Export nur auf Web verfugbar', 'error');
+    }
+  };
+
+  const renderTravelCard = (type: 'arrival' | 'departure', transport: Activity | null | undefined) => {
+    const label = type === 'arrival' ? 'Anreise' : 'Abreise';
+    const icon = type === 'arrival' ? '🛬' : '🛫';
+    const borderColor = type === 'arrival' ? colors.success : colors.error;
+
+    if (transport) {
+      const detail = formatCategoryDetail('transport', transport.category_data || {});
+      return (
+        <TouchableOpacity
+          style={[styles.travelDayCard, { borderLeftColor: borderColor }]}
+          onPress={() => setViewActivity(transport)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.travelDayBadge, { backgroundColor: borderColor + '20' }]}>
+            <Text style={[styles.travelDayBadgeText, { color: borderColor }]}>{label}</Text>
+          </View>
+          <Text style={styles.travelDayIcon}>{icon}</Text>
+          <View style={styles.travelDayInfo}>
+            <Text style={styles.travelDayTitle}>{transport.title}</Text>
+            {detail && <Text style={styles.travelDayDetail}>{detail}</Text>}
+            {transport.location_name && <Text style={styles.accommodationAddress}>📍 {transport.location_name}</Text>}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    // Placeholder: no transport yet
+    return (
+      <TouchableOpacity
+        style={[styles.travelDayCardEmpty, { borderLeftColor: borderColor }]}
+        onPress={() => {
+          setModalActivity(null);
+          setModalDefaultCategory('transport');
+          setModalDefaultCategoryData({
+            ...(selectedDate ? { departure_date: selectedDate } : {}),
+            [type === 'arrival' ? 'is_arrival' : 'is_departure']: true,
+          });
+          setShowModal(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.travelDayIcon}>{icon}</Text>
+        <Text style={styles.travelDayPlaceholder}>{label} hinzufugen</Text>
+        <Text style={styles.travelDayPlus}>+</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderActivityDetail = (activity: Activity) => {
     const detail = formatCategoryDetail(activity.category, activity.category_data || {});
     if (detail) return <Text style={styles.activityDetail}>{detail}</Text>;
@@ -283,7 +420,27 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Programm" onBack={() => navigation.goBack()} />
+      <Header
+        title="Programm"
+        onBack={() => navigation.goBack()}
+        rightAction={
+          <View>
+            <TouchableOpacity onPress={() => setShowMoreMenu(!showMoreMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ fontSize: 18 }}>⋮</Text>
+            </TouchableOpacity>
+            {showMoreMenu && (
+              <View style={styles.moreMenu}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMoreMenu(false); setShowImportModal(true); }}>
+                  <Text style={styles.menuItemText}>📂 Importieren</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handleExport}>
+                  <Text style={styles.menuItemText}>📤 Exportieren</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        }
+      />
 
       {loading && days.length === 0 ? (
         <ItinerarySkeleton />
@@ -307,22 +464,25 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Activities Timeline with swipe */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
-        <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
+        <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent} keyboardDismissMode="on-drag">
+          {/* Anreise on first day */}
+          {isFirstDay && renderTravelCard('arrival', arrivalTransport)}
+
           {/* Continuing accommodation at top */}
           {continuingStay && renderHotelCard(continuingStay, 'continuing', isCheckingOut)}
 
-          {activities.filter(a => a.category !== 'hotel').length === 0 && !continuingStay && !newCheckIn ? (
+          {filteredActivities.length === 0 && !continuingStay && !newCheckIn ? (
             <View style={styles.emptyDay}>
               <Text style={styles.emptyIcon}>📝</Text>
               <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
               <Text style={styles.emptySubtext}>Tippe auf +, um eine Aktivität hinzuzufügen</Text>
             </View>
           ) : (
-            activities.filter(a => a.category !== 'hotel').map((activity, i) => (
-              <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => openEdit(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
+            filteredActivities.map((activity, i) => (
+              <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => setViewActivity(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
                 <View style={styles.timelineLine}>
                   <View style={[styles.timelineDot, { backgroundColor: CATEGORY_COLORS[activity.category] || colors.primary }]} />
-                  {i < activities.filter(a => a.category !== 'hotel').length - 1 && <View style={styles.timelineConnector} />}
+                  {i < filteredActivities.length - 1 && <View style={styles.timelineConnector} />}
                 </View>
                 <Card style={styles.activityContent}>
                   <View style={styles.activityHeader}>
@@ -335,7 +495,16 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Text style={styles.deleteBtnText}>✕</Text>
                     </TouchableOpacity>
                   </View>
-                  {activity.location_name && <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>}
+                  {activity.location_name && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>
+                      {activity.location_lat && activity.location_lng && (
+                        <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                   {renderActivityDetail(activity)}
                   {activity.description && <Text style={styles.activityDesc}>{activity.description}</Text>}
                 </Card>
@@ -345,33 +514,52 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* New check-in accommodation at bottom */}
           {newCheckIn && renderHotelCard(newCheckIn, 'check-in')}
-          {!newCheckIn && isCheckingOut && (
+          {!newCheckIn && isCheckingOut && !isLastDay && (
             <View style={styles.noAccommodation}>
               <Text style={styles.noAccommodationIcon}>⚠️</Text>
               <Text style={styles.noAccommodationText}>Keine Unterkunft geplant</Text>
             </View>
           )}
+
+          {/* Abreise on last day */}
+          {isLastDay && renderTravelCard('departure', departureTransport)}
         </ScrollView>
       </View>
 
       {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategory(undefined); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
       </TouchableOpacity>
 
+      <ActivityViewModal
+        visible={!!viewActivity}
+        activity={viewActivity}
+        onClose={() => setViewActivity(null)}
+        onEdit={(a) => { setViewActivity(null); openEdit(a); }}
+        onDelete={(id) => { setViewActivity(null); handleDelete(id); }}
+      />
+
       <ActivityModal
         visible={showModal}
         activity={modalActivity}
         onSave={handleModalSave}
-        onCancel={() => { setShowModal(false); setModalActivity(null); }}
+        onCancel={() => { setShowModal(false); setModalActivity(null); setModalDefaultCategory(undefined); }}
         tripStartDate={tripStartDate}
         tripEndDate={tripEndDate}
+        defaultCategory={modalDefaultCategory}
         defaultCategoryData={modalDefaultCategoryData}
       />
       </>
       )}
+
+      <ImportPlacesModal
+        visible={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportPlaces}
+        dayDates={dayDates}
+      />
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
@@ -427,4 +615,17 @@ const styles = StyleSheet.create({
   noAccommodation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8E1', borderRadius: borderRadius.lg, padding: spacing.md, marginTop: spacing.md, borderLeftWidth: 3, borderLeftColor: '#E67E22' },
   noAccommodationIcon: { fontSize: 20, marginRight: spacing.sm },
   noAccommodationText: { ...typography.bodySmall, color: '#E67E22', fontWeight: '500' },
+  travelDayCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, ...shadows.sm },
+  travelDayCardEmpty: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderStyle: 'dashed', borderWidth: 1.5, borderColor: colors.border },
+  travelDayBadge: { position: 'absolute', top: spacing.xs, right: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
+  travelDayBadgeText: { ...typography.caption, fontSize: 10, fontWeight: '600' },
+  travelDayIcon: { fontSize: 28, marginRight: spacing.md },
+  travelDayInfo: { flex: 1 },
+  travelDayTitle: { ...typography.body, fontWeight: '600' },
+  travelDayDetail: { ...typography.caption, color: colors.accent, marginTop: 2, fontWeight: '500' },
+  travelDayPlaceholder: { ...typography.bodySmall, color: colors.textLight, flex: 1 },
+  travelDayPlus: { fontSize: 24, color: colors.primary, fontWeight: '300' },
+  moreMenu: { position: 'absolute', top: 28, right: 0, backgroundColor: '#FFFFFF', borderRadius: borderRadius.md, ...shadows.lg, zIndex: 100, minWidth: 160 },
+  menuItem: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  menuItemText: { ...typography.bodySmall, fontWeight: '500' },
 });

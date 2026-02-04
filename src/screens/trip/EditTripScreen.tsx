@@ -305,19 +305,24 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleRemoveMember = (member: CollaboratorWithProfile) => {
     const mName = member.profile.full_name || member.profile.email;
-    Alert.alert('Teilnehmer entfernen', `${mName} wirklich entfernen?`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Entfernen', style: 'destructive',
-        onPress: async () => {
-          try {
-            await removeCollaborator(member.id);
-            setMembers(prev => prev.filter(m => m.id !== member.id));
-            showToast(`${mName} entfernt`, 'success');
-          } catch { showToast('Fehler', 'error'); }
-        },
-      },
-    ]);
+    const doRemove = async () => {
+      try {
+        await removeCollaborator(member.id);
+        setMembers(prev => prev.filter(m => m.id !== member.id));
+        showToast(`${mName} entfernt`, 'success');
+      } catch { showToast('Fehler', 'error'); }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${mName} wirklich entfernen?`)) {
+        doRemove();
+      }
+    } else {
+      Alert.alert('Teilnehmer entfernen', `${mName} wirklich entfernen?`, [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Entfernen', style: 'destructive', onPress: doRemove },
+      ]);
+    }
   };
 
   const handleToggleRole = async (member: CollaboratorWithProfile) => {
@@ -355,7 +360,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {step === 0 && (
             <>
               <Text style={styles.stepTitle}>Reisedetails</Text>

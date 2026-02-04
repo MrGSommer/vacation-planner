@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   focused: { borderColor: colors.primary },
-  input: { height: 48, ...typography.body, color: colors.text },
+  input: { height: 48, ...typography.body, color: colors.text, outlineStyle: 'none' as any },
   dropdown: {
     position: 'absolute',
     top: '100%',
