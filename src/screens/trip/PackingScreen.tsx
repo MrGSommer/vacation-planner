@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, EmptyState, TripBottomNav } from '../../components/common';
+import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import {
   getPackingLists, createPackingList, getPackingItems,
   createPackingItem, createPackingItems, togglePackingItem,
@@ -238,14 +240,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Packliste"
         onBack={() => navigation.goBack()}
         rightAction={
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.headerBtn}>📋</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.headerBtn}>+</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.headerBtn}>📋</Text>
+          </TouchableOpacity>
         }
       />
 
@@ -441,6 +438,13 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
       </Modal>
 
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>
+        <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <Text style={styles.fabText}>+</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+
       <TripBottomNav tripId={tripId} activeTab="Packing" />
     </View>
   );
@@ -453,7 +457,7 @@ const styles = StyleSheet.create({
   progressBar: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: 8, backgroundColor: colors.success, borderRadius: 4 },
   progressText: { ...typography.caption, marginTop: spacing.xs, textAlign: 'center' },
-  content: { padding: spacing.md, paddingBottom: 80 },
+  content: { padding: spacing.md, paddingBottom: 140 },
   categorySection: { marginBottom: spacing.lg },
   categoryTitle: { ...typography.h3, marginBottom: spacing.sm },
   itemRow: {
@@ -588,4 +592,9 @@ const styles = StyleSheet.create({
   assignOptionAvatarText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   assignOptionName: { ...typography.body, flex: 1 },
   assignCheck: { fontSize: 16, color: colors.success, fontWeight: '700' },
+
+  // FAB
+  fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
+  fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
+  fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
 });

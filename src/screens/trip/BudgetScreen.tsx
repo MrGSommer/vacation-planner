@@ -139,7 +139,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md },
+  content: { padding: spacing.md, paddingBottom: 140 },
   totalCard: { alignItems: 'center', marginBottom: spacing.md },
   totalLabel: { ...typography.bodySmall, color: colors.textSecondary },
   totalAmount: { ...typography.h1, color: colors.primary, marginTop: spacing.xs },

@@ -450,7 +450,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   list: { flex: 1 },
-  listContent: { padding: spacing.md },
+  listContent: { padding: spacing.md, paddingBottom: 140 },
   empty: { alignItems: 'center', paddingVertical: spacing.xxl },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { ...typography.h3, marginBottom: spacing.xs },

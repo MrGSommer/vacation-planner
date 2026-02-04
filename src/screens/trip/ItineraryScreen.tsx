@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   tabDate: { ...typography.caption, textAlign: 'center' },
   tabDateActive: { color: 'rgba(255,255,255,0.8)' },
   timeline: { flex: 1 },
-  timelineContent: { padding: spacing.md },
+  timelineContent: { padding: spacing.md, paddingBottom: 140 },
   emptyDay: { alignItems: 'center', paddingVertical: spacing.xxl },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { ...typography.h3, marginBottom: spacing.xs },
