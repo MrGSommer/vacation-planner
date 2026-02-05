@@ -2,18 +2,26 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Calendar, DateData } from 'react-native-calendars';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useTrips } from '../../hooks/useTrips';
-import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { useAuthContext } from '../../contexts/AuthContext';
+import { colors, spacing, borderRadius, typography, gradients, shadows } from '../../utils/theme';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
+const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
+
 export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const { create, loading } = useTrips();
+  const { user } = useAuthContext();
   const [step, setStep] = useState(0);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const isAiEnabled = AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL;
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
   const [destinationLat, setDestinationLat] = useState<number | null>(null);
@@ -117,6 +125,24 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                   setDestinationLng(place.lng);
                 }}
               />
+
+              {destination.trim() && isAiEnabled && (
+                <TouchableOpacity
+                  style={styles.aiButton}
+                  onPress={() => setShowAiModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[...gradients.ocean]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.aiButtonGradient}
+                  >
+                    <Text style={styles.aiButtonText}>{'✨ KI-Reiseplanung'}</Text>
+                    <Text style={styles.aiButtonSubtext}>Lass dir einen kompletten Plan erstellen</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
@@ -172,6 +198,27 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
           <Button title="Reise erstellen" onPress={handleCreate} loading={loading} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
         )}
       </View>
+
+      {user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="create"
+          userId={user.id}
+          initialContext={{
+            destination,
+            destinationLat,
+            destinationLng,
+            startDate: startDate || undefined,
+            endDate: endDate || undefined,
+            currency,
+          }}
+          onComplete={(tripId) => {
+            setShowAiModal(false);
+            navigation.replace('TripDetail', { tripId });
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -196,6 +243,10 @@ const styles = StyleSheet.create({
   currencyChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   currencyText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   currencyTextActive: { color: '#FFFFFF' },
+  aiButton: { marginTop: spacing.lg },
+  aiButtonGradient: { padding: spacing.md, borderRadius: borderRadius.lg, alignItems: 'center', ...shadows.sm },
+  aiButtonText: { ...typography.button, color: '#FFFFFF', marginBottom: 2 },
+  aiButtonSubtext: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
   footer: { flexDirection: 'row', padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   footerButton: { flex: 1 },
   footerNext: { marginLeft: spacing.sm },

@@ -26,7 +26,7 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingBottom: insets.bottom, height: BOTTOM_NAV_HEIGHT + insets.bottom }]}>
       {TABS.map(tab => {
         const active = tab.key === activeTab;
         return (

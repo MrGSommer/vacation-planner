@@ -548,7 +548,10 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.footer}>
         {step > 0 && <Button title="Zurück" onPress={() => setStep(s => s - 1)} variant="ghost" style={styles.footerButton} />}
         {step < lastStep ? (
-          <Button title="Weiter" onPress={() => setStep(s => s + 1)} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
+          <>
+            <Button title="Speichern" onPress={handleSave} loading={saving} disabled={!name.trim() || !destination.trim() || !startDate || !endDate} variant="secondary" style={styles.footerButton} />
+            <Button title="Weiter" onPress={() => setStep(s => s + 1)} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
+          </>
         ) : (
           <Button title="Speichern" onPress={handleSave} loading={saving} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
         )}

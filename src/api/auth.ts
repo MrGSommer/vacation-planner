@@ -50,6 +50,7 @@ export const updateProfile = async (userId: string, updates: {
   preferred_language?: string;
   preferred_currency?: string;
   notifications_enabled?: boolean;
+  ai_trip_context_enabled?: boolean;
 }) => {
   const { data, error } = await supabase
     .from('profiles')

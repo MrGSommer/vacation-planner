@@ -1,19 +1,35 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Switch } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Card, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useTrips } from '../../hooks/useTrips';
+import { updateProfile } from '../../api/auth';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import appJson from '../../../app.json';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
+const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
+
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const { trips } = useTrips();
   const insets = useSafeAreaInsets();
+  const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
+
+  const handleAiContextToggle = async (value: boolean) => {
+    setAiContextEnabled(value);
+    if (user) {
+      try {
+        await updateProfile(user.id, { ai_trip_context_enabled: value });
+        refreshProfile?.();
+      } catch (e) {
+        setAiContextEnabled(!value);
+      }
+    }
+  };
 
   const handleSignOut = async () => {
     if (Platform.OS === 'web') {
@@ -75,6 +91,24 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </Card>
 
+      {AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL && (
+        <Card style={styles.aiSettingsCard}>
+          <Text style={styles.aiSettingsTitle}>{'🤖 KI-Einstellungen'}</Text>
+          <View style={styles.aiSettingsRow}>
+            <View style={styles.aiSettingsInfo}>
+              <Text style={styles.aiSettingsLabel}>Reisedaten als KI-Kontext verwenden</Text>
+              <Text style={styles.aiSettingsDesc}>Erlaubt dem KI-Reiseplaner, bestehende Trip-Daten fuer bessere Vorschlaege zu nutzen</Text>
+            </View>
+            <Switch
+              value={aiContextEnabled}
+              onValueChange={handleAiContextToggle}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </Card>
+      )}
+
       <Button title="Abmelden" onPress={handleSignOut} variant="secondary" style={styles.logoutButton} />
 
       <Text style={styles.version}>Version {appJson.expo.version}</Text>
@@ -99,6 +133,12 @@ const styles = StyleSheet.create({
   settingsText: { ...typography.body, flex: 1 },
   arrow: { fontSize: 20, color: colors.textLight },
   divider: { height: 1, backgroundColor: colors.border },
+  aiSettingsCard: { marginBottom: spacing.xl },
+  aiSettingsTitle: { ...typography.h3, marginBottom: spacing.md },
+  aiSettingsRow: { flexDirection: 'row', alignItems: 'center' },
+  aiSettingsInfo: { flex: 1, marginRight: spacing.md },
+  aiSettingsLabel: { ...typography.body, fontWeight: '500' },
+  aiSettingsDesc: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
   logoutButton: { marginTop: spacing.md },
   version: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.xl, marginBottom: spacing.md },
 });

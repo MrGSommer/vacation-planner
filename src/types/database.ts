@@ -6,6 +6,7 @@ export interface Profile {
   preferred_language: string;
   preferred_currency: string;
   notifications_enabled: boolean;
+  ai_trip_context_enabled: boolean;
   created_at: string;
   updated_at: string;
 }

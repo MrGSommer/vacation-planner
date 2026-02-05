@@ -16,6 +16,7 @@ import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryField
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Card, TripBottomNav, Avatar } from '../../components/common';
 import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleton';
+import { AiTripModal } from '../../components/ai/AiTripModal';
 import { ShareModal } from '../home/ShareModal';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
@@ -40,6 +41,8 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   return html;
 }
 
+const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
+
 export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
@@ -53,6 +56,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [mapReady, setMapReady] = useState(false);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
@@ -353,6 +357,25 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             </Card>
           )}
 
+          {/* AI Planning */}
+          {AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL && (
+            <TouchableOpacity
+              style={styles.aiCard}
+              onPress={() => setShowAiModal(true)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={[...gradients.ocean]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.aiCardGradient}
+              >
+                <Text style={styles.aiCardText}>{'✨ KI-Reiseplanung'}</Text>
+                <Text style={styles.aiCardSubtext}>{'Aktivitaeten und Stops generieren ›'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
           {trip.notes && (
             <Card style={styles.notesCard}>
               <Text style={styles.notesTitle}>Notizen</Text>
@@ -383,6 +406,30 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           tripId={trip.id}
           tripName={trip.name}
           userId={user.id}
+        />
+      )}
+
+      {showAiModal && trip && user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="enhance"
+          tripId={tripId}
+          userId={user.id}
+          initialContext={{
+            destination: trip.destination,
+            destinationLat: trip.destination_lat,
+            destinationLng: trip.destination_lng,
+            startDate: trip.start_date,
+            endDate: trip.end_date,
+            currency: trip.currency,
+            tripName: trip.name,
+            notes: trip.notes,
+          }}
+          onComplete={() => {
+            setShowAiModal(false);
+            loadData();
+          }}
         />
       )}
     </View>
@@ -426,6 +473,10 @@ const styles = StyleSheet.create({
   fullscreenBtnText: { fontSize: 20, color: colors.primary },
   fullscreenCloseBtn: { position: 'absolute' as any, left: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
   fullscreenCloseText: { ...typography.body, fontWeight: '600' as const, color: colors.primary },
+  aiCard: { marginBottom: spacing.lg, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.sm },
+  aiCardGradient: { padding: spacing.md, flexDirection: 'column' },
+  aiCardText: { ...typography.body, fontWeight: '600', color: '#FFFFFF' },
+  aiCardSubtext: { ...typography.caption, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   notesCard: { marginBottom: spacing.lg },
   notesTitle: { ...typography.h3, marginBottom: spacing.sm },
   notesText: { ...typography.body, color: colors.textSecondary },

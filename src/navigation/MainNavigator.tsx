@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { Avatar } from '../components/common';
@@ -11,6 +12,7 @@ const Tab = createBottomTabNavigator();
 
 export const MainNavigator: React.FC = () => {
   const { profile } = useAuthContext();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -18,7 +20,7 @@ export const MainNavigator: React.FC = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        tabBarStyle: { borderTopColor: colors.border, paddingBottom: 4, height: 56 },
+        tabBarStyle: { borderTopColor: colors.border, paddingBottom: insets.bottom > 0 ? insets.bottom : 4, height: 56 + (insets.bottom > 0 ? insets.bottom : 4) },
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
