@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,9 +7,6 @@ import { Button } from '../../components/common';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
-
-const { width } = Dimensions.get('window');
-const isWide = width > 700;
 
 const NAV_ITEMS = [
   { label: 'Features', id: 'features' },
@@ -21,6 +18,8 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const scrollRef = useRef<ScrollView>(null);
   const sectionRefs = useRef<Record<string, number>>({});
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWide = width > 700;
 
   const scrollTo = (id: string) => {
     const y = sectionRefs.current[id];
@@ -32,10 +31,10 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       {/* Sticky Nav */}
-      <View style={[styles.nav, { paddingTop: insets.top + spacing.xs }]}>
+      <View style={[styles.nav, { paddingTop: insets.top + spacing.xs, paddingHorizontal: isWide ? spacing.xl : spacing.md }]}>
         <Text style={styles.navLogo}>WayFable</Text>
-        <View style={styles.navLinks}>
-          {NAV_ITEMS.map(item => (
+        <View style={[styles.navLinks, { gap: isWide ? spacing.lg : spacing.sm }]}>
+          {isWide && NAV_ITEMS.map(item => (
             <TouchableOpacity key={item.id} onPress={() => scrollTo(item.id)}>
               <Text style={styles.navLink}>{item.label}</Text>
             </TouchableOpacity>
@@ -90,7 +89,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               { icon: '📸', title: 'Foto-Galerie', desc: 'Halte Erinnerungen fest und teile sie mit der Gruppe' },
               { icon: '✨', title: 'Reisebegleiter Fable', desc: 'Dein persönlicher Begleiter plant die perfekte Reise für dich' },
             ].map((f, i) => (
-              <View key={i} style={styles.featureCard}>
+              <View key={i} style={[styles.featureCard, { width: isWide ? '30%' : '100%' }]}>
                 <Text style={styles.featureIcon}>{f.icon}</Text>
                 <Text style={styles.featureTitle}>{f.title}</Text>
                 <Text style={styles.featureDesc}>{f.desc}</Text>
@@ -102,13 +101,13 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         {/* How it Works */}
         <View style={styles.sectionAlt}>
           <Text style={styles.sectionTitle}>So funktioniert's</Text>
-          <View style={styles.stepsRow}>
+          <View style={[styles.stepsRow, { flexDirection: isWide ? 'row' : 'column', alignItems: isWide ? 'flex-start' : 'center' }]}>
             {[
               { step: '1', title: 'Trip erstellen', desc: 'Wähle Ziel, Daten und lade dein Team ein' },
               { step: '2', title: 'Gemeinsam planen', desc: 'Füllt den Tagesplan, Budget und Packliste aus' },
               { step: '3', title: 'Losreisen', desc: 'Nutze die App als Reisebegleiter unterwegs' },
             ].map((s, i) => (
-              <View key={i} style={styles.stepCard}>
+              <View key={i} style={[styles.stepCard, isWide && { flex: 1 }]}>
                 <LinearGradient
                   colors={[...gradients.ocean]}
                   style={styles.stepNumber}
@@ -130,8 +129,8 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Einfache Preise</Text>
           <Text style={styles.sectionSubtitle}>Starte kostenlos, upgrade wenn du bereit bist</Text>
 
-          <View style={styles.pricingRow}>
-            <View style={styles.pricingCard}>
+          <View style={[styles.pricingRow, { flexDirection: isWide ? 'row' : 'column', alignItems: isWide ? 'stretch' : 'center' }]}>
+            <View style={[styles.pricingCard, { width: isWide ? '40%' : '100%' }]}>
               <Text style={styles.pricingTier}>Free</Text>
               <Text style={styles.pricingPrice}>CHF 0</Text>
               <Text style={styles.pricingPeriod}>für immer</Text>
@@ -148,7 +147,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
 
-            <View style={[styles.pricingCard, styles.pricingCardPremium]}>
+            <View style={[styles.pricingCard, styles.pricingCardPremium, { width: isWide ? '40%' : '100%' }]}>
               <LinearGradient
                 colors={[...gradients.ocean]}
                 start={{ x: 0, y: 0 }}
@@ -246,7 +245,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
     paddingBottom: spacing.sm,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderBottomWidth: 1,
@@ -254,7 +252,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   navLogo: { fontSize: 22, fontWeight: '800', color: colors.secondary },
-  navLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  navLinks: { flexDirection: 'row', alignItems: 'center' },
   navLink: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   navCta: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full },
   navCtaText: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
@@ -312,7 +310,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
-    width: isWide ? '30%' : '100%',
     ...shadows.sm,
   },
   featureIcon: { fontSize: 32, marginBottom: spacing.sm },
@@ -321,12 +318,10 @@ const styles = StyleSheet.create({
 
   // Steps
   stepsRow: {
-    flexDirection: isWide ? 'row' : 'column',
     gap: spacing.lg,
     justifyContent: 'center',
-    alignItems: isWide ? 'flex-start' : 'center',
   },
-  stepCard: { alignItems: 'center', flex: isWide ? 1 : undefined, maxWidth: 280 },
+  stepCard: { alignItems: 'center', maxWidth: 280 },
   stepNumber: {
     width: 48,
     height: 48,
@@ -341,16 +336,13 @@ const styles = StyleSheet.create({
 
   // Pricing
   pricingRow: {
-    flexDirection: isWide ? 'row' : 'column',
     gap: spacing.lg,
     justifyContent: 'center',
-    alignItems: isWide ? 'stretch' : 'center',
   },
   pricingCard: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.xl,
-    width: isWide ? '40%' : '100%',
     maxWidth: 380,
     borderWidth: 2,
     borderColor: colors.border,
