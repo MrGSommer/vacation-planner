@@ -35,6 +35,9 @@ nul
 .env
 .env*.local
 
+# Claude Code local config
+.claude/
+
 # Netlify
 .netlify/
 
