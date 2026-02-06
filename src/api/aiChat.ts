@@ -38,15 +38,16 @@ export const sendAiMessage = async (
       body: { task, messages, context },
     });
 
-    if (error) {
-      throw new Error(error.message || 'AI-Anfrage fehlgeschlagen');
-    }
-
+    // Check data.error first — on non-2xx, Supabase still populates data with the JSON body
     if (data?.error) {
       const err = new Error(data.error) as any;
       err.retryable = data.retryable || false;
       err.status = data.status;
       throw err;
+    }
+
+    if (error) {
+      throw new Error(error.message || 'AI-Anfrage fehlgeschlagen');
     }
 
     return { content: data.content, usage: data.usage };
