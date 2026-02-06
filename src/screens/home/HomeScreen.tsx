@@ -195,6 +195,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <Text style={styles.brandName}>WayFable</Text>
         <Text style={styles.headerTitle}>Meine Reisen</Text>
         <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
       </View>
@@ -288,6 +289,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { padding: spacing.xl, paddingBottom: spacing.md },
+  brandName: { fontSize: 22, fontWeight: '800' as const, color: colors.secondary, marginBottom: spacing.xs },
   headerTitle: { ...typography.h1 },
   headerSubtitle: { ...typography.bodySmall, marginTop: spacing.xs },
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },

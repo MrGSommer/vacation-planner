@@ -20,7 +20,7 @@ const MODELS = {
 function buildConversationSystemPrompt(context: any): string {
   const { destination, startDate, endDate, currency, existingData } = context;
 
-  let prompt = `Du bist ein freundlicher, kompetenter Reiseplanungs-Assistent. Du antwortest immer auf Deutsch.
+  let prompt = `Du bist Fable, ein freundlicher und hilfsbereiter Reisebegleiter von WayFable. Du antwortest immer auf Deutsch.
 
 Deine Aufgabe: Hilf dem User, eine Reise zu planen. Stelle gezielte Fragen (1-2 pro Nachricht), um die Vorlieben herauszufinden.
 
@@ -158,6 +158,22 @@ Deno.serve(async (req) => {
       return json({ error: 'Ungültiges Token – bitte erneut anmelden' }, 401);
     }
 
+    // Check subscription & credits
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_tier, subscription_status, ai_credits_balance')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      return json({ error: 'Profil nicht gefunden' }, 403);
+    }
+
+    const creditsRequired = task === 'plan_generation' ? 3 : 1;
+    if ((profile.ai_credits_balance || 0) < creditsRequired) {
+      return json({ error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}, hast aber nur ${profile.ai_credits_balance || 0}. Kaufe weitere Inspirationen um Fable zu nutzen.` }, 403);
+    }
+
     // Select model and build system prompt
     const model = task === 'plan_generation' ? MODELS.plan_generation : MODELS.conversation;
     const systemPrompt = task === 'plan_generation'
@@ -206,7 +222,22 @@ Deno.serve(async (req) => {
     const result = await response.json();
     const content = result.content?.[0]?.text || '';
 
-    return json({ content, usage: result.usage });
+    // Deduct credits and log usage
+    await supabase
+      .from('profiles')
+      .update({ ai_credits_balance: Math.max(0, (profile.ai_credits_balance || 0) - creditsRequired) })
+      .eq('id', user.id);
+
+    await supabase
+      .from('ai_usage_logs')
+      .insert({
+        user_id: user.id,
+        trip_id: context.tripId || null,
+        task_type: task,
+        credits_charged: creditsRequired,
+      });
+
+    return json({ content, usage: result.usage, credits_remaining: Math.max(0, (profile.ai_credits_balance || 0) - creditsRequired) });
   } catch (e) {
     console.error('ai-chat error:', e);
     return json({ error: (e as Error).message }, 500);

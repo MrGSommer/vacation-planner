@@ -15,6 +15,8 @@ import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryField
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { useToast } from '../../contexts/ToastContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 import { RouteMapModal } from '../../components/map/RouteMapModal';
 
@@ -32,6 +34,7 @@ interface CachedTravel {
 
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
+  const { isFeatureAllowed } = useSubscription();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -297,6 +300,20 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       ]);
     }
   };
+
+  if (!isFeatureAllowed('stops')) {
+    return (
+      <View style={styles.container}>
+        <Header title="Route & Stops" onBack={() => navigation.goBack()} />
+        <UpgradePrompt
+          icon="🗺️"
+          title="Routen & Stops"
+          message="Plane Übernachtungen, Zwischenstopps und Reiserouten mit Premium"
+        />
+        <TripBottomNav tripId={tripId} activeTab="Stops" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

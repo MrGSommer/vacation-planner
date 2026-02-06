@@ -17,8 +17,10 @@ import { colors, spacing, borderRadius, typography, shadows, gradients } from '.
 import { Card, TripBottomNav, Avatar } from '../../components/common';
 import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleton';
 import { AiTripModal } from '../../components/ai/AiTripModal';
+import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { ShareModal } from '../home/ShareModal';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 
@@ -41,11 +43,10 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   return html;
 }
 
-const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
-
 export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
+  const { isFeatureAllowed, aiCredits } = useSubscription();
   const insets = useSafeAreaInsets();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activityCount, setActivityCount] = useState(0);
@@ -329,18 +330,29 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
 
           {/* Photos */}
-          <TouchableOpacity
-            style={styles.photosCard}
-            onPress={() => navigation.navigate('Photos', { tripId })}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.photosIcon}>📸</Text>
-            <View style={styles.photosInfo}>
-              <Text style={styles.photosTitle}>Fotos</Text>
-              <Text style={styles.photosSubtitle}>Reiseerinnerungen festhalten</Text>
+          {isFeatureAllowed('photos') ? (
+            <TouchableOpacity
+              style={styles.photosCard}
+              onPress={() => navigation.navigate('Photos', { tripId })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.photosIcon}>📸</Text>
+              <View style={styles.photosInfo}>
+                <Text style={styles.photosTitle}>Fotos</Text>
+                <Text style={styles.photosSubtitle}>Reiseerinnerungen festhalten</Text>
+              </View>
+              <Text style={styles.photosArrow}>{'›'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ marginBottom: spacing.lg }}>
+              <UpgradePrompt
+                icon="📸"
+                title="Fotos"
+                message="Verfügbar mit Premium"
+                inline
+              />
             </View>
-            <Text style={styles.photosArrow}>›</Text>
-          </TouchableOpacity>
+          )}
 
           {/* Map */}
           {Platform.OS === 'web' && (
@@ -357,8 +369,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             </Card>
           )}
 
-          {/* AI Planning */}
-          {AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL && (
+          {/* Fable — Reisebegleiter */}
+          {isFeatureAllowed('ai') ? (
             <TouchableOpacity
               style={styles.aiCard}
               onPress={() => setShowAiModal(true)}
@@ -370,10 +382,20 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 end={{ x: 1, y: 0 }}
                 style={styles.aiCardGradient}
               >
-                <Text style={styles.aiCardText}>{'✨ KI-Reiseplanung'}</Text>
-                <Text style={styles.aiCardSubtext}>{'Aktivitaeten und Stops generieren ›'}</Text>
+                <Text style={styles.aiCardText}>{'✨ Fable fragen'}</Text>
+                <Text style={styles.aiCardSubtext}>{`Aktivitäten und Stops generieren · ${aiCredits} Inspirationen ›`}</Text>
               </LinearGradient>
             </TouchableOpacity>
+          ) : (
+            <View style={{ marginBottom: spacing.lg }}>
+              <UpgradePrompt
+                icon="✨"
+                title="Fable — Dein Reisebegleiter"
+                message="Kaufe Inspirationen um Fable zu nutzen"
+                inline
+                buyInspirations
+              />
+            </View>
           )}
 
           {trip.notes && (

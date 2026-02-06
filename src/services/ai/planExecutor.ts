@@ -161,7 +161,7 @@ export const executePlan = async (
   if (plan.budget_categories?.length > 0) {
     onProgress?.('budget');
     for (const cat of plan.budget_categories) {
-      await createBudgetCategory(finalTripId, cat.name, cat.color, cat.budget_limit || undefined);
+      await createBudgetCategory(finalTripId, cat.name, cat.color, cat.budget_limit || null, 'group');
       budgetCategoriesCreated++;
     }
   }

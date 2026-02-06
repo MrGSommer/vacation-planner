@@ -20,6 +20,12 @@ import { NotificationsScreen } from '../screens/profile/NotificationsScreen';
 import { LanguageCurrencyScreen } from '../screens/profile/LanguageCurrencyScreen';
 import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
 import { TripShareScreen } from '../screens/share/TripShareScreen';
+import { SubscriptionScreen } from '../screens/subscription/SubscriptionScreen';
+import { SubscriptionSuccessScreen } from '../screens/subscription/SubscriptionSuccessScreen';
+import { SubscriptionCancelScreen } from '../screens/subscription/SubscriptionCancelScreen';
+import { DatenschutzScreen } from '../screens/legal/DatenschutzScreen';
+import { AGBScreen } from '../screens/legal/AGBScreen';
+import { ImpressumScreen } from '../screens/legal/ImpressumScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -30,6 +36,8 @@ const linking = {
     screens: {
       AcceptInvite: 'invite/:token',
       TripShare: 'share/:token',
+      SubscriptionSuccess: 'subscription-success',
+      SubscriptionCancel: 'subscription-cancel',
     },
   },
 };
@@ -82,6 +90,12 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="LanguageCurrency" component={LanguageCurrencyScreen} />
             <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
+            <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+            <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />
+            <Stack.Screen name="SubscriptionCancel" component={SubscriptionCancelScreen} />
+            <Stack.Screen name="Datenschutz" component={DatenschutzScreen} />
+            <Stack.Screen name="AGB" component={AGBScreen} />
+            <Stack.Screen name="Impressum" component={ImpressumScreen} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />

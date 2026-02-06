@@ -279,7 +279,7 @@ export const AiTripModal: React.FC<Props> = ({
               <Text style={styles.closeText}>{'✕'}</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle}>
-              {'✨ KI-Reiseplanung'}
+              {'✨ Fable'}
             </Text>
             <View style={styles.closeButton} />
           </View>

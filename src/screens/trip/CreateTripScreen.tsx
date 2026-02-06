@@ -5,23 +5,27 @@ import { Calendar, DateData } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, gradients, shadows } from '../../utils/theme';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
-const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
-
 export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const { create, loading } = useTrips();
+  const { trips } = useTrips();
   const { user } = useAuthContext();
+  const { isFeatureAllowed, canAddTrip, aiCredits } = useSubscription();
   const [step, setStep] = useState(0);
   const [showAiModal, setShowAiModal] = useState(false);
-  const isAiEnabled = AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL;
+
+  const activeTrips = trips.filter(t => t.status === 'planning' || t.status === 'upcoming' || t.status === 'active');
+  const tripLimitReached = !canAddTrip(activeTrips.length);
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
   const [destinationLat, setDestinationLat] = useState<number | null>(null);
@@ -126,7 +130,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                 }}
               />
 
-              {destination.trim() && isAiEnabled && (
+              {isFeatureAllowed('ai') ? (
                 <TouchableOpacity
                   style={styles.aiButton}
                   onPress={() => setShowAiModal(true)}
@@ -138,10 +142,23 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                     end={{ x: 1, y: 0 }}
                     style={styles.aiButtonGradient}
                   >
-                    <Text style={styles.aiButtonText}>{'✨ KI-Reiseplanung'}</Text>
-                    <Text style={styles.aiButtonSubtext}>Lass dir einen kompletten Plan erstellen</Text>
+                    <Text style={styles.aiButtonText}>{'✨ Mit Fable planen'}</Text>
+                    <Text style={styles.aiButtonSubtext}>Dein Reisebegleiter hilft dir bei der Planung</Text>
+                    {aiCredits > 0 && (
+                      <Text style={styles.aiButtonSubtext}>{aiCredits} Inspirationen verfügbar</Text>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
+              ) : (
+                <View style={styles.aiButton}>
+                  <UpgradePrompt
+                    icon="✨"
+                    title="Mit Fable planen"
+                    message="Kaufe Inspirationen um deinen Reisebegleiter zu nutzen"
+                    inline
+                    buyInspirations
+                  />
+                </View>
               )}
             </>
           )}
@@ -190,14 +207,25 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={styles.footer}>
-        {step > 0 && <Button title="Zurück" onPress={() => setStep(s => s - 1)} variant="ghost" style={styles.footerButton} />}
-        {step < 2 ? (
-          <Button title="Weiter" onPress={() => setStep(s => s + 1)} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
-        ) : (
-          <Button title="Reise erstellen" onPress={handleCreate} loading={loading} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
-        )}
-      </View>
+      {tripLimitReached ? (
+        <View style={styles.footer}>
+          <UpgradePrompt
+            icon="✈️"
+            title="Trip-Limit erreicht"
+            message="Upgrade auf Premium für unbegrenzte Trips"
+            inline
+          />
+        </View>
+      ) : (
+        <View style={styles.footer}>
+          {step > 0 && <Button title="Zurück" onPress={() => setStep(s => s - 1)} variant="ghost" style={styles.footerButton} />}
+          {step < 2 ? (
+            <Button title="Weiter" onPress={() => setStep(s => s + 1)} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
+          ) : (
+            <Button title="Reise erstellen" onPress={handleCreate} loading={loading} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
+          )}
+        </View>
+      )}
 
       {user && (
         <AiTripModal

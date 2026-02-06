@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "vacation_planner_temp",
-    "slug": "vacation_planner_temp",
+    "name": "WayFable",
+    "slug": "wayfable",
     "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

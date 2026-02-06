@@ -8,6 +8,8 @@ import { getPhotos, uploadPhoto, deletePhoto } from '../../api/photos';
 import { Photo } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
@@ -20,6 +22,20 @@ const PHOTO_SIZE = (width - spacing.md * 4) / 3;
 export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
+  const { isFeatureAllowed } = useSubscription();
+
+  if (!isFeatureAllowed('photos')) {
+    return (
+      <View style={styles.container}>
+        <Header title="Fotos" onBack={() => navigation.goBack()} />
+        <UpgradePrompt
+          icon="📸"
+          title="Foto-Galerie"
+          message="Lade Fotos hoch und teile Reiseerinnerungen mit Premium"
+        />
+      </View>
+    );
+  }
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [loading, setLoading] = useState(true);

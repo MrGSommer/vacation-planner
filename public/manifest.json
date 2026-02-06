@@ -1,7 +1,7 @@
 {
-  "name": "Vacation Planner",
-  "short_name": "Vacation",
-  "description": "Plan and manage your trips together — itineraries, budgets, accommodation and more.",
+  "name": "WayFable",
+  "short_name": "WayFable",
+  "description": "Plane und verwalte deine Reisen gemeinsam — Routen, Budgets, Unterkünfte und mehr.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -7,8 +7,24 @@ export interface Profile {
   preferred_currency: string;
   notifications_enabled: boolean;
   ai_trip_context_enabled: boolean;
+  subscription_tier: 'free' | 'premium';
+  subscription_status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_period_end: string | null;
+  ai_credits_balance: number;
+  ai_credits_monthly_quota: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AiUsageLog {
+  id: string;
+  user_id: string;
+  trip_id: string | null;
+  task_type: 'conversation' | 'plan_generation';
+  credits_charged: number;
+  created_at: string;
 }
 
 export interface Trip {
@@ -100,6 +116,8 @@ export interface BudgetCategory {
   name: string;
   color: string;
   budget_limit: number | null;
+  scope: 'group' | 'personal';
+  user_id: string | null;
   created_at: string;
 }
 
@@ -112,7 +130,11 @@ export interface Expense {
   amount: number;
   currency: string;
   date: string;
+  scope: 'group' | 'personal';
+  paid_by: string | null;
+  split_with: string[];
   created_at: string;
+  budget_categories?: { name: string; color: string };
 }
 
 export interface PackingList {

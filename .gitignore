@@ -35,6 +35,12 @@ nul
 .env
 .env*.local
 
+# Netlify
+.netlify/
+
+# Claude Code scratchpad
+C*UsersGABRIE*
+
 # typescript
 *.tsbuildinfo
 

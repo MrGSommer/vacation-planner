@@ -15,6 +15,12 @@ export type RootStackParamList = {
   LanguageCurrency: undefined;
   AcceptInvite: { token: string };
   TripShare: { token: string };
+  Subscription: undefined;
+  SubscriptionSuccess: undefined;
+  SubscriptionCancel: undefined;
+  Datenschutz: undefined;
+  AGB: undefined;
+  Impressum: undefined;
 };
 
 export type MainTabParamList = {
@@ -26,4 +32,5 @@ export type AuthStackParamList = {
   Welcome: undefined;
   Login: undefined;
   SignUp: undefined;
+  SignUpSuccess: { email: string };
 };

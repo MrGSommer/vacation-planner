@@ -5,17 +5,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Card, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useTrips } from '../../hooks/useTrips';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
+import { createPortalSession, purchaseInspirations } from '../../api/stripe';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import appJson from '../../../app.json';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
-const AI_ALLOWED_EMAIL = process.env.EXPO_PUBLIC_AI_ALLOWED_EMAIL;
-
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { trips } = useTrips();
+  const { isPremium, aiCredits, isFeatureAllowed } = useSubscription();
   const insets = useSafeAreaInsets();
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
 
@@ -91,13 +92,60 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </Card>
 
-      {AI_ALLOWED_EMAIL && user?.email === AI_ALLOWED_EMAIL && (
+      {/* Subscription */}
+      <Card style={styles.aiSettingsCard}>
+        <Text style={styles.aiSettingsTitle}>Abonnement</Text>
+        <View style={styles.subscriptionRow}>
+          <Text style={styles.subscriptionLabel}>Status</Text>
+          <Text style={[styles.subscriptionValue, isPremium && { color: colors.secondary }]}>
+            {isPremium ? 'Premium' : 'Free'}
+          </Text>
+        </View>
+        <View style={styles.subscriptionRow}>
+          <Text style={styles.subscriptionLabel}>Inspirationen</Text>
+          <Text style={styles.subscriptionValue}>{aiCredits}</Text>
+        </View>
+        {isPremium && (
+          <TouchableOpacity
+            style={styles.subscriptionBtn}
+            onPress={async () => {
+              try {
+                const { url } = await createPortalSession();
+                if (Platform.OS === 'web') window.open(url, '_blank');
+              } catch {}
+            }}
+          >
+            <Text style={styles.subscriptionBtnText}>Abo verwalten</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[styles.subscriptionBtn, { marginTop: spacing.xs }]}
+          onPress={async () => {
+            try {
+              const { url } = await purchaseInspirations();
+              if (Platform.OS === 'web') window.open(url, '_blank');
+            } catch {}
+          }}
+        >
+          <Text style={styles.subscriptionBtnText}>Inspirationen kaufen</Text>
+        </TouchableOpacity>
+        {!isPremium && (
+          <TouchableOpacity
+            style={[styles.subscriptionBtn, { backgroundColor: colors.secondary, marginTop: spacing.xs }]}
+            onPress={() => navigation.navigate('Subscription')}
+          >
+            <Text style={[styles.subscriptionBtnText, { color: '#FFFFFF' }]}>Upgrade auf Premium</Text>
+          </TouchableOpacity>
+        )}
+      </Card>
+
+      {isFeatureAllowed('ai') && (
         <Card style={styles.aiSettingsCard}>
-          <Text style={styles.aiSettingsTitle}>{'🤖 KI-Einstellungen'}</Text>
+          <Text style={styles.aiSettingsTitle}>Fable-Einstellungen</Text>
           <View style={styles.aiSettingsRow}>
             <View style={styles.aiSettingsInfo}>
-              <Text style={styles.aiSettingsLabel}>Reisedaten als KI-Kontext verwenden</Text>
-              <Text style={styles.aiSettingsDesc}>Erlaubt dem KI-Reiseplaner, bestehende Trip-Daten fuer bessere Vorschlaege zu nutzen</Text>
+              <Text style={styles.aiSettingsLabel}>Reisedaten als Kontext verwenden</Text>
+              <Text style={styles.aiSettingsDesc}>Erlaubt Fable, bestehende Trip-Daten für bessere Vorschläge zu nutzen</Text>
             </View>
             <Switch
               value={aiContextEnabled}
@@ -108,6 +156,27 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </Card>
       )}
+
+      {/* Legal */}
+      <Card style={styles.settingsCard}>
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Datenschutz')}>
+          <Text style={styles.settingsIcon}>🔒</Text>
+          <Text style={styles.settingsText}>Datenschutz</Text>
+          <Text style={styles.arrow}>{'›'}</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('AGB')}>
+          <Text style={styles.settingsIcon}>📄</Text>
+          <Text style={styles.settingsText}>AGB</Text>
+          <Text style={styles.arrow}>{'›'}</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Impressum')}>
+          <Text style={styles.settingsIcon}>ℹ️</Text>
+          <Text style={styles.settingsText}>Impressum</Text>
+          <Text style={styles.arrow}>{'›'}</Text>
+        </TouchableOpacity>
+      </Card>
 
       <Button title="Abmelden" onPress={handleSignOut} variant="secondary" style={styles.logoutButton} />
 
@@ -139,6 +208,11 @@ const styles = StyleSheet.create({
   aiSettingsInfo: { flex: 1, marginRight: spacing.md },
   aiSettingsLabel: { ...typography.body, fontWeight: '500' },
   aiSettingsDesc: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  subscriptionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  subscriptionLabel: { ...typography.body, color: colors.textSecondary },
+  subscriptionValue: { ...typography.body, fontWeight: '600' },
+  subscriptionBtn: { backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
+  subscriptionBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
   logoutButton: { marginTop: spacing.md },
   version: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.xl, marginBottom: spacing.md },
 });

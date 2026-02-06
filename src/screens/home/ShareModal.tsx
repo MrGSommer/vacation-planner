@@ -19,6 +19,7 @@ import {
   CollaboratorWithProfile,
 } from '../../api/invitations';
 import { useToast } from '../../contexts/ToastContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Button, Avatar } from '../../components/common';
 
@@ -46,6 +47,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   userId,
 }) => {
   const { showToast } = useToast();
+  const { canAddCollaborator } = useSubscription();
   const [tab, setTab] = useState<Tab>('share');
   const [type, setType] = useState<'info' | 'collaborate'>('collaborate');
   const [role, setRole] = useState<'editor' | 'viewer'>('viewer');
@@ -73,6 +75,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const handleCreate = async () => {
+    if (type === 'collaborate' && !canAddCollaborator(nonOwnerMembers.length)) {
+      showToast('Kollaborateur-Limit erreicht. Upgrade auf Premium für unbegrenzte Teilnehmer.', 'error');
+      return;
+    }
     setLoading(true);
     try {
       const { url } = await createInviteLink(tripId, userId, type, role);
