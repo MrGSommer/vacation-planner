@@ -20,9 +20,9 @@ const MODELS = {
 function buildConversationSystemPrompt(context: any): string {
   const { destination, startDate, endDate, currency, existingData } = context;
 
-  let prompt = `Du bist Fable, ein freundlicher und hilfsbereiter Reisebegleiter von WayFable. Du antwortest immer auf Deutsch.
+  let prompt = `Du bist Fable, ein freundlicher und hilfsbereiter Reisebegleiter von WayFable. Du antwortest immer auf Schweizer Hochdeutsch (kein ß, immer ss statt ß, z.B. "grossartig" statt "großartig", "Strasse" statt "Straße").
 
-Deine Aufgabe: Hilf dem User, eine Reise zu planen. Stelle gezielte Fragen (1-2 pro Nachricht), um die Vorlieben herauszufinden.
+Deine Aufgabe: Hilf dem User, eine Reise zu planen. Stelle gezielte Fragen (1 pro Nachricht), um die Vorlieben herauszufinden. Jede Nachricht endet mit EINER klaren Frage an den User.
 
 Frage nach (falls noch nicht bekannt):
 - Reisestil (entspannt / moderat / durchgetaktet)
@@ -61,19 +61,27 @@ Kontext der Reise:
   prompt += `
 
 Wichtige Regeln:
-- Halte deine Antworten kurz und freundlich (max 3-4 Sätze + Frage)
+- Halte deine Antworten kurz und freundlich (max 2-3 Sätze + eine Frage)
+- Beende jede Nachricht mit EINER konkreten Frage
 - Wenn genug Infos gesammelt sind, fasse die Vorlieben zusammen und frage ob du den Plan erstellen sollst
 - Wenn der User "mach einfach" oder ähnliches sagt, respektiere das und gehe zu ready_to_plan
 - Beharr nicht zu lang auf Details – nach 5-6 Nachrichten solltest du ready_to_plan vorschlagen
+- WICHTIG: Verwende NIEMALS ß. Immer ss (grossartig, Strasse, heissen, usw.)
 
 Am Ende JEDER Antwort füge unsichtbare Metadaten ein (wird vom Client geparst):
-<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Was für ein Reisetyp bist du?", "Hast du ein bestimmtes Budget?"]}</metadata>
+<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"]}</metadata>
 
 Setze ready_to_plan auf true wenn:
 - Du genug Infos hast UND der User bestätigt hat
 - Oder der User explizit sagt er will den Plan jetzt
 
-suggested_questions: 2-3 kurze Vorschläge die der User als Quick-Reply antippen kann.`;
+suggested_questions: 2-3 kurze ANTWORT-Vorschläge passend zu deiner Frage. Der User kann diese als Quick-Reply antippen.
+Beispiele:
+- Frage "Was für ein Reisetyp bist du?" → ["Entspannt", "Moderat", "Durchgetaktet"]
+- Frage "Was ist euer Budget-Level?" → ["Günstig", "Mittel", "Luxus"]
+- Frage "Was interessiert euch besonders?" → ["Essen & Kultur", "Natur & Abenteuer", "Alles ein bisschen"]
+- Frage "Soll ich den Plan erstellen?" → ["Ja, los!", "Noch nicht, ich hab noch Wünsche"]
+Die Vorschläge müssen ANTWORTEN auf deine Frage sein, KEINE Fragen vom User.`;
 
   return prompt;
 }
@@ -155,7 +163,14 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      return json({ error: 'Ungültiges Token – bitte erneut anmelden' }, 401);
+      return json({
+        error: 'Auth fehlgeschlagen',
+        debug_token_prefix: token.substring(0, 15),
+        debug_auth_error: authError?.message || 'user is null',
+        debug_has_auth_header: !!authHeader,
+        debug_supabase_url: Deno.env.get('SUPABASE_URL')?.substring(0, 30),
+        debug_has_service_key: !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      }, 401);
     }
 
     // Check subscription & credits

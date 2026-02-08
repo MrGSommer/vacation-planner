@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
           if (!customerId) break;
 
-          // Add 10 credits to balance
+          // Add 20 credits to balance
           const { data: profile } = await supabase
             .from('profiles')
             .select('ai_credits_balance')
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
             await supabase
               .from('profiles')
               .update({
-                ai_credits_balance: (profile.ai_credits_balance || 0) + 10,
+                ai_credits_balance: (profile.ai_credits_balance || 0) + 20,
               })
               .eq('stripe_customer_id', customerId);
           }

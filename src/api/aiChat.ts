@@ -47,6 +47,21 @@ export const sendAiMessage = async (
     }
 
     if (error) {
+      // Try to extract response body from FunctionsHttpError
+      if (error.context instanceof Response) {
+        try {
+          const body = await error.context.json();
+          console.error('AI-Chat error body:', body);
+          if (body?.error) {
+            const err = new Error(body.error) as any;
+            err.retryable = body.retryable || false;
+            err.status = error.context.status;
+            throw err;
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+        }
+      }
       throw new Error(error.message || 'AI-Anfrage fehlgeschlagen');
     }
 

@@ -135,7 +135,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.inspirationTitle}>Oder: Inspirationen einzeln kaufen</Text>
           <Text style={styles.inspirationDesc}>
             Nutze Fable, deinen Reisebegleiter, auch ohne Abo.{'\n'}
-            10 Inspirationen für CHF 5 — du hast aktuell {aiCredits}.
+            20 Inspirationen für CHF 5 — du hast aktuell {aiCredits}.
           </Text>
           <TouchableOpacity
             style={styles.inspirationButton}

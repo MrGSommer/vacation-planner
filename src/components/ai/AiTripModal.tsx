@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
@@ -43,6 +44,7 @@ export const AiTripModal: React.FC<Props> = ({
   visible, onClose, mode, tripId, userId, initialContext, onComplete,
 }) => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -188,12 +190,21 @@ export const AiTripModal: React.FC<Props> = ({
           )}
 
           {error && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity onPress={() => sendMessage('Weiter')}>
-                <Text style={styles.errorRetry}>Erneut versuchen</Text>
-              </TouchableOpacity>
-            </View>
+            error.includes('Inspirationen') ? (
+              <View style={styles.creditBanner}>
+                <Text style={styles.creditText}>{error}</Text>
+                <TouchableOpacity onPress={() => { handleClose(); navigation.navigate('Subscription'); }}>
+                  <Text style={styles.creditAction}>Inspirationen kaufen</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity onPress={() => sendMessage('Weiter')}>
+                  <Text style={styles.errorRetry}>Erneut versuchen</Text>
+                </TouchableOpacity>
+              </View>
+            )
           )}
 
           {tokenWarning && (
@@ -344,6 +355,18 @@ const styles = StyleSheet.create({
   },
   errorText: { ...typography.bodySmall, color: colors.error },
   errorRetry: { ...typography.bodySmall, color: colors.primary, fontWeight: '600', marginTop: spacing.xs },
+
+  // Credit hint (friendly, not error)
+  creditBanner: {
+    backgroundColor: colors.secondary + '12',
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.secondary,
+  },
+  creditText: { ...typography.bodySmall, color: colors.textSecondary },
+  creditAction: { ...typography.bodySmall, color: colors.secondary, fontWeight: '600', marginTop: spacing.xs },
 
   // Warning
   warningBanner: {

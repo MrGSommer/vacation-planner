@@ -39,7 +39,7 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.body}>
           - Premium monatlich: CHF 9.90/Monat{'\n'}
           - Premium jährlich: CHF 99/Jahr{'\n'}
-          - Zusätzliche Inspirationen: CHF 5 pro 10 Inspirationen{'\n\n'}
+          - Zusätzliche Inspirationen: CHF 5 pro 20 Inspirationen{'\n\n'}
           Alle Preise verstehen sich inklusive allfälliger Steuern. Die Zahlung erfolgt über Stripe. Es gelten die Zahlungsbedingungen von Stripe.
         </Text>
 
