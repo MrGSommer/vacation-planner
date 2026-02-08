@@ -1,5 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
-import Stripe from 'npm:stripe@17';
+// Zero npm imports — uses native fetch() for Stripe + Supabase APIs
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +12,28 @@ const json = (data: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY')!;
+const SITE_URL = Deno.env.get('SITE_URL') || 'https://vacation-planner-gs.netlify.app';
+
+async function getUser(token: string) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'apikey': SERVICE_ROLE_KEY },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function getCustomerId(userId: string): Promise<string | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=stripe_customer_id`,
+    { headers: { 'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 'apikey': SERVICE_ROLE_KEY } },
+  );
+  const rows = await res.json();
+  return rows?.[0]?.stripe_customer_id || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -22,35 +43,31 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Nicht authentifiziert' }, 401);
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+    const body = await req.json().catch(() => ({}));
+    const clientCustomerId = body?.customerId;
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return json({ error: 'Ungültiges Token' }, 401);
+    const user = await getUser(token);
+    if (!user?.id) return json({ error: 'Ungültiges Token' }, 401);
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('stripe_customer_id')
-      .eq('id', user.id)
-      .single();
+    const customerId = clientCustomerId || await getCustomerId(user.id);
+    if (!customerId) return json({ error: 'Kein Stripe-Konto verknüpft' }, 400);
 
-    if (!profile?.stripe_customer_id) {
-      return json({ error: 'Kein Stripe-Konto verknüpft' }, 400);
-    }
-
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-      apiVersion: '2024-12-18.acacia',
+    // Create billing portal session via Stripe REST API
+    const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${STRIPE_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'customer': customerId,
+        'return_url': SITE_URL,
+      }).toString(),
     });
 
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://vacation-planner-gs.netlify.app';
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
-      return_url: siteUrl,
-    });
+    const session = await res.json();
+    if (session.error) throw new Error(session.error.message);
 
     return json({ url: session.url });
   } catch (e) {

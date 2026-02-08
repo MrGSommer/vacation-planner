@@ -7,7 +7,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../api/supabase';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
 
-const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE === 'true';
+// Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
+const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 

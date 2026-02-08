@@ -120,7 +120,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               setStripeLoading('portal');
               setStripeError(null);
               try {
-                const { url } = await createPortalSession();
+                const { url } = await createPortalSession(profile?.stripe_customer_id);
                 if (Platform.OS === 'web') window.location.href = url;
               } catch (e: any) {
                 setStripeError(e?.message || 'Abo-Verwaltung konnte nicht geladen werden');
@@ -141,7 +141,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             setStripeLoading('credits');
             setStripeError(null);
             try {
-              const { url } = await purchaseInspirations();
+              const { url } = await purchaseInspirations(profile?.stripe_customer_id);
               if (Platform.OS === 'web') window.location.href = url;
             } catch (e: any) {
               setStripeError(e?.message || 'Inspirationen kaufen fehlgeschlagen');

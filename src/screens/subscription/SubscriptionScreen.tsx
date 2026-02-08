@@ -4,6 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '../../components/common';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useAuth } from '../../hooks/useAuth';
 import { createCheckoutSession, purchaseInspirations } from '../../api/stripe';
 import { STRIPE_CONFIG } from '../../config/stripe';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
@@ -12,6 +13,7 @@ type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, aiCredits } = useSubscription();
+  const { profile } = useAuth();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
   const [loading, setLoading] = useState(false);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -22,7 +24,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
       const priceId = billing === 'monthly'
         ? STRIPE_CONFIG.priceMonthly
         : STRIPE_CONFIG.priceYearly;
-      const { url } = await createCheckoutSession(priceId, 'subscription');
+      const { url } = await createCheckoutSession(priceId, 'subscription', profile?.stripe_customer_id);
       if (Platform.OS === 'web') {
         window.location.href = url;
       }
@@ -144,7 +146,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             onPress={async () => {
               setCreditsLoading(true);
               try {
-                const { url } = await purchaseInspirations();
+                const { url } = await purchaseInspirations(profile?.stripe_customer_id);
                 if (Platform.OS === 'web') window.location.href = url;
               } catch (e) {
                 console.error(e);
