@@ -7,6 +7,9 @@ export const signUpWithEmail = async (email: string, password: string, fullName:
     options: { data: { full_name: fullName } },
   });
   if (error) throw error;
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    throw new Error('Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich stattdessen an.');
+  }
   return data;
 };
 

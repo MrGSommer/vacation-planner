@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
-import { colors, spacing, typography, borderRadius } from '../../utils/theme';
+import { supabase } from '../../api/supabase';
+import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
+
+const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE === 'true';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -14,6 +18,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   const [agbAccepted, setAgbAccepted] = useState(false);
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
   const { signUp, loading, error, clearError } = useAuth();
 
   const handleSignUp = async () => {
@@ -32,7 +38,82 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     } catch {}
   };
 
+  const handleWaitlist = async () => {
+    if (!email.trim()) {
+      setLocalError('Bitte gib deine E-Mail-Adresse ein');
+      return;
+    }
+    setWaitlistLoading(true);
+    setLocalError(null);
+    try {
+      const { error: insertError } = await supabase
+        .from('waitlist')
+        .insert({ email: email.trim().toLowerCase(), full_name: fullName.trim() || null });
+      if (insertError) {
+        if (insertError.code === '23505') {
+          setLocalError('Du stehst bereits auf der Warteliste!');
+        } else {
+          setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+        }
+      } else {
+        setWaitlistSuccess(true);
+      }
+    } catch {
+      setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+    } finally {
+      setWaitlistLoading(false);
+    }
+  };
+
   const displayError = localError || error;
+
+  if (WAITLIST_MODE) {
+    if (waitlistSuccess) {
+      return (
+        <View style={styles.container}>
+          <Header title="Warteliste" onBack={() => navigation.goBack()} />
+          <View style={styles.successContainer}>
+            <LinearGradient colors={[...gradients.ocean]} style={styles.successGradient}>
+              <Text style={styles.successIcon}>{'🎉'}</Text>
+              <Text style={styles.successTitle}>Du bist dabei!</Text>
+              <Text style={styles.successMessage}>
+                Wir benachrichtigen dich per E-Mail, sobald WayFable für dich bereit ist.
+              </Text>
+              <TouchableOpacity style={styles.successButton} onPress={() => navigation.goBack()}>
+                <Text style={styles.successButtonText}>Zurück</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.container}>
+        <Header title="Warteliste" onBack={() => navigation.goBack()} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <Text style={styles.waitlistEmoji}>{'✈️'}</Text>
+            <Text style={styles.title}>Bald verfügbar!</Text>
+            <Text style={styles.subtitle}>
+              WayFable befindet sich aktuell in der Beta-Phase. Trag dich ein und wir melden uns, sobald du loslegen kannst.
+            </Text>
+
+            {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
+
+            <Input label="Name (optional)" placeholder="Dein Name" value={fullName} onChangeText={setFullName} />
+            <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
+
+            <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!email.trim()} style={styles.signUpButton} />
+
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
+              <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -77,7 +158,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: spacing.xl, paddingTop: spacing.xxl },
   title: { ...typography.h1, marginBottom: spacing.xs },
-  subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl },
+  subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl, lineHeight: 24 },
   errorBox: { backgroundColor: '#FFEAEA', padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
   agbRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.md },
@@ -90,4 +171,12 @@ const styles = StyleSheet.create({
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: '600' },
+  waitlistEmoji: { fontSize: 48, textAlign: 'center', marginBottom: spacing.md },
+  successContainer: { flex: 1 },
+  successGradient: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  successIcon: { fontSize: 64, marginBottom: spacing.lg },
+  successTitle: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.md },
+  successMessage: { ...typography.body, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 24, marginBottom: spacing.xl },
+  successButton: { backgroundColor: '#FFFFFF', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: borderRadius.full },
+  successButtonText: { ...typography.button, color: colors.secondary },
 });
