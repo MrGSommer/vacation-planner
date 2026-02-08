@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { priceId } = await req.json();
+    const { priceId, mode: modeHint } = await req.json();
     if (!priceId) return json({ error: 'priceId fehlt' }, 400);
 
     // Auth
@@ -62,9 +62,12 @@ Deno.serve(async (req) => {
 
     const siteUrl = Deno.env.get('SITE_URL') || 'https://vacation-planner-gs.netlify.app';
 
-    // Determine mode based on price type
-    const price = await stripe.prices.retrieve(priceId);
-    const mode = price.recurring ? 'subscription' : 'payment';
+    // Use client hint or fetch price to determine mode
+    let mode: 'subscription' | 'payment' = modeHint;
+    if (!mode) {
+      const price = await stripe.prices.retrieve(priceId);
+      mode = price.recurring ? 'subscription' : 'payment';
+    }
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,

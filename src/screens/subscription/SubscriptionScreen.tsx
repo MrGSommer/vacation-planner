@@ -14,6 +14,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, aiCredits } = useSubscription();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
   const [loading, setLoading] = useState(false);
+  const [creditsLoading, setCreditsLoading] = useState(false);
 
   const handleSubscribe = async () => {
     setLoading(true);
@@ -21,7 +22,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
       const priceId = billing === 'monthly'
         ? STRIPE_CONFIG.priceMonthly
         : STRIPE_CONFIG.priceYearly;
-      const { url } = await createCheckoutSession(priceId);
+      const { url } = await createCheckoutSession(priceId, 'subscription');
       if (Platform.OS === 'web') {
         window.location.href = url;
       }
@@ -138,18 +139,24 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             20 Inspirationen für CHF 5 — du hast aktuell {aiCredits}.
           </Text>
           <TouchableOpacity
-            style={styles.inspirationButton}
+            style={[styles.inspirationButton, creditsLoading && { opacity: 0.6 }]}
+            disabled={creditsLoading}
             onPress={async () => {
+              setCreditsLoading(true);
               try {
                 const { url } = await purchaseInspirations();
                 if (Platform.OS === 'web') window.location.href = url;
               } catch (e) {
                 console.error(e);
+              } finally {
+                setCreditsLoading(false);
               }
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.inspirationButtonText}>{'✨ Inspirationen kaufen'}</Text>
+            <Text style={styles.inspirationButtonText}>
+              {creditsLoading ? 'Wird geladen...' : '✨ Inspirationen kaufen'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

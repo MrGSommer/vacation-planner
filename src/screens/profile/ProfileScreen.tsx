@@ -19,6 +19,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, aiCredits, isFeatureAllowed } = useSubscription();
   const insets = useSafeAreaInsets();
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
+  const [stripeLoading, setStripeLoading] = useState<'portal' | 'credits' | null>(null);
+  const [stripeError, setStripeError] = useState<string | null>(null);
 
   const handleAiContextToggle = async (value: boolean) => {
     setAiContextEnabled(value);
@@ -105,29 +107,52 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.subscriptionLabel}>Inspirationen</Text>
           <Text style={styles.subscriptionValue}>{aiCredits}</Text>
         </View>
+        {stripeError && (
+          <View style={styles.stripeErrorBox}>
+            <Text style={styles.stripeErrorText}>{stripeError}</Text>
+          </View>
+        )}
         {isPremium && (
           <TouchableOpacity
-            style={styles.subscriptionBtn}
+            style={[styles.subscriptionBtn, stripeLoading === 'portal' && { opacity: 0.6 }]}
+            disabled={stripeLoading !== null}
             onPress={async () => {
+              setStripeLoading('portal');
+              setStripeError(null);
               try {
                 const { url } = await createPortalSession();
-                if (Platform.OS === 'web') window.open(url, '_blank');
-              } catch {}
+                if (Platform.OS === 'web') window.location.href = url;
+              } catch (e: any) {
+                setStripeError(e?.message || 'Abo-Verwaltung konnte nicht geladen werden');
+              } finally {
+                setStripeLoading(null);
+              }
             }}
           >
-            <Text style={styles.subscriptionBtnText}>Abo verwalten</Text>
+            <Text style={styles.subscriptionBtnText}>
+              {stripeLoading === 'portal' ? 'Wird geladen...' : 'Abo verwalten'}
+            </Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[styles.subscriptionBtn, { marginTop: spacing.xs }]}
+          style={[styles.subscriptionBtn, { marginTop: spacing.xs }, stripeLoading === 'credits' && { opacity: 0.6 }]}
+          disabled={stripeLoading !== null}
           onPress={async () => {
+            setStripeLoading('credits');
+            setStripeError(null);
             try {
               const { url } = await purchaseInspirations();
-              if (Platform.OS === 'web') window.open(url, '_blank');
-            } catch {}
+              if (Platform.OS === 'web') window.location.href = url;
+            } catch (e: any) {
+              setStripeError(e?.message || 'Inspirationen kaufen fehlgeschlagen');
+            } finally {
+              setStripeLoading(null);
+            }
           }}
         >
-          <Text style={styles.subscriptionBtnText}>Inspirationen kaufen</Text>
+          <Text style={styles.subscriptionBtnText}>
+            {stripeLoading === 'credits' ? 'Wird geladen...' : 'Inspirationen kaufen'}
+          </Text>
         </TouchableOpacity>
         {!isPremium && (
           <TouchableOpacity
@@ -211,6 +236,8 @@ const styles = StyleSheet.create({
   subscriptionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   subscriptionLabel: { ...typography.body, color: colors.textSecondary },
   subscriptionValue: { ...typography.body, fontWeight: '600' },
+  stripeErrorBox: { backgroundColor: '#FFEAEA', padding: spacing.sm, borderRadius: borderRadius.md, marginBottom: spacing.sm },
+  stripeErrorText: { ...typography.caption, color: colors.error, textAlign: 'center' },
   subscriptionBtn: { backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
   subscriptionBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
   logoutButton: { marginTop: spacing.md },
