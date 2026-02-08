@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
+      payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       mode,
       success_url: `${siteUrl}/subscription-success`,
