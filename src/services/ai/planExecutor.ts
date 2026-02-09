@@ -95,6 +95,8 @@ export const executePlan = async (
       status: 'planning',
       currency: plan.trip.currency || currency,
       notes: plan.trip.notes,
+      travelers_count: 1,
+      group_type: 'solo',
     });
     finalTripId = trip.id;
   }

@@ -317,7 +317,7 @@ export const AiTripModal: React.FC<Props> = ({
             <TouchableOpacity style={styles.planReviewBtn} onPress={showPreview} activeOpacity={0.7}>
               <Text style={styles.planReviewBtnText}>{'📋 Details anzeigen'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={confirmPlan} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={() => confirmPlan()} activeOpacity={0.7}>
               <LinearGradient
                 colors={[...gradients.ocean]}
                 start={{ x: 0, y: 0 }}
