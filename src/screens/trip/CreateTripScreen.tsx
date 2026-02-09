@@ -33,7 +33,23 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
+  const [travelersCount, setTravelersCount] = useState(1);
+  const [groupType, setGroupType] = useState<'solo' | 'couple' | 'family' | 'friends' | 'group'>('solo');
   const [notes, setNotes] = useState('');
+
+  const GROUP_TYPES: Array<{ id: typeof groupType; label: string }> = [
+    { id: 'solo', label: 'Solo' },
+    { id: 'couple', label: 'Paar' },
+    { id: 'family', label: 'Familie' },
+    { id: 'friends', label: 'Freunde' },
+    { id: 'group', label: 'Gruppe' },
+  ];
+
+  const handleGroupTypeChange = (type: typeof groupType) => {
+    setGroupType(type);
+    if (type === 'solo') setTravelersCount(1);
+    else if (type === 'couple') setTravelersCount(2);
+  };
 
   const steps = ['Details', 'Daten', 'Optionen'];
 
@@ -88,6 +104,8 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         end_date: endDate,
         status: 'planning',
         currency,
+        travelers_count: travelersCount,
+        group_type: groupType,
         notes: notes.trim() || null,
       });
       navigation.replace('TripDetail', { tripId: trip.id });
@@ -189,6 +207,39 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
           {step === 2 && (
             <>
               <Text style={styles.stepTitle}>Weitere Details</Text>
+
+              <Text style={styles.fieldLabel}>Reisegruppe</Text>
+              <View style={styles.currencyRow}>
+                {GROUP_TYPES.map(g => (
+                  <TouchableOpacity
+                    key={g.id}
+                    style={[styles.currencyChip, groupType === g.id && styles.currencyChipActive]}
+                    onPress={() => handleGroupTypeChange(g.id)}
+                  >
+                    <Text style={[styles.currencyText, groupType === g.id && styles.currencyTextActive]}>{g.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Anzahl Reisende</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, travelersCount <= 1 && styles.stepperBtnDisabled]}
+                  onPress={() => setTravelersCount(c => Math.max(1, c - 1))}
+                  disabled={travelersCount <= 1}
+                >
+                  <Text style={[styles.stepperBtnText, travelersCount <= 1 && styles.stepperBtnTextDisabled]}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{travelersCount}</Text>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, travelersCount >= 20 && styles.stepperBtnDisabled]}
+                  onPress={() => setTravelersCount(c => Math.min(20, c + 1))}
+                  disabled={travelersCount >= 20}
+                >
+                  <Text style={[styles.stepperBtnText, travelersCount >= 20 && styles.stepperBtnTextDisabled]}>+</Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={styles.fieldLabel}>Währung</Text>
               <View style={styles.currencyRow}>
                 {CURRENCIES.map(c => (
@@ -240,6 +291,8 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
             startDate: startDate || undefined,
             endDate: endDate || undefined,
             currency,
+            travelersCount,
+            groupType,
           }}
           onComplete={(tripId) => {
             setShowAiModal(false);
@@ -271,6 +324,12 @@ const styles = StyleSheet.create({
   currencyChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   currencyText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   currencyTextActive: { color: '#FFFFFF' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  stepperBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  stepperBtnDisabled: { borderColor: colors.border },
+  stepperBtnText: { fontSize: 20, color: colors.primary, fontWeight: '600', lineHeight: 22 },
+  stepperBtnTextDisabled: { color: colors.border },
+  stepperValue: { ...typography.h2, minWidth: 32, textAlign: 'center' },
   aiButton: { marginTop: spacing.lg },
   aiButtonGradient: { padding: spacing.md, borderRadius: borderRadius.lg, alignItems: 'center', ...shadows.sm },
   aiButtonText: { ...typography.button, color: '#FFFFFF', marginBottom: 2 },

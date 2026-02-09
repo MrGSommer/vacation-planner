@@ -39,11 +39,14 @@ interface Props {
     currency?: string;
     tripName?: string;
     notes?: string | null;
+    travelersCount?: number;
+    groupType?: string;
   };
   onComplete?: (tripId: string) => void;
 }
 
 const PROGRESS_LABELS: Record<ProgressStep, string> = {
+  structure: 'Erstelle Grundstruktur...',
   trip: 'Erstelle Trip...',
   days: 'Erstelle Tage...',
   activities: 'Erstelle Aktivitäten...',
@@ -64,8 +67,9 @@ export const AiTripModal: React.FC<Props> = ({
   const {
     phase, messages, metadata, plan, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
+    restored, creditsBalance,
     startConversation, sendMessage, generatePlan,
-    confirmPlan, rejectPlan, showPreview, adjustPlan,
+    confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
     dismissConflicts, confirmWithConflicts, reset,
   } = useAiPlanner({ mode, tripId, userId, initialContext });
   const [adjustMode, setAdjustMode] = useState(false);
@@ -98,21 +102,36 @@ export const AiTripModal: React.FC<Props> = ({
   };
 
   const handleClose = () => {
-    reset();
+    // Don't reset — conversation is persisted and can be resumed
     onClose();
+  };
+
+  const handleRestart = () => {
+    reset();
+    // Will auto-start via the useEffect
   };
 
   const handleComplete = () => {
     if (executionResult) {
       onComplete?.(executionResult.tripId);
     }
-    handleClose();
+    reset();
+    onClose();
   };
 
   // Render different phases
   const renderContent = () => {
     if (phase === 'generating_plan') {
-      return <AiPlanningAnimation />;
+      return (
+        <View style={styles.executingContainer}>
+          <LinearGradient colors={[...gradients.ocean]} style={styles.executingGradient}>
+            <AiPlanningAnimation />
+            {progressStep && (
+              <Text style={styles.executingStep}>{PROGRESS_LABELS[progressStep]}</Text>
+            )}
+          </LinearGradient>
+        </View>
+      );
     }
 
     if (phase === 'previewing_plan' && plan) {
@@ -121,7 +140,7 @@ export const AiTripModal: React.FC<Props> = ({
           plan={plan}
           currency={initialContext.currency || 'CHF'}
           onConfirm={confirmPlan}
-          onReject={() => setPhase('plan_review')}
+          onReject={hidePreview}
         />
       );
     }
@@ -195,6 +214,13 @@ export const AiTripModal: React.FC<Props> = ({
           </View>
         )}
 
+        {/* Restored conversation hint */}
+        {restored && (
+          <View style={styles.restoredBanner}>
+            <Text style={styles.restoredText}>Gespräch fortgesetzt</Text>
+          </View>
+        )}
+
         {/* Conflict dialog */}
         {conflicts.length > 0 && (
           <View style={styles.conflictBanner}>
@@ -259,7 +285,7 @@ export const AiTripModal: React.FC<Props> = ({
                       if (Platform.OS === 'web') {
                         setShowBuyModal(true);
                       } else {
-                        handleClose();
+                        onClose();
                         navigation.navigate('Subscription');
                       }
                     }}>
@@ -376,6 +402,9 @@ export const AiTripModal: React.FC<Props> = ({
     );
   };
 
+  // Show "Neu starten" button only in conversing/plan_review
+  const showRestartButton = phase === 'conversing' || phase === 'plan_review';
+
   return (
     <Modal
       visible={visible}
@@ -390,10 +419,21 @@ export const AiTripModal: React.FC<Props> = ({
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Text style={styles.closeText}>{'✕'}</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-              {'✨ Fable'}
-            </Text>
-            <View style={styles.closeButton} />
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerTitle}>
+                {'✨ Fable'}
+              </Text>
+              {creditsBalance !== null && (
+                <Text style={styles.creditsLabel}>{creditsBalance} Inspirationen</Text>
+              )}
+            </View>
+            {showRestartButton ? (
+              <TouchableOpacity onPress={handleRestart} style={styles.closeButton}>
+                <Text style={styles.restartText}>{'↺'}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.closeButton} />
+            )}
           </View>
         )}
 
@@ -425,7 +465,10 @@ const styles = StyleSheet.create({
   },
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   closeText: { fontSize: 20, color: colors.textSecondary },
-  headerTitle: { ...typography.h3, textAlign: 'center', flex: 1 },
+  restartText: { fontSize: 22, color: colors.textSecondary },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { ...typography.h3, textAlign: 'center' },
+  creditsLabel: { ...typography.caption, color: colors.textLight, marginTop: 2 },
 
   // Chat
   chatContainer: { flex: 1 },
@@ -488,6 +531,15 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.warning,
   },
   warningText: { ...typography.bodySmall, color: colors.textSecondary },
+
+  // Restored conversation hint
+  restoredBanner: {
+    backgroundColor: colors.secondary + '12',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  restoredText: { ...typography.caption, color: colors.secondary },
 
   // Chips
   chipsContainer: { maxHeight: 48, borderTopWidth: 1, borderTopColor: colors.border },

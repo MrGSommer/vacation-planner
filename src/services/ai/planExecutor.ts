@@ -1,5 +1,6 @@
-import { createTrip } from '../../api/trips';
+import { createTrip, updateTrip } from '../../api/trips';
 import { createDay, createActivities, getActivitiesForTrip } from '../../api/itineraries';
+import { searchPhotos, triggerDownload } from '../../api/unsplash';
 import { createStop, getStops } from '../../api/stops';
 import { createBudgetCategory, getBudgetCategories } from '../../api/budgets';
 import { invalidateCache } from '../../utils/queryCache';
@@ -41,6 +42,8 @@ export interface AiTripPlan {
       location_address: string | null;
       cost: number | null;
       sort_order: number;
+      check_in_date?: string | null;
+      check_out_date?: string | null;
       category_data: Record<string, any>;
     }>;
   }>;
@@ -53,7 +56,7 @@ export interface AiTripPlan {
 
 const VALID_CATEGORIES = ['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'stop', 'other'];
 
-export type ProgressStep = 'trip' | 'days' | 'activities' | 'stops' | 'budget' | 'done';
+export type ProgressStep = 'structure' | 'trip' | 'days' | 'activities' | 'stops' | 'budget' | 'done';
 
 export interface ExecutionResult {
   tripId: string;
@@ -150,8 +153,8 @@ export const executePlan = async (
             cost: act.cost || null,
             currency,
             sort_order: act.sort_order ?? idx,
-            check_in_date: null as string | null,
-            check_out_date: null as string | null,
+            check_in_date: (act.category === 'hotel' && act.check_in_date) ? act.check_in_date : null,
+            check_out_date: (act.category === 'hotel' && act.check_out_date) ? act.check_out_date : null,
             category_data: act.category_data || {},
           }));
 
@@ -207,6 +210,21 @@ export const executePlan = async (
 
   onProgress?.('done');
 
+  // Best-effort: Unsplash cover image for newly created trips
+  if (plan.trip) {
+    try {
+      const photos = await searchPhotos(plan.trip.destination, 6);
+      if (photos.length > 0) {
+        const photo = photos[Math.floor(Math.random() * Math.min(photos.length, 6))];
+        await updateTrip(finalTripId, {
+          cover_image_url: photo.urls.regular,
+          cover_image_attribution: `${photo.user.name}|${photo.user.links.html}|${photo.links.html}`,
+        });
+        triggerDownload(photo);
+      }
+    } catch { /* best-effort */ }
+  }
+
   return {
     tripId: finalTripId,
     daysCreated,
@@ -247,9 +265,22 @@ export const parsePlanJson = (content: string): AiTripPlan => {
   try {
     plan = JSON.parse(cleaned) as AiTripPlan;
   } catch (e) {
-    console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
-    logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
-    throw e;
+    // Truncation recovery: try to repair incomplete JSON
+    const repaired = tryRepairTruncatedJson(cleaned);
+    if (repaired) {
+      try {
+        plan = JSON.parse(repaired) as AiTripPlan;
+        console.warn('parsePlanJson: recovered truncated JSON');
+      } catch {
+        console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
+        logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
+        throw e;
+      }
+    } else {
+      console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
+      logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
+      throw e;
+    }
   }
 
   // Basic validation
@@ -259,3 +290,58 @@ export const parsePlanJson = (content: string): AiTripPlan => {
 
   return plan;
 };
+
+function tryRepairTruncatedJson(json: string): string | null {
+  // Count open/close brackets and braces
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of json) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') openBraces++;
+    if (ch === '}') openBraces--;
+    if (ch === '[') openBrackets++;
+    if (ch === ']') openBrackets--;
+  }
+
+  // If balanced, no repair needed (error is something else)
+  if (openBraces === 0 && openBrackets === 0) return null;
+
+  // If still in a string, close it
+  let repaired = json;
+  if (inString) {
+    repaired += '"';
+  }
+
+  // Remove trailing comma or incomplete key-value
+  repaired = repaired.replace(/,\s*$/, '');
+  repaired = repaired.replace(/,\s*"[^"]*"?\s*$/, '');
+  repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*("[^"]*)?$/, '');
+
+  // Re-count after cleanup
+  openBraces = 0;
+  openBrackets = 0;
+  inString = false;
+  escaped = false;
+  for (const ch of repaired) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') openBraces++;
+    if (ch === '}') openBraces--;
+    if (ch === '[') openBrackets++;
+    if (ch === ']') openBrackets--;
+  }
+
+  // Append missing closing brackets/braces
+  for (let i = 0; i < openBrackets; i++) repaired += ']';
+  for (let i = 0; i < openBraces; i++) repaired += '}';
+
+  return repaired;
+}

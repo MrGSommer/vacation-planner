@@ -467,6 +467,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             currency: trip.currency,
             tripName: trip.name,
             notes: trip.notes,
+            travelersCount: trip.travelers_count,
+            groupType: trip.group_type,
           }}
           onComplete={() => {
             setShowAiModal(false);

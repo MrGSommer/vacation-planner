@@ -13,23 +13,31 @@ export interface AiContext {
   endDate?: string;
   currency?: string;
   mode?: 'create' | 'enhance';
+  travelersCount?: number;
+  groupType?: string;
+  todayDate?: string;
   preferences?: Record<string, any>;
   existingData?: {
     activities?: Array<{ title: string; category: string; start_time: string | null }>;
     stops?: Array<{ name: string; type: string }>;
     budgetCategories?: Array<{ name: string; color: string }>;
   };
+  dayDates?: string[];
+  userMemory?: string;
 }
 
 export interface AiResponse {
   content: string;
   usage?: { input_tokens: number; output_tokens: number };
+  credits_remaining?: number;
 }
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+export type AiTask = 'conversation' | 'plan_generation' | 'plan_activities' | 'plan_generation_full';
+
 export const sendAiMessage = async (
-  task: 'conversation' | 'plan_generation',
+  task: AiTask,
   messages: AiMessage[],
   context: AiContext,
 ): Promise<AiResponse> => {
@@ -65,7 +73,7 @@ export const sendAiMessage = async (
       throw new Error(error.message || 'AI-Anfrage fehlgeschlagen');
     }
 
-    return { content: data.content, usage: data.usage };
+    return { content: data.content, usage: data.usage, credits_remaining: data.credits_remaining };
   };
 
   try {

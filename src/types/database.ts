@@ -24,9 +24,32 @@ export interface AiUsageLog {
   id: string;
   user_id: string;
   trip_id: string | null;
-  task_type: 'conversation' | 'plan_generation';
+  task_type: 'conversation' | 'plan_generation' | 'plan_activities';
   credits_charged: number;
   created_at: string;
+}
+
+export interface AiConversation {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  phase: 'conversing' | 'generating_plan' | 'plan_review';
+  encrypted_data: never; // bytea — never accessed directly
+  context_snapshot: {
+    destination?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiUserMemory {
+  id: string;
+  user_id: string;
+  encrypted_memory: never; // bytea — never accessed directly
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Trip {
@@ -42,6 +65,8 @@ export interface Trip {
   end_date: string;
   status: 'planning' | 'upcoming' | 'active' | 'completed';
   currency: string;
+  travelers_count: number;
+  group_type: 'solo' | 'couple' | 'family' | 'friends' | 'group';
   notes: string | null;
   created_at: string;
   updated_at: string;

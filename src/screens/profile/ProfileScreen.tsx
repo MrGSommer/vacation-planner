@@ -8,6 +8,7 @@ import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
 import { createPortalSession } from '../../api/stripe';
+import { deleteAiUserMemory } from '../../api/aiMemory';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import appJson from '../../../app.json';
 
@@ -22,6 +23,38 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [showBuyModal, setShowBuyModal] = useState(false);
+  const [memoryDeleting, setMemoryDeleting] = useState(false);
+  const [memoryDeleted, setMemoryDeleted] = useState(false);
+
+  const handleDeleteMemory = async () => {
+    const doDelete = async () => {
+      setMemoryDeleting(true);
+      try {
+        await deleteAiUserMemory();
+        setMemoryDeleted(true);
+        setTimeout(() => setMemoryDeleted(false), 3000);
+      } catch (e) {
+        console.error('Failed to delete memory:', e);
+      } finally {
+        setMemoryDeleting(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Fable vergisst alle gelernten Vorlieben. Fortfahren?')) {
+        await doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Memory löschen',
+        'Fable vergisst alle gelernten Vorlieben. Fortfahren?',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Löschen', style: 'destructive', onPress: doDelete },
+        ],
+      );
+    }
+  };
 
   const handleAiContextToggle = async (value: boolean) => {
     setAiContextEnabled(value);
@@ -173,6 +206,22 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               thumbColor="#FFFFFF"
             />
           </View>
+          <View style={styles.divider} />
+          <View style={styles.aiSettingsRow}>
+            <View style={styles.aiSettingsInfo}>
+              <Text style={styles.aiSettingsLabel}>Fable-Memory</Text>
+              <Text style={styles.aiSettingsDesc}>Fable merkt sich deine Vorlieben (z.B. Ernährung, Reisestil)</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.memoryDeleteBtn, memoryDeleting && { opacity: 0.6 }]}
+              onPress={handleDeleteMemory}
+              disabled={memoryDeleting}
+            >
+              <Text style={styles.memoryDeleteBtnText}>
+                {memoryDeleted ? 'Gelöscht' : memoryDeleting ? '...' : 'Löschen'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </Card>
       )}
 
@@ -239,6 +288,8 @@ const styles = StyleSheet.create({
   subscriptionValue: { ...typography.body, fontWeight: '600' },
   stripeErrorBox: { backgroundColor: '#FFEAEA', padding: spacing.sm, borderRadius: borderRadius.md, marginBottom: spacing.sm },
   stripeErrorText: { ...typography.caption, color: colors.error, textAlign: 'center' },
+  memoryDeleteBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.md, backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: colors.error + '30' },
+  memoryDeleteBtnText: { ...typography.caption, color: colors.error, fontWeight: '600' },
   subscriptionBtn: { backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
   subscriptionBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
   logoutButton: { marginTop: spacing.md },
