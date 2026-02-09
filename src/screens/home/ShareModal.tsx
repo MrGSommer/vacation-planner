@@ -22,6 +22,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Button, Avatar } from '../../components/common';
+import { TripPrintTab } from '../../components/trip/TripPrintTab';
 
 interface ShareModalProps {
   visible: boolean;
@@ -31,7 +32,7 @@ interface ShareModalProps {
   userId: string;
 }
 
-type Tab = 'share' | 'members';
+type Tab = 'share' | 'members' | 'print';
 
 const roleLabels: Record<string, string> = {
   owner: 'Besitzer',
@@ -175,6 +176,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 Teilnehmer{nonOwnerMembers.length > 0 ? ` (${nonOwnerMembers.length})` : ''}
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tabBtn, tab === 'print' && styles.tabActive]}
+              onPress={() => setTab('print')}
+            >
+              <Text style={[styles.tabText, tab === 'print' && styles.tabTextActive]}>Drucken</Text>
+            </TouchableOpacity>
           </View>
 
           {tab === 'share' && (
@@ -301,6 +308,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 </>
               )}
             </ScrollView>
+          )}
+
+          {tab === 'print' && (
+            <TripPrintTab tripId={tripId} tripName={tripName} />
           )}
 
           <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>

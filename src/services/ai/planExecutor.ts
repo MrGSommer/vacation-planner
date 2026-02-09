@@ -1,8 +1,9 @@
 import { createTrip } from '../../api/trips';
-import { createDay, createActivities } from '../../api/itineraries';
-import { createStop } from '../../api/stops';
-import { createBudgetCategory } from '../../api/budgets';
+import { createDay, createActivities, getActivitiesForTrip } from '../../api/itineraries';
+import { createStop, getStops } from '../../api/stops';
+import { createBudgetCategory, getBudgetCategories } from '../../api/budgets';
 import { invalidateCache } from '../../utils/queryCache';
+import { logError } from '../errorLogger';
 
 export interface AiTripPlan {
   trip?: {
@@ -99,6 +100,26 @@ export const executePlan = async (
     throw new Error('Keine Trip-ID vorhanden');
   }
 
+  // Load existing data for duplicate detection (enhance mode)
+  let existingActivityTitles = new Set<string>();
+  let existingStopNames = new Set<string>();
+  let existingBudgetNames = new Set<string>();
+
+  if (tripId) {
+    try {
+      const [existingActivities, existingStops, existingBudget] = await Promise.all([
+        getActivitiesForTrip(finalTripId),
+        getStops(finalTripId),
+        getBudgetCategories(finalTripId),
+      ]);
+      existingActivityTitles = new Set(existingActivities.map(a => a.title.toLowerCase()));
+      existingStopNames = new Set(existingStops.map(s => s.name.toLowerCase()));
+      existingBudgetNames = new Set(existingBudget.map(b => b.name.toLowerCase()));
+    } catch {
+      // If loading fails, proceed without duplicate check
+    }
+  }
+
   // 2. Create days and activities
   if (plan.days?.length > 0) {
     onProgress?.('days');
@@ -108,36 +129,46 @@ export const executePlan = async (
 
       if (day.activities?.length > 0) {
         onProgress?.('activities');
-        const validActivities = day.activities.map((act, idx) => ({
-          day_id: createdDay.id,
-          trip_id: finalTripId,
-          title: act.title,
-          description: act.description || null,
-          category: VALID_CATEGORIES.includes(act.category) ? act.category : 'other',
-          start_time: act.start_time || null,
-          end_time: act.end_time || null,
-          location_name: act.location_name || null,
-          location_lat: act.location_lat || null,
-          location_lng: act.location_lng || null,
-          location_address: act.location_address || null,
-          cost: act.cost || null,
-          currency,
-          sort_order: act.sort_order ?? idx,
-          check_in_date: null as string | null,
-          check_out_date: null as string | null,
-          category_data: act.category_data || {},
-        }));
+        // Filter out activities that already exist (by title)
+        const newActivities = day.activities.filter(
+          act => !existingActivityTitles.has(act.title.toLowerCase()),
+        );
 
-        const created = await createActivities(validActivities);
-        activitiesCreated += created.length;
+        if (newActivities.length > 0) {
+          const validActivities = newActivities.map((act, idx) => ({
+            day_id: createdDay.id,
+            trip_id: finalTripId,
+            title: act.title,
+            description: act.description || null,
+            category: VALID_CATEGORIES.includes(act.category) ? act.category : 'other',
+            start_time: act.start_time || null,
+            end_time: act.end_time || null,
+            location_name: act.location_name || null,
+            location_lat: act.location_lat || null,
+            location_lng: act.location_lng || null,
+            location_address: act.location_address || null,
+            cost: act.cost || null,
+            currency,
+            sort_order: act.sort_order ?? idx,
+            check_in_date: null as string | null,
+            check_out_date: null as string | null,
+            category_data: act.category_data || {},
+          }));
+
+          const created = await createActivities(validActivities);
+          activitiesCreated += created.length;
+        }
       }
     }
   }
 
-  // 3. Create stops
+  // 3. Create stops (skip duplicates)
   if (plan.stops?.length > 0) {
     onProgress?.('stops');
-    for (const stop of plan.stops) {
+    const newStops = plan.stops.filter(
+      s => !existingStopNames.has(s.name.toLowerCase()),
+    );
+    for (const stop of newStops) {
       await createStop({
         trip_id: finalTripId,
         name: stop.name,
@@ -157,10 +188,13 @@ export const executePlan = async (
     }
   }
 
-  // 4. Create budget categories
+  // 4. Create budget categories (skip duplicates)
   if (plan.budget_categories?.length > 0) {
     onProgress?.('budget');
-    for (const cat of plan.budget_categories) {
+    const newBudgetCats = plan.budget_categories.filter(
+      c => !existingBudgetNames.has(c.name.toLowerCase()),
+    );
+    for (const cat of newBudgetCats) {
       await createBudgetCategory(finalTripId, cat.name, cat.color, cat.budget_limit || null, 'group');
       budgetCategoriesCreated++;
     }
@@ -183,13 +217,40 @@ export const executePlan = async (
 };
 
 export const parsePlanJson = (content: string): AiTripPlan => {
-  // Strip markdown code fences if present
   let cleaned = content.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+
+  // Strip markdown code fences if present
+  if (cleaned.includes('```')) {
+    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (fenceMatch) {
+      cleaned = fenceMatch[1];
+    }
   }
 
-  const plan = JSON.parse(cleaned) as AiTripPlan;
+  // If it doesn't start with '{', try to extract JSON object from surrounding text
+  if (!cleaned.startsWith('{')) {
+    const jsonStart = cleaned.indexOf('{');
+    if (jsonStart !== -1) {
+      cleaned = cleaned.substring(jsonStart);
+    }
+  }
+
+  // If it doesn't end with '}', trim trailing text
+  if (!cleaned.endsWith('}')) {
+    const jsonEnd = cleaned.lastIndexOf('}');
+    if (jsonEnd !== -1) {
+      cleaned = cleaned.substring(0, jsonEnd + 1);
+    }
+  }
+
+  let plan: AiTripPlan;
+  try {
+    plan = JSON.parse(cleaned) as AiTripPlan;
+  } catch (e) {
+    console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
+    logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
+    throw e;
+  }
 
   // Basic validation
   if (!plan.days && !plan.stops && !plan.budget_categories) {

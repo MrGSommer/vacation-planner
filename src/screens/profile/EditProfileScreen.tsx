@@ -24,7 +24,8 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
-  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [firstName, setFirstName] = useState(profile?.first_name || '');
+  const [lastName, setLastName] = useState(profile?.last_name || '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || null);
   const [saving, setSaving] = useState(false);
 
@@ -85,8 +86,9 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
     if (!user) return;
     setSaving(true);
     try {
-      const updates: { full_name?: string; avatar_url?: string } = {};
-      if (fullName !== profile?.full_name) updates.full_name = fullName;
+      const updates: { first_name?: string; last_name?: string; avatar_url?: string } = {};
+      if (firstName !== (profile?.first_name || '')) updates.first_name = firstName;
+      if (lastName !== (profile?.last_name || '')) updates.last_name = lastName;
       if (avatarUrl !== profile?.avatar_url) updates.avatar_url = avatarUrl || undefined;
 
       if (Object.keys(updates).length > 0) {
@@ -114,7 +116,7 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.avatarSection}>
         <TouchableOpacity onPress={pickImage}>
-          <Avatar uri={avatarUrl} name={fullName || user?.email || ''} size={100} />
+          <Avatar uri={avatarUrl} name={`${firstName} ${lastName}`.trim() || user?.email || ''} size={100} />
           <View style={styles.cameraOverlay}>
             <Text style={styles.cameraIcon}>📷</Text>
           </View>
@@ -123,14 +125,28 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.label}>Name</Text>
-        <TextInput
-          style={styles.input}
-          value={fullName}
-          onChangeText={setFullName}
-          placeholder="Dein Name"
-          placeholderTextColor={colors.textLight}
-        />
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Vorname</Text>
+            <TextInput
+              style={styles.input}
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Vorname"
+              placeholderTextColor={colors.textLight}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Nachname</Text>
+            <TextInput
+              style={styles.input}
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Nachname"
+              placeholderTextColor={colors.textLight}
+            />
+          </View>
+        </View>
 
         <Text style={styles.label}>E-Mail</Text>
         <TextInput

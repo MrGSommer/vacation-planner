@@ -5,33 +5,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '../../components/common';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../hooks/useAuth';
-import { createCheckoutSession, purchaseInspirations } from '../../api/stripe';
-import { STRIPE_CONFIG } from '../../config/stripe';
+import { getSubscriptionUrl, getInspirationsUrl } from '../../api/stripe';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, aiCredits } = useSubscription();
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
-  const [loading, setLoading] = useState(false);
-  const [creditsLoading, setCreditsLoading] = useState(false);
 
-  const handleSubscribe = async () => {
-    setLoading(true);
-    try {
-      const priceId = billing === 'monthly'
-        ? STRIPE_CONFIG.priceMonthly
-        : STRIPE_CONFIG.priceYearly;
-      const { url } = await createCheckoutSession(priceId, 'subscription', profile?.stripe_customer_id);
-      if (Platform.OS === 'web') {
-        window.location.href = url;
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const handleSubscribe = () => {
+    if (!user) return;
+    if (Platform.OS === 'web') {
+      window.location.href = getSubscriptionUrl(billing, user.id, user.email || '');
     }
   };
 
@@ -112,9 +99,8 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* CTA */}
         <TouchableOpacity
-          style={[styles.ctaButton, loading && { opacity: 0.6 }]}
+          style={styles.ctaButton}
           onPress={handleSubscribe}
-          disabled={loading}
           activeOpacity={0.8}
         >
           <LinearGradient
@@ -123,9 +109,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             end={{ x: 1, y: 0 }}
             style={styles.ctaGradient}
           >
-            <Text style={styles.ctaText}>
-              {loading ? 'Wird geladen...' : 'Jetzt upgraden'}
-            </Text>
+            <Text style={styles.ctaText}>Jetzt upgraden</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -141,24 +125,16 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             20 Inspirationen für CHF 5 — du hast aktuell {aiCredits}.
           </Text>
           <TouchableOpacity
-            style={[styles.inspirationButton, creditsLoading && { opacity: 0.6 }]}
-            disabled={creditsLoading}
-            onPress={async () => {
-              setCreditsLoading(true);
-              try {
-                const { url } = await purchaseInspirations(profile?.stripe_customer_id);
-                if (Platform.OS === 'web') window.location.href = url;
-              } catch (e) {
-                console.error(e);
-              } finally {
-                setCreditsLoading(false);
+            style={styles.inspirationButton}
+            onPress={() => {
+              if (!user) return;
+              if (Platform.OS === 'web') {
+                window.location.href = getInspirationsUrl(user.id, user.email || '');
               }
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.inspirationButtonText}>
-              {creditsLoading ? 'Wird geladen...' : '✨ Inspirationen kaufen'}
-            </Text>
+            <Text style={styles.inspirationButtonText}>{'✨ Inspirationen kaufen'}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

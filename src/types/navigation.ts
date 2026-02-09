@@ -21,6 +21,7 @@ export type RootStackParamList = {
   Datenschutz: undefined;
   AGB: undefined;
   Impressum: undefined;
+  FeedbackModal: undefined;
 };
 
 export type MainTabParamList = {

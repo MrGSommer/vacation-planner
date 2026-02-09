@@ -58,6 +58,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
@@ -85,6 +86,9 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       setLoading(true);
+      mapInitializedRef.current = false;
+      mapInstanceRef.current = null;
+      setMapReady(false);
       loadData();
     });
     return unsubscribe;
@@ -152,7 +156,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: stop.name,
-            content: pin.element,
+            content: pin,
             gmpClickable: true,
           });
           const iw = new google.maps.InfoWindow({
@@ -172,7 +176,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           });
           const marker = new AdvancedMarkerElement({
             position: pos, map, title: act.title,
-            content: pin.element,
+            content: pin,
             gmpClickable: true,
           });
           const iw = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
@@ -273,11 +277,27 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => navigation.navigate('EditTrip', { tripId })} style={styles.editBtn}>
-            <Text style={styles.editText}>✏️</Text>
+          <TouchableOpacity onPress={() => setShowMenu(v => !v)} style={styles.menuBtn}>
+            <Text style={styles.menuText}>⋯</Text>
           </TouchableOpacity>
         </View>
       </View>
+      {showMenu && (
+        <>
+          <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1} />
+          <View style={styles.menuDropdown}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
+              <Text style={styles.menuIcon}>✏️</Text>
+              <Text style={styles.menuLabel}>Bearbeiten</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowShareModal(true); }}>
+              <Text style={styles.menuIcon}>🔗</Text>
+              <Text style={styles.menuLabel}>Teilen & Drucken</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
       <Text style={styles.tripName}>{trip.name}</Text>
       <Text style={styles.destination}>{trip.destination}</Text>
       <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
@@ -470,8 +490,14 @@ const styles = StyleSheet.create({
   avatarWrap: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', borderRadius: 16, overflow: 'hidden' },
   avatarOverflow: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   avatarOverflowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
-  editBtn: {},
-  editText: { fontSize: 22, color: '#FFFFFF' },
+  menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
+  menuText: { fontSize: 20, color: '#FFFFFF', fontWeight: '700', marginTop: -4 },
+  menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
+  menuDropdown: { position: 'absolute', top: 52, right: spacing.xl, backgroundColor: colors.card, borderRadius: borderRadius.md, ...shadows.lg, zIndex: 11, minWidth: 190, overflow: 'hidden' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
+  menuIcon: { fontSize: 18, marginRight: spacing.sm, width: 24 },
+  menuLabel: { ...typography.body, fontWeight: '500' },
+  menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },

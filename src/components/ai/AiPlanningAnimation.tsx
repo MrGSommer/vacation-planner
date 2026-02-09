@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { typography, spacing } from '../../utils/theme';
 import { gradients } from '../../utils/theme';
 
 const STATUS_TEXTS = [
-  'Suche Sehenswuerdigkeiten...',
-  'Plane Tagesablaeufe...',
+  'Suche Sehenswürdigkeiten...',
+  'Plane Tagesabläufe...',
   'Finde Restaurants...',
   'Berechne Budget...',
   'Optimiere Route...',
-  'Erstelle Aktivitaeten...',
+  'Erstelle Aktivitäten...',
 ];
 
 export const AiPlanningAnimation: React.FC = () => {
@@ -24,12 +24,12 @@ export const AiPlanningAnimation: React.FC = () => {
     const planeAnimation = Animated.loop(
       Animated.sequence([
         Animated.parallel([
-          Animated.timing(planeX, { toValue: 1, duration: 3000, useNativeDriver: true }),
-          Animated.timing(planeY, { toValue: 1, duration: 1500, useNativeDriver: true }),
+          Animated.timing(planeX, { toValue: 1, duration: 3000, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(planeY, { toValue: 1, duration: 1500, useNativeDriver: Platform.OS !== 'web' }),
         ]),
         Animated.parallel([
-          Animated.timing(planeX, { toValue: 0, duration: 3000, useNativeDriver: true }),
-          Animated.timing(planeY, { toValue: 0, duration: 1500, useNativeDriver: true }),
+          Animated.timing(planeX, { toValue: 0, duration: 3000, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(planeY, { toValue: 0, duration: 1500, useNativeDriver: Platform.OS !== 'web' }),
         ]),
       ]),
     );
@@ -37,9 +37,9 @@ export const AiPlanningAnimation: React.FC = () => {
 
     // Rotating status text
     const textInterval = setInterval(() => {
-      Animated.timing(textOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+      Animated.timing(textOpacity, { toValue: 0, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start(() => {
         setStatusIndex(prev => (prev + 1) % STATUS_TEXTS.length);
-        Animated.timing(textOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+        Animated.timing(textOpacity, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start();
       });
     }, 2500);
 

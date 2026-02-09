@@ -5,8 +5,9 @@ import { getActivitiesForTrip } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
 import { getProfile } from '../api/auth';
+import { logError } from '../services/errorLogger';
 
-export type AiPhase = 'idle' | 'conversing' | 'generating_plan' | 'previewing_plan' | 'executing_plan' | 'completed';
+export type AiPhase = 'idle' | 'conversing' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
 
 export interface AiChatMessage {
   id: string;
@@ -98,6 +99,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
   const [progressStep, setProgressStep] = useState<ProgressStep | null>(null);
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [tokenWarning, setTokenWarning] = useState(false);
+  const [conflicts, setConflicts] = useState<string[]>([]);
   const contextRef = useRef<AiContext>({
     destination: initialContext.destination,
     destinationLat: initialContext.destinationLat,
@@ -171,6 +173,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       setMessages([greetingMsg, aiMsg]);
       if (meta) setMetadata(meta);
     } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'startConversation' } });
       setError(e.message || 'Verbindung zum AI-Service fehlgeschlagen');
     } finally {
       setSending(false);
@@ -205,11 +208,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       setMessages(prev => [...prev, aiMsg]);
       if (meta) setMetadata(meta);
     } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage' } });
       setError(e.message || 'Nachricht konnte nicht gesendet werden');
     } finally {
       setSending(false);
     }
   }, [messages, sending]);
+
+  const buildPlanSummary = (p: AiTripPlan): string => {
+    const days = p.days?.length || 0;
+    const activities = p.days?.reduce((sum, d) => sum + (d.activities?.length || 0), 0) || 0;
+    const stops = p.stops?.length || 0;
+    const budget = p.budget_categories?.reduce((sum, c) => sum + (c.budget_limit || 0), 0) || 0;
+    const currency = initialContext.currency || 'CHF';
+
+    let summary = `Hier ist mein Vorschlag: **${days} Tage**, **${activities} Aktivitäten**`;
+    if (stops > 0) summary += `, **${stops} Stops**`;
+    if (budget > 0) summary += `, Budget ca. **${budget} ${currency}**`;
+    summary += '.\n\nDu kannst dir die Details anschauen, den Plan direkt übernehmen, oder mir sagen was ich anpassen soll.';
+    return summary;
+  };
 
   const generatePlan = useCallback(async () => {
     setPhase('generating_plan');
@@ -231,10 +249,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       const parsed = parsePlanJson(response.content);
 
       setPlan(parsed);
-      setPhase('previewing_plan');
+      const summaryMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: buildPlanSummary(parsed),
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, summaryMsg]);
+      setPhase('plan_review');
     } catch (e: any) {
       // Retry once on JSON parse error
-      if (e instanceof SyntaxError) {
+      if (e instanceof SyntaxError || e.message?.includes('verwertbaren Daten')) {
+        logError(e, { component: 'useAiPlanner', context: { action: 'generatePlan' } });
+        console.warn('Plan JSON parse failed, retrying...', e.message);
         try {
           const preferences = extractPreferences(messages, contextRef.current);
           const retryContext: AiContext = { ...contextRef.current, preferences };
@@ -245,9 +272,18 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
           const retryResponse = await sendAiMessage('plan_generation', [retryMessage], retryContext);
           const parsed = parsePlanJson(retryResponse.content);
           setPlan(parsed);
-          setPhase('previewing_plan');
+          const summaryMsg: AiChatMessage = {
+            id: nextId(),
+            role: 'assistant',
+            content: buildPlanSummary(parsed),
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, summaryMsg]);
+          setPhase('plan_review');
           return;
         } catch (retryErr: any) {
+          logError(retryErr, { component: 'useAiPlanner', context: { action: 'generatePlanRetry' } });
+          console.error('Plan retry also failed:', retryErr.message);
           setError('Plan konnte nicht erstellt werden – bitte versuche es erneut');
           setPhase('conversing');
           return;
@@ -256,11 +292,30 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       setError(e.message || 'Plan-Erstellung fehlgeschlagen');
       setPhase('conversing');
     }
-  }, [messages]);
+  }, [messages, initialContext.currency]);
 
-  const confirmPlan = useCallback(async () => {
+  const confirmPlan = useCallback(async (skipConflictCheck = false) => {
     if (!plan) return;
 
+    // Check for conflicts before executing (enhance mode only)
+    if (!skipConflictCheck && mode === 'enhance' && tripId) {
+      try {
+        const existingActivities = await getActivitiesForTrip(tripId);
+        const existingTitles = new Set(existingActivities.map(a => a.title.toLowerCase()));
+        const conflicting = plan.days?.flatMap(d => d.activities || [])
+          .filter(a => existingTitles.has(a.title.toLowerCase()))
+          .map(a => a.title) || [];
+
+        if (conflicting.length > 0) {
+          setConflicts(conflicting);
+          return; // Don't execute until user confirms
+        }
+      } catch {
+        // If check fails, proceed anyway (planExecutor has its own dedup)
+      }
+    }
+
+    setConflicts([]);
     setPhase('executing_plan');
     setError(null);
 
@@ -276,10 +331,57 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       setExecutionResult(result);
       setPhase('completed');
     } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'executePlan' } });
       setError(e.message || 'Plan konnte nicht ausgeführt werden');
       setPhase('previewing_plan');
     }
-  }, [plan, tripId, userId, initialContext.currency]);
+  }, [plan, tripId, userId, initialContext.currency, mode]);
+
+  const dismissConflicts = useCallback(() => {
+    setConflicts([]);
+  }, []);
+
+  const confirmWithConflicts = useCallback(() => {
+    confirmPlan(true);
+  }, [confirmPlan]);
+
+  const showPreview = useCallback(() => {
+    if (plan) setPhase('previewing_plan');
+  }, [plan]);
+
+  const adjustPlan = useCallback(async (feedback: string) => {
+    if (!feedback.trim() || sending) return;
+    setPhase('generating_plan');
+    setError(null);
+
+    const userMsg: AiChatMessage = { id: nextId(), role: 'user', content: feedback.trim(), timestamp: Date.now() };
+    setMessages(prev => [...prev, userMsg]);
+
+    try {
+      const preferences = extractPreferences(messages, contextRef.current);
+      const planContext: AiContext = { ...contextRef.current, preferences };
+      const adjustMessage: AiMessage = {
+        role: 'user',
+        content: `Passe den Reiseplan an basierend auf folgendem Feedback: "${feedback}". Antworte NUR mit dem vollständigen, angepassten JSON-Plan.`,
+      };
+      const response = await sendAiMessage('plan_generation', [adjustMessage], planContext);
+      const parsed = parsePlanJson(response.content);
+      setPlan(parsed);
+      const summaryMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: buildPlanSummary(parsed),
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, summaryMsg]);
+      setPhase('plan_review');
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'adjustPlan' } });
+      console.error('Plan adjustment failed:', e.message);
+      setError('Anpassung fehlgeschlagen – bitte versuche es erneut');
+      setPhase('plan_review');
+    }
+  }, [messages, sending, initialContext.currency]);
 
   const rejectPlan = useCallback(() => {
     setPlan(null);
@@ -297,6 +399,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     setProgressStep(null);
     setExecutionResult(null);
     setTokenWarning(false);
+    setConflicts([]);
   }, []);
 
   return {
@@ -309,11 +412,16 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     progressStep,
     executionResult,
     tokenWarning,
+    conflicts,
     startConversation,
     sendMessage,
     generatePlan,
     confirmPlan,
     rejectPlan,
+    showPreview,
+    adjustPlan,
+    dismissConflicts,
+    confirmWithConflicts,
     reset,
   };
 };

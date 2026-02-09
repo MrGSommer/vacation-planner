@@ -17,3 +17,7 @@ export type { ActivityFormData } from './ActivityModal';
 export { ActivityViewModal } from './ActivityViewModal';
 export { DocumentPicker } from './DocumentPicker';
 export { Skeleton } from './Skeleton';
+export { ErrorBoundary } from './ErrorBoundary';
+export { FloatingFeedbackButton } from './FloatingFeedbackButton';
+export { StripeBuyButton } from './StripeBuyButton';
+export { BuyInspirationenModal } from './BuyInspirationenModal';

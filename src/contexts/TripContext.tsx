@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Trip } from '../types/database';
 import { getTrips, getTrip } from '../api/trips';
 import { useAuthContext } from './AuthContext';
+import { logError } from '../services/errorLogger';
 
 interface TripContextType {
   trips: Trip[];
@@ -37,6 +38,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTrips(data);
     } catch (e) {
       console.error('Fehler beim Laden der Trips:', e);
+      logError(e, { component: 'TripContext', context: { action: 'fetchTrips' } });
     } finally {
       setLoading(false);
     }
@@ -49,6 +51,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentTrip(data);
     } catch (e) {
       console.error('Fehler beim Aktualisieren des Trips:', e);
+      logError(e, { component: 'TripContext', context: { action: 'refreshTrip' } });
     }
   }, [currentTrip]);
 

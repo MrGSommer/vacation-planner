@@ -67,40 +67,30 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const autocompleteServiceRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    (async () => {
-      try {
-        const placesLib = await importMapsLibrary('places');
-        autocompleteServiceRef.current = new placesLib.AutocompleteService();
-      } catch (e) {
-        console.error('Places init error:', e);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (value !== undefined && value !== query) setQuery(value);
   }, [value]);
 
-  const search = useCallback((text: string) => {
-    if (!text.trim() || !autocompleteServiceRef.current) {
+  const search = useCallback(async (text: string) => {
+    if (!text.trim() || text.length < 3) {
       setPredictions([]);
       return;
     }
-    autocompleteServiceRef.current.getPlacePredictions(
-      { input: text, language: 'de' },
-      (results: any, status: string) => {
-        if (status === 'OK' && results) {
-          setPredictions(results);
-          setShowDropdown(true);
-        } else {
-          setPredictions([]);
-        }
-      }
-    );
+    try {
+      const placesLib = await importMapsLibrary('places');
+      const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input: text,
+        language: 'de',
+      });
+      const mapped = suggestions
+        .filter((s: any) => s.placePrediction)
+        .map((s: any) => s.placePrediction);
+      setPredictions(mapped);
+      setShowDropdown(mapped.length > 0);
+    } catch {
+      setPredictions([]);
+    }
   }, []);
 
   const handleChange = (text: string) => {
@@ -112,23 +102,21 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
 
   const handleSelect = async (prediction: any) => {
     setShowDropdown(false);
-    setQuery(prediction.description);
+    setQuery(prediction.text?.text || prediction.mainText?.text || '');
 
     try {
-      const placesLib = await importMapsLibrary('places');
-      const place = new placesLib.Place({ id: prediction.place_id });
+      const place = prediction.toPlace();
       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'regularOpeningHours', 'websiteURI'] });
       const loc = place.location;
       if (loc) {
-        // Format opening hours as readable string
         let opening_hours: string | undefined;
         if (place.regularOpeningHours?.weekdayDescriptions) {
           opening_hours = place.regularOpeningHours.weekdayDescriptions.join('\n');
         }
         onSelect({
-          name: place.displayName || prediction.structured_formatting?.main_text || prediction.description,
-          place_id: prediction.place_id,
-          address: place.formattedAddress || prediction.description,
+          name: place.displayName || prediction.mainText?.text || '',
+          place_id: prediction.placeId,
+          address: place.formattedAddress || prediction.text?.text || '',
           lat: loc.lat(),
           lng: loc.lng(),
           opening_hours,
@@ -137,9 +125,9 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
       }
     } catch {
       onSelect({
-        name: prediction.structured_formatting?.main_text || prediction.description,
-        place_id: prediction.place_id,
-        address: prediction.description,
+        name: prediction.mainText?.text || prediction.text?.text || '',
+        place_id: prediction.placeId,
+        address: prediction.text?.text || '',
         lat: 0,
         lng: 0,
       });
@@ -164,15 +152,15 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
         <View style={styles.dropdown}>
           {predictions.map((item) => (
             <TouchableOpacity
-              key={item.place_id}
+              key={item.placeId}
               style={styles.dropdownItem}
               onPress={() => handleSelect(item)}
             >
               <Text style={styles.dropdownMain}>
-                {item.structured_formatting?.main_text || item.description}
+                {item.mainText?.text || item.text?.text || ''}
               </Text>
               <Text style={styles.dropdownSecondary} numberOfLines={1}>
-                {item.structured_formatting?.secondary_text || ''}
+                {item.secondaryText?.text || ''}
               </Text>
             </TouchableOpacity>
           ))}

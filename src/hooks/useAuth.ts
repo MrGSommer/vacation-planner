@@ -7,11 +7,11 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSignUp = async (email: string, password: string, fullName: string) => {
+  const handleSignUp = async (email: string, password: string, firstName: string, lastName: string) => {
     setLoading(true);
     setError(null);
     try {
-      await signUpWithEmail(email, password, fullName);
+      await signUpWithEmail(email, password, firstName, lastName);
     } catch (e: any) {
       setError(e.message || 'Registrierung fehlgeschlagen');
       throw e;

@@ -6,11 +6,23 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../../hooks/useAuth';
 import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
+import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { ProgressStep } from '../../services/ai/planExecutor';
+
+function renderMarkdown(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <Text key={i} style={{ fontWeight: '700' }}>{part.slice(2, -2)}</Text>;
+    }
+    return part;
+  });
+}
 
 interface Props {
   visible: boolean;
@@ -34,7 +46,7 @@ interface Props {
 const PROGRESS_LABELS: Record<ProgressStep, string> = {
   trip: 'Erstelle Trip...',
   days: 'Erstelle Tage...',
-  activities: 'Erstelle Aktivitaeten...',
+  activities: 'Erstelle Aktivitäten...',
   stops: 'Erstelle Stops...',
   budget: 'Erstelle Budget...',
   done: 'Fertig!',
@@ -45,21 +57,27 @@ export const AiTripModal: React.FC<Props> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { user: authUser, profile } = useAuth();
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const {
     phase, messages, metadata, plan, error, sending,
-    progressStep, executionResult, tokenWarning,
+    progressStep, executionResult, tokenWarning, conflicts,
     startConversation, sendMessage, generatePlan,
-    confirmPlan, rejectPlan, reset,
+    confirmPlan, rejectPlan, showPreview, adjustPlan,
+    dismissConflicts, confirmWithConflicts, reset,
   } = useAiPlanner({ mode, tripId, userId, initialContext });
+  const [adjustMode, setAdjustMode] = useState(false);
+  const [creditPurchased, setCreditPurchased] = useState(false);
+  const [showBuyModal, setShowBuyModal] = useState(false);
 
   // Auto-start conversation when modal opens
   useEffect(() => {
     if (visible && phase === 'idle') {
       startConversation();
     }
+    if (visible) { setCreditPurchased(false); setShowBuyModal(false); }
   }, [visible, phase]);
 
   // Scroll to bottom when messages change
@@ -103,7 +121,7 @@ export const AiTripModal: React.FC<Props> = ({
           plan={plan}
           currency={initialContext.currency || 'CHF'}
           onConfirm={confirmPlan}
-          onReject={rejectPlan}
+          onReject={() => setPhase('plan_review')}
         />
       );
     }
@@ -134,7 +152,7 @@ export const AiTripModal: React.FC<Props> = ({
                   <Text style={styles.completedStat}>{executionResult.daysCreated} Tage</Text>
                 )}
                 {executionResult.activitiesCreated > 0 && (
-                  <Text style={styles.completedStat}>{executionResult.activitiesCreated} Aktivitaeten</Text>
+                  <Text style={styles.completedStat}>{executionResult.activitiesCreated} Aktivitäten</Text>
                 )}
                 {executionResult.stopsCreated > 0 && (
                   <Text style={styles.completedStat}>{executionResult.stopsCreated} Stops</Text>
@@ -152,13 +170,53 @@ export const AiTripModal: React.FC<Props> = ({
       );
     }
 
-    // Default: chat view (conversing)
+    // Chat view (conversing or plan_review)
+    const isPlanReview = phase === 'plan_review';
+
+    const handleAdjustSend = () => {
+      if (!inputText.trim()) return;
+      adjustPlan(inputText);
+      setInputText('');
+      setAdjustMode(false);
+    };
+
     return (
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.chatContainer}
         keyboardVerticalOffset={0}
       >
+        {/* Context-disabled warning */}
+        {mode === 'enhance' && !profile?.ai_trip_context_enabled && (
+          <View style={styles.contextWarningBanner}>
+            <Text style={styles.contextWarningText}>
+              Hinweis: Daten-Lesen ist deaktiviert. Fable kann bestehende Aktivitaeten nicht sehen und koennte Duplikate vorschlagen. Aktiviere es in den Profil-Einstellungen.
+            </Text>
+          </View>
+        )}
+
+        {/* Conflict dialog */}
+        {conflicts.length > 0 && (
+          <View style={styles.conflictBanner}>
+            <Text style={styles.conflictTitle}>Folgende Aktivitaeten existieren bereits:</Text>
+            {conflicts.slice(0, 5).map((c, i) => (
+              <Text key={i} style={styles.conflictItem}>- {c}</Text>
+            ))}
+            {conflicts.length > 5 && (
+              <Text style={styles.conflictItem}>... und {conflicts.length - 5} weitere</Text>
+            )}
+            <Text style={styles.conflictHint}>Duplikate werden automatisch uebersprungen.</Text>
+            <View style={styles.conflictActions}>
+              <TouchableOpacity style={styles.conflictBtn} onPress={dismissConflicts}>
+                <Text style={styles.conflictBtnText}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.conflictBtn, styles.conflictBtnPrimary]} onPress={confirmWithConflicts}>
+                <Text style={[styles.conflictBtnText, { color: '#FFFFFF' }]}>Trotzdem uebernehmen</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Messages */}
         <ScrollView
           ref={scrollRef}
@@ -178,7 +236,7 @@ export const AiTripModal: React.FC<Props> = ({
                 styles.messageText,
                 msg.role === 'user' ? styles.userText : styles.aiText,
               ]}>
-                {msg.content}
+                {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
               </Text>
             </View>
           ))}
@@ -192,10 +250,23 @@ export const AiTripModal: React.FC<Props> = ({
           {error && (
             error.includes('Inspirationen') ? (
               <View style={styles.creditBanner}>
-                <Text style={styles.creditText}>{error}</Text>
-                <TouchableOpacity onPress={() => { handleClose(); navigation.navigate('Subscription'); }}>
-                  <Text style={styles.creditAction}>Inspirationen kaufen</Text>
-                </TouchableOpacity>
+                {creditPurchased ? (
+                  <Text style={styles.creditSuccess}>Inspirationen erhalten! Du kannst jetzt weitermachen.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.creditText}>{error}</Text>
+                    <TouchableOpacity onPress={() => {
+                      if (Platform.OS === 'web') {
+                        setShowBuyModal(true);
+                      } else {
+                        handleClose();
+                        navigation.navigate('Subscription');
+                      }
+                    }}>
+                      <Text style={styles.creditAction}>Inspirationen kaufen</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             ) : (
               <View style={styles.errorBanner}>
@@ -214,8 +285,30 @@ export const AiTripModal: React.FC<Props> = ({
           )}
         </ScrollView>
 
-        {/* Suggestion chips */}
-        {metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
+        {/* Plan review action buttons */}
+        {isPlanReview && !adjustMode && (
+          <View style={styles.planReviewActions}>
+            <TouchableOpacity style={styles.planReviewBtn} onPress={showPreview} activeOpacity={0.7}>
+              <Text style={styles.planReviewBtnText}>{'📋 Details anzeigen'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={confirmPlan} activeOpacity={0.7}>
+              <LinearGradient
+                colors={[...gradients.ocean]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.planReviewBtnGradient}
+              >
+                <Text style={styles.planReviewBtnPrimaryText}>{'✅ Übernehmen'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.planReviewBtn} onPress={() => setAdjustMode(true)} activeOpacity={0.7}>
+              <Text style={styles.planReviewBtnText}>{'✏️ Anpassen'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Suggestion chips (conversing only) */}
+        {!isPlanReview && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -235,8 +328,8 @@ export const AiTripModal: React.FC<Props> = ({
           </ScrollView>
         )}
 
-        {/* Generate plan button */}
-        {metadata?.ready_to_plan && !sending && (
+        {/* Generate plan button (conversing only) */}
+        {!isPlanReview && metadata?.ready_to_plan && !sending && (
           <TouchableOpacity style={styles.generateButton} onPress={generatePlan} activeOpacity={0.8}>
             <LinearGradient
               colors={[...gradients.ocean]}
@@ -249,28 +342,36 @@ export const AiTripModal: React.FC<Props> = ({
           </TouchableOpacity>
         )}
 
-        {/* Input */}
-        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Nachricht eingeben..."
-            placeholderTextColor={colors.textLight}
-            multiline
-            maxLength={1000}
-            editable={!sending}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-          >
-            <Text style={styles.sendButtonText}>{'➤'}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Input (conversing or adjust mode) */}
+        {(!isPlanReview || adjustMode) && (
+          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+            <TextInput
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={adjustMode ? 'Was soll angepasst werden...' : 'Nachricht eingeben...'}
+              placeholderTextColor={colors.textLight}
+              multiline
+              maxLength={1000}
+              editable={!sending}
+              onSubmitEditing={adjustMode ? handleAdjustSend : handleSend}
+              blurOnSubmit={false}
+              onKeyPress={(e: any) => {
+                if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                  e.preventDefault();
+                  adjustMode ? handleAdjustSend() : handleSend();
+                }
+              }}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendButtonDisabled]}
+              onPress={adjustMode ? handleAdjustSend : handleSend}
+              disabled={!inputText.trim() || sending}
+            >
+              <Text style={styles.sendButtonText}>{'➤'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     );
   };
@@ -297,6 +398,14 @@ export const AiTripModal: React.FC<Props> = ({
         )}
 
         {renderContent()}
+
+        <BuyInspirationenModal
+          visible={showBuyModal}
+          onClose={() => setShowBuyModal(false)}
+          userId={userId}
+          email={authUser?.email || ''}
+          onPurchaseDetected={() => setCreditPurchased(true)}
+        />
       </View>
     </Modal>
   );
@@ -367,6 +476,7 @@ const styles = StyleSheet.create({
   },
   creditText: { ...typography.bodySmall, color: colors.textSecondary },
   creditAction: { ...typography.bodySmall, color: colors.secondary, fontWeight: '600', marginTop: spacing.xs },
+  creditSuccess: { ...typography.bodySmall, color: colors.success, fontWeight: '600' },
 
   // Warning
   warningBanner: {
@@ -433,6 +543,37 @@ const styles = StyleSheet.create({
   sendButtonDisabled: { backgroundColor: colors.border },
   sendButtonText: { fontSize: 18, color: '#FFFFFF' },
 
+  // Plan review actions
+  planReviewActions: {
+    flexDirection: 'row',
+    padding: spacing.sm,
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  planReviewBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  planReviewBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.text },
+  planReviewBtnPrimary: {
+    flex: 1,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+  },
+  planReviewBtnGradient: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+  },
+  planReviewBtnPrimaryText: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
+
   // Executing
   executingContainer: { flex: 1 },
   executingGradient: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
@@ -454,4 +595,42 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   completedButtonText: { ...typography.button, color: colors.secondary },
+
+  // Context warning
+  contextWarningBanner: {
+    backgroundColor: '#FFFBF0',
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
+  },
+  contextWarningText: { ...typography.bodySmall, color: colors.textSecondary },
+
+  // Conflict dialog
+  conflictBanner: {
+    backgroundColor: '#FFF5F5',
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.error,
+  },
+  conflictTitle: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+  conflictItem: { ...typography.bodySmall, color: colors.textSecondary },
+  conflictHint: { ...typography.caption, color: colors.textLight, marginTop: spacing.sm },
+  conflictActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  conflictBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  conflictBtnPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  conflictBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.text },
 });

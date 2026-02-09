@@ -195,7 +195,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.brandName}>WayFable</Text>
+        <View style={styles.brandRow}>
+          <Text style={styles.brandName}>WayFable</Text>
+          <View style={styles.betaBadge}>
+            <Text style={styles.betaText}>Beta</Text>
+          </View>
+        </View>
         <Text style={styles.headerTitle}>Meine Reisen</Text>
         <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
       </View>
@@ -289,7 +294,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { padding: spacing.xl, paddingBottom: spacing.md },
-  brandName: { fontSize: 22, fontWeight: '800' as const, color: colors.secondary, marginBottom: spacing.xs },
+  brandRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm, marginBottom: spacing.xs },
+  brandName: { fontSize: 22, fontWeight: '800' as const, color: colors.secondary },
+  betaBadge: { backgroundColor: colors.secondary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm },
+  betaText: { ...typography.caption, color: '#FFFFFF', fontWeight: '700' as const, fontSize: 10 },
   headerTitle: { ...typography.h1 },
   headerSubtitle: { ...typography.bodySmall, marginTop: spacing.xs },
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },

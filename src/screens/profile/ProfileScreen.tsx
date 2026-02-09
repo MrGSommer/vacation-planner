@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Switch } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar, Card, Button } from '../../components/common';
+import { Avatar, Card, Button, BuyInspirationenModal } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
-import { createPortalSession, purchaseInspirations } from '../../api/stripe';
+import { createPortalSession } from '../../api/stripe';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import appJson from '../../../app.json';
 
@@ -19,8 +19,9 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, aiCredits, isFeatureAllowed } = useSubscription();
   const insets = useSafeAreaInsets();
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
-  const [stripeLoading, setStripeLoading] = useState<'portal' | 'credits' | null>(null);
+  const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
+  const [showBuyModal, setShowBuyModal] = useState(false);
 
   const handleAiContextToggle = async (value: boolean) => {
     setAiContextEnabled(value);
@@ -55,7 +56,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.profileSection}>
         <Avatar uri={profile?.avatar_url} name={profile?.full_name || user?.email || ''} size={80} />
-        <Text style={styles.name}>{profile?.full_name || 'Reisender'}</Text>
+        <Text style={styles.name}>{[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Reisender'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
       </View>
 
@@ -135,24 +136,17 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[styles.subscriptionBtn, { marginTop: spacing.xs }, stripeLoading === 'credits' && { opacity: 0.6 }]}
-          disabled={stripeLoading !== null}
-          onPress={async () => {
-            setStripeLoading('credits');
-            setStripeError(null);
-            try {
-              const { url } = await purchaseInspirations(profile?.stripe_customer_id);
-              if (Platform.OS === 'web') window.location.href = url;
-            } catch (e: any) {
-              setStripeError(e?.message || 'Inspirationen kaufen fehlgeschlagen');
-            } finally {
-              setStripeLoading(null);
+          style={[styles.subscriptionBtn, { marginTop: spacing.xs }]}
+          onPress={() => {
+            if (!user) return;
+            if (Platform.OS === 'web') {
+              setShowBuyModal(true);
+            } else {
+              navigation.navigate('Subscription');
             }
           }}
         >
-          <Text style={styles.subscriptionBtnText}>
-            {stripeLoading === 'credits' ? 'Wird geladen...' : 'Inspirationen kaufen'}
-          </Text>
+          <Text style={styles.subscriptionBtnText}>Inspirationen kaufen</Text>
         </TouchableOpacity>
         {!isPremium && (
           <TouchableOpacity
@@ -206,6 +200,13 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       <Button title="Abmelden" onPress={handleSignOut} variant="secondary" style={styles.logoutButton} />
 
       <Text style={styles.version}>Version {appJson.expo.version}</Text>
+
+      <BuyInspirationenModal
+        visible={showBuyModal}
+        onClose={() => setShowBuyModal(false)}
+        userId={user?.id || ''}
+        email={user?.email || ''}
+      />
     </ScrollView>
   );
 };

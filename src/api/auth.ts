@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
 
-export const signUpWithEmail = async (email: string, password: string, fullName: string) => {
+export const signUpWithEmail = async (email: string, password: string, firstName: string, lastName: string) => {
+  const fullName = `${firstName} ${lastName}`.trim();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: { data: { full_name: fullName || null, first_name: firstName || null, last_name: lastName || null } },
   });
   if (error) throw error;
   if (data.user && data.user.identities && data.user.identities.length === 0) {
@@ -49,12 +50,17 @@ export const getProfile = async (userId: string) => {
 
 export const updateProfile = async (userId: string, updates: {
   full_name?: string;
+  first_name?: string;
+  last_name?: string;
   avatar_url?: string;
   preferred_language?: string;
   preferred_currency?: string;
   notifications_enabled?: boolean;
   ai_trip_context_enabled?: boolean;
 }) => {
+  if (updates.first_name !== undefined || updates.last_name !== undefined) {
+    updates.full_name = `${updates.first_name ?? ''} ${updates.last_name ?? ''}`.trim() || null as any;
+  }
   const { data, error } = await supabase
     .from('profiles')
     .update({ ...updates, updated_at: new Date().toISOString() })

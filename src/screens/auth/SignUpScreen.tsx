@@ -13,7 +13,8 @@ const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,7 +35,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
     try {
       setLocalError(null);
-      await signUp(email.trim(), password, fullName.trim());
+      await signUp(email.trim(), password, firstName.trim(), lastName.trim());
       navigation.replace('SignUpSuccess', { email: email.trim() });
     } catch {}
   };
@@ -49,7 +50,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const { error: insertError } = await supabase
         .from('waitlist')
-        .insert({ email: email.trim().toLowerCase(), full_name: fullName.trim() || null });
+        .insert({ email: email.trim().toLowerCase(), full_name: `${firstName.trim()} ${lastName.trim()}`.trim() || null });
       if (insertError) {
         if (insertError.code === '23505') {
           setLocalError('Du stehst bereits auf der Warteliste!');
@@ -102,7 +103,10 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
             {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
-            <Input label="Name (optional)" placeholder="Dein Name" value={fullName} onChangeText={setFullName} />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Input label="Vorname (optional)" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
+              <Input label="Nachname (optional)" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
+            </View>
             <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
 
             <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!email.trim()} style={styles.signUpButton} />
@@ -126,7 +130,10 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
           {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
-          <Input label="Name" placeholder="Dein vollständiger Name" value={fullName} onChangeText={setFullName} />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
+            <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
+          </View>
           <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); clearError(); }} keyboardType="email-address" autoCapitalize="none" />
           <Input label="Passwort" placeholder="Mindestens 6 Zeichen" value={password} onChangeText={(t) => { setPassword(t); setLocalError(null); }} secureTextEntry />
           <Input label="Passwort bestätigen" placeholder="Passwort wiederholen" value={confirmPassword} onChangeText={(t) => { setConfirmPassword(t); setLocalError(null); }} secureTextEntry />
@@ -143,7 +150,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </Pressable>
 
-          <Button title="Registrieren" onPress={handleSignUp} loading={loading} disabled={!fullName || !email || !password || !confirmPassword || !agbAccepted} style={styles.signUpButton} />
+          <Button title="Registrieren" onPress={handleSignUp} loading={loading} disabled={!firstName || !email || !password || !confirmPassword || !agbAccepted} style={styles.signUpButton} />
 
           <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
             <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>

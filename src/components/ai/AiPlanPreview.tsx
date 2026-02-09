@@ -42,7 +42,7 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{totalActivities}</Text>
-              <Text style={styles.summaryLabel}>Aktivitaeten</Text>
+              <Text style={styles.summaryLabel}>Aktivitäten</Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{totalStops}</Text>
@@ -67,7 +67,7 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
                 <View style={styles.stopInfo}>
                   <Text style={styles.stopName}>{stop.name}</Text>
                   {stop.nights ? (
-                    <Text style={styles.stopDetail}>{stop.nights} {stop.nights === 1 ? 'Nacht' : 'Naechte'}</Text>
+                    <Text style={styles.stopDetail}>{stop.nights} {stop.nights === 1 ? 'Nacht' : 'Nächte'}</Text>
                   ) : (
                     <Text style={styles.stopDetail}>Zwischenstopp</Text>
                   )}
@@ -90,7 +90,7 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
                 <Text style={styles.dayDate}>{formatDate(day.date)}</Text>
               </View>
               <View style={styles.dayMeta}>
-                <Text style={styles.dayActivityCount}>{day.activities?.length || 0} Aktivitaeten</Text>
+                <Text style={styles.dayActivityCount}>{day.activities?.length || 0} Aktivitäten</Text>
                 <Text style={styles.expandIcon}>{expandedDay === dayIndex ? '▲' : '▼'}</Text>
               </View>
             </TouchableOpacity>
@@ -150,7 +150,7 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
           disabled={loading}
         />
         <Button
-          title="Plan uebernehmen"
+          title="Plan übernehmen"
           onPress={onConfirm}
           style={styles.actionButton}
           loading={loading}
