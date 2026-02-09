@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,12 +65,13 @@ export const AiTripModal: React.FC<Props> = ({
   const scrollRef = useRef<ScrollView>(null);
 
   const {
-    phase, messages, metadata, plan, error, sending,
+    phase, messages, metadata, plan, structure, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
-    restored, creditsBalance,
+    restored, creditsBalance, estimatedSeconds, activeJobId,
     startConversation, sendMessage, generatePlan,
+    generateStructure, generateAllViaServer, generateActivitiesClientSide,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
-    dismissConflicts, confirmWithConflicts, reset,
+    dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
   } = useAiPlanner({ mode, tripId, userId, initialContext });
   const [adjustMode, setAdjustMode] = useState(false);
   const [creditPurchased, setCreditPurchased] = useState(false);
@@ -90,6 +91,16 @@ export const AiTripModal: React.FC<Props> = ({
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages.length, sending]);
+
+  // Save conversation state when app goes to background
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') {
+        saveConversationNow();
+      }
+    });
+    return () => sub.remove();
+  }, [saveConversationNow]);
 
   const handleSend = () => {
     if (!inputText.trim()) return;
@@ -121,10 +132,80 @@ export const AiTripModal: React.FC<Props> = ({
 
   // Render different phases
   const renderContent = () => {
+    if (phase === 'generating_structure') {
+      return (
+        <View style={styles.executingContainer}>
+          <AiPlanningAnimation />
+        </View>
+      );
+    }
+
+    if (phase === 'structure_overview' && structure) {
+      const stopNames = (structure.stops || []).map(s => s.name);
+      const dayCount = structure.days?.length || 0;
+
+      return (
+        <View style={styles.structureOverview}>
+          <ScrollView contentContainerStyle={styles.structureContent}>
+            <Text style={styles.structureTitle}>Route</Text>
+            <View style={styles.routeList}>
+              {stopNames.map((name, i) => (
+                <View key={i} style={styles.routeItem}>
+                  <View style={styles.routeDot} />
+                  <Text style={styles.routeText}>{name}</Text>
+                  {i < stopNames.length - 1 && <View style={styles.routeLine} />}
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.structureStats}>
+              {dayCount} Tage, {structure.stops?.length || 0} Stops, {structure.budget_categories?.length || 0} Budget-Kategorien
+            </Text>
+
+            {estimatedSeconds && (
+              <Text style={styles.structureEstimate}>
+                Geschätzte Dauer: ~{estimatedSeconds} Sekunden
+              </Text>
+            )}
+
+            <View style={styles.granularityButtons}>
+              <TouchableOpacity style={styles.granularityBtn} onPress={generateAllViaServer} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.granularityBtnGradient}
+                >
+                  <Text style={styles.granularityBtnTextPrimary}>
+                    Alles generieren {estimatedSeconds ? `(~${estimatedSeconds}s)` : ''}
+                  </Text>
+                  <Text style={styles.granularityBtnHint}>Im Hintergrund — App kann geschlossen werden</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.granularityBtnSecondary}
+                onPress={() => generateActivitiesClientSide()}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.granularityBtnTextSecondary}>Direkt generieren</Text>
+                <Text style={styles.granularityBtnHintSecondary}>Schneller, aber App muss offen bleiben</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
+
     if (phase === 'generating_plan') {
       return (
         <View style={styles.executingContainer}>
           <AiPlanningAnimation />
+          {activeJobId && (
+            <Text style={styles.backgroundHint}>
+              Generierung läuft im Hintergrund — du kannst die App schliessen
+            </Text>
+          )}
         </View>
       );
     }
@@ -246,19 +327,30 @@ export const AiTripModal: React.FC<Props> = ({
           keyboardShouldPersistTaps="handled"
         >
           {messages.map((msg) => (
-            <View
-              key={msg.id}
-              style={[
-                styles.messageBubble,
-                msg.role === 'user' ? styles.userBubble : styles.aiBubble,
-              ]}
-            >
-              <Text style={[
-                styles.messageText,
-                msg.role === 'user' ? styles.userText : styles.aiText,
-              ]}>
-                {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
-              </Text>
+            <View key={msg.id}>
+              <View
+                style={[
+                  styles.messageBubble,
+                  msg.role === 'user' ? styles.userBubble : styles.aiBubble,
+                ]}
+              >
+                <Text style={[
+                  styles.messageText,
+                  msg.role === 'user' ? styles.userText : styles.aiText,
+                ]}>
+                  {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
+                </Text>
+              </View>
+              {msg.role === 'assistant' && msg.creditsAfter !== undefined && (
+                <View style={styles.creditIndicator}>
+                  <Text style={styles.creditIndicatorText}>
+                    {msg.creditsCost !== undefined && msg.creditsCost > 0
+                      ? `-${msg.creditsCost} · `
+                      : ''}
+                    {msg.creditsAfter} Inspirationen
+                  </Text>
+                </View>
+              )}
             </View>
           ))}
 
@@ -397,8 +489,8 @@ export const AiTripModal: React.FC<Props> = ({
     );
   };
 
-  // Show "Neu starten" button only in conversing/plan_review
-  const showRestartButton = phase === 'conversing' || phase === 'plan_review';
+  // Show "Neu starten" button only in conversing/plan_review/structure_overview
+  const showRestartButton = phase === 'conversing' || phase === 'plan_review' || phase === 'structure_overview';
 
   return (
     <Modal
@@ -463,7 +555,7 @@ const styles = StyleSheet.create({
   restartText: { fontSize: 22, color: colors.textSecondary },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { ...typography.h3, textAlign: 'center' },
-  creditsLabel: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  creditsLabel: { ...typography.caption, color: colors.secondary, marginTop: 2, fontWeight: '600' },
 
   // Chat
   chatContainer: { flex: 1 },
@@ -490,6 +582,19 @@ const styles = StyleSheet.create({
   messageText: { ...typography.body, lineHeight: 22 },
   userText: { color: '#FFFFFF' },
   aiText: { color: colors.text },
+
+  // Credit indicator per message
+  creditIndicator: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+    marginTop: -spacing.xs,
+  },
+  creditIndicatorText: {
+    ...typography.caption,
+    color: colors.textLight,
+    fontSize: 11,
+  },
 
   // Error
   errorBanner: {
@@ -620,6 +725,63 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   planReviewBtnPrimaryText: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
+
+  // Structure overview
+  structureOverview: { flex: 1 },
+  structureContent: { padding: spacing.lg },
+  structureTitle: { ...typography.h3, color: colors.text, marginBottom: spacing.md },
+  routeList: { marginBottom: spacing.lg },
+  routeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  routeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.secondary,
+    marginRight: spacing.sm,
+  },
+  routeText: { ...typography.body, color: colors.text, flex: 1 },
+  routeLine: {
+    position: 'absolute',
+    left: 4,
+    top: 28,
+    width: 2,
+    height: 16,
+    backgroundColor: colors.border,
+  },
+  structureStats: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xs },
+  structureEstimate: { ...typography.bodySmall, color: colors.textLight, marginBottom: spacing.lg },
+  granularityButtons: { gap: spacing.sm },
+  granularityBtn: { borderRadius: borderRadius.lg, overflow: 'hidden' },
+  granularityBtnGradient: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    borderRadius: borderRadius.lg,
+  },
+  granularityBtnTextPrimary: { ...typography.button, color: '#FFFFFF' },
+  granularityBtnHint: { ...typography.caption, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  granularityBtnSecondary: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  granularityBtnTextSecondary: { ...typography.button, color: colors.text },
+  granularityBtnHintSecondary: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  backgroundHint: {
+    ...typography.bodySmall,
+    color: colors.textLight,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
 
   // Executing
   executingContainer: { flex: 1 },

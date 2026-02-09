@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
 import { getActivitiesForTrip } from '../api/itineraries';
@@ -7,21 +7,25 @@ import { getBudgetCategories } from '../api/budgets';
 import { getProfile } from '../api/auth';
 import { getAiConversation, saveAiConversation, deleteAiConversation } from '../api/aiConversations';
 import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
+import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
 import { logError } from '../services/errorLogger';
 
-export type AiPhase = 'idle' | 'conversing' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
+export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
 
 export interface AiChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  creditsCost?: number;
+  creditsAfter?: number;
 }
 
 export interface AiMetadata {
   ready_to_plan: boolean;
   preferences_gathered: string[];
   suggested_questions: string[];
+  trip_type?: 'roundtrip' | 'pointtopoint' | null;
 }
 
 export interface UseAiPlannerOptions {
@@ -125,11 +129,14 @@ function mergePlan(
   };
 }
 
+export type GenerationGranularity = 'all' | 'weekly' | 'daily';
+
 export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlannerOptions) => {
   const [phase, setPhase] = useState<AiPhase>('idle');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [metadata, setMetadata] = useState<AiMetadata | null>(null);
   const [plan, setPlan] = useState<AiTripPlan | null>(null);
+  const [structure, setStructure] = useState<AiTripPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [progressStep, setProgressStep] = useState<ProgressStep | null>(null);
@@ -138,6 +145,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [restored, setRestored] = useState(false);
   const [creditsBalance, setCreditsBalance] = useState<number | null>(null);
+  const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contextRef = useRef<AiContext>({
     destination: initialContext.destination,
     destinationLat: initialContext.destinationLat,
@@ -152,6 +162,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
   });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userMemoryRef = useRef<string | undefined>(undefined);
+  const prevCreditsRef = useRef<number | null>(null);
+
+  // Time estimation: 8s structure + 12s per 5-day batch
+  const estimateTime = useCallback((days: number) => {
+    const batches = Math.ceil(days / 5);
+    return 8 + batches * 12;
+  }, []);
 
   // Debounced save conversation (fire-and-forget)
   const debouncedSave = useCallback((
@@ -267,7 +284,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       const response = await sendAiMessage('conversation', [greeting], contextRef.current);
 
       // Update credits balance from response
+      let creditsCost: number | undefined;
       if (response.credits_remaining !== undefined) {
+        if (prevCreditsRef.current !== null) {
+          creditsCost = prevCreditsRef.current - response.credits_remaining;
+        }
+        prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
       }
 
@@ -282,11 +304,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       }
 
       const greetingMsg: AiChatMessage = { id: nextId(), role: 'user', content: greeting.content, timestamp: Date.now() };
-      const aiMsg: AiChatMessage = { id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now() };
+      const aiMsg: AiChatMessage = {
+        id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now(),
+        creditsCost, creditsAfter: response.credits_remaining,
+      };
 
       const newMessages = [greetingMsg, aiMsg];
       setMessages(newMessages);
-      if (meta) setMetadata(meta);
+      if (meta) {
+        setMetadata(meta);
+        if (meta.trip_type) {
+          contextRef.current.tripType = meta.trip_type;
+        }
+      }
 
       // Save conversation (debounced)
       debouncedSave('conversing', newMessages, meta, null);
@@ -322,7 +352,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       const response = await sendAiMessage('conversation', apiMessages, contextRef.current);
 
       // Update credits balance
+      let creditsCost: number | undefined;
       if (response.credits_remaining !== undefined) {
+        if (prevCreditsRef.current !== null) {
+          creditsCost = prevCreditsRef.current - response.credits_remaining;
+        }
+        prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
       }
 
@@ -336,10 +371,18 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
         saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
       }
 
-      const aiMsg: AiChatMessage = { id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now() };
+      const aiMsg: AiChatMessage = {
+        id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now(),
+        creditsCost, creditsAfter: response.credits_remaining,
+      };
       const allMessages = [...updatedMessages, aiMsg];
       setMessages(allMessages);
-      if (meta) setMetadata(meta);
+      if (meta) {
+        setMetadata(meta);
+        if (meta.trip_type) {
+          contextRef.current.tripType = meta.trip_type;
+        }
+      }
 
       // Save conversation (debounced)
       debouncedSave('conversing', allMessages, meta, null);
@@ -351,7 +394,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     }
   }, [messages, sending, debouncedSave]);
 
-  const buildPlanSummary = (p: AiTripPlan): string => {
+  const buildPlanSummary = useCallback((p: AiTripPlan): string => {
     const days = p.days?.length || 0;
     const activities = p.days?.reduce((sum, d) => sum + (d.activities?.length || 0), 0) || 0;
     const stops = p.stops?.length || 0;
@@ -363,10 +406,64 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     if (budget > 0) summary += `, Budget ca. **${budget} ${currency}**`;
     summary += '.\n\nDu kannst dir die Details anschauen, den Plan direkt übernehmen, oder mir sagen was ich anpassen soll.';
     return summary;
-  };
+  }, [initialContext.currency]);
 
-  const generatePlan = useCallback(async () => {
-    setPhase('generating_plan');
+  // Build structure summary for overview
+  const buildStructureSummary = useCallback((s: AiTripPlan): string => {
+    const stopNames = (s.stops || []).map(st => st.name);
+    const route = stopNames.length > 0 ? stopNames.join(' → ') : 'Wird generiert...';
+    const days = s.days?.length || 0;
+    const stops = s.stops?.length || 0;
+    const budgetCats = s.budget_categories?.length || 0;
+    return `Route: **${route}**\n${days} Tage, ${stops} Stops, ${budgetCats} Budget-Kategorien`;
+  }, []);
+
+  // Polling for server-agent jobs
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    const poll = async () => {
+      try {
+        const job = await getPlanJobStatus(activeJobId);
+        if (job.status === 'completed' && job.plan_json) {
+          setPlan(job.plan_json);
+          setActiveJobId(null);
+          setProgressStep(null);
+
+          const summaryMsg: AiChatMessage = {
+            id: nextId(),
+            role: 'assistant',
+            content: restored
+              ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
+              : buildPlanSummary(job.plan_json),
+            timestamp: Date.now(),
+          };
+          setMessages(prev => {
+            const updated = [...prev, summaryMsg];
+            debouncedSave('plan_review', updated, metadata, job.plan_json);
+            return updated;
+          });
+          setPhase('plan_review');
+        } else if (job.status === 'failed') {
+          setActiveJobId(null);
+          setProgressStep(null);
+          setError(job.error || 'Plan-Generierung fehlgeschlagen');
+          setPhase('conversing');
+        }
+      } catch {
+        // Ignore polling errors — will retry
+      }
+    };
+
+    pollingRef.current = setInterval(poll, 3000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [activeJobId, restored, metadata, buildPlanSummary, debouncedSave]);
+
+  // Phase 1: Generate structure only → show overview
+  const generateStructure = useCallback(async () => {
+    setPhase('generating_structure');
     setError(null);
 
     try {
@@ -376,7 +473,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
         preferences,
       };
 
-      // --- Phase 1: Structure (trip, stops, budget, days without activities) ---
       setProgressStep('structure');
       const structureMessage: AiMessage = {
         role: 'user',
@@ -385,26 +481,75 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
 
       const structureResponse = await sendAiMessage('plan_generation', [structureMessage], planContext);
 
-      // Update credits balance
       if (structureResponse.credits_remaining !== undefined) {
+        prevCreditsRef.current = structureResponse.credits_remaining;
         setCreditsBalance(structureResponse.credits_remaining);
       }
 
-      const structure = parsePlanJson(structureResponse.content);
-      const dayDates = (structure.days || []).map(d => d.date);
+      const parsed = parsePlanJson(structureResponse.content);
+      setStructure(parsed);
 
-      // --- Phase 2: Activities ---
-      setProgressStep('activities');
-      const activitiesContext: AiContext = {
-        ...planContext,
-        dayDates,
+      const dayCount = parsed.days?.length || 0;
+      setEstimatedSeconds(estimateTime(dayCount));
+
+      // Show overview with structure summary
+      const overviewMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: buildStructureSummary(parsed),
+        timestamp: Date.now(),
       };
+      setMessages(prev => [...prev, overviewMsg]);
+      setPhase('structure_overview');
+      setProgressStep(null);
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure' } });
+      setError('Struktur konnte nicht erstellt werden – bitte versuche es erneut');
+      setPhase('conversing');
+      setProgressStep(null);
+    }
+  }, [messages, estimateTime, buildStructureSummary]);
+
+  // Phase 2a: Generate all activities via server agent (background)
+  const generateAllViaServer = useCallback(async () => {
+    if (!structure) return;
+    setPhase('generating_plan');
+    setError(null);
+    setProgressStep('activities');
+
+    try {
+      const preferences = extractPreferences(messages, contextRef.current);
+      const planContext: AiContext = { ...contextRef.current, preferences };
+
+      const { job_id } = await startPlanGeneration(planContext, [], structure);
+      setActiveJobId(job_id);
+      // Polling will take over from here
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateAllViaServer' } });
+      setError('Server-Generierung konnte nicht gestartet werden');
+      setPhase('structure_overview');
+      setProgressStep(null);
+    }
+  }, [structure, messages]);
+
+  // Phase 2b: Generate activities client-side (original approach, used for incremental/fallback)
+  const generateActivitiesClientSide = useCallback(async (dayDatesToGenerate?: string[]) => {
+    if (!structure) return;
+    setPhase('generating_plan');
+    setError(null);
+    setProgressStep('activities');
+
+    try {
+      const preferences = extractPreferences(messages, contextRef.current);
+      const planContext: AiContext = { ...contextRef.current, preferences };
+
+      const dayDates = dayDatesToGenerate || (structure.days || []).map(d => d.date);
+      const activitiesContext: AiContext = { ...planContext, dayDates };
 
       let allActivities: { days: Array<{ date: string; activities: any[] }> } = { days: [] };
       const BATCH_SIZE = 5;
 
       if (dayDates.length > BATCH_SIZE) {
-        // Split into batches of BATCH_SIZE days to avoid token truncation
         const batches: string[][] = [];
         for (let i = 0; i < dayDates.length; i += BATCH_SIZE) {
           batches.push(dayDates.slice(i, i + BATCH_SIZE));
@@ -428,7 +573,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
         allActivities = parsePlanJson(activitiesResponse.content);
       }
 
-      // --- Merge ---
       const mergedPlan = mergePlan(structure, allActivities);
       setPlan(mergedPlan);
 
@@ -446,13 +590,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       setPhase('plan_review');
       setProgressStep(null);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generatePlan' } });
-      console.error('Plan generation failed:', e.message);
-      setError('Plan konnte nicht erstellt werden – bitte versuche es erneut');
-      setPhase('conversing');
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateActivitiesClientSide' } });
+      setError('Aktivitäten konnten nicht erstellt werden – bitte versuche es erneut');
+      setPhase('structure_overview');
       setProgressStep(null);
     }
-  }, [messages, initialContext.currency, metadata, debouncedSave]);
+  }, [structure, messages, metadata, debouncedSave, buildPlanSummary]);
+
+  // Legacy generatePlan — generates structure + activities in one go (for backward compat)
+  const generatePlan = useCallback(async () => {
+    await generateStructure();
+    // After structure is done, the UI will show structure_overview
+    // User picks granularity from there
+  }, [generateStructure]);
 
   const confirmPlan = useCallback(async (skipConflictCheck = false) => {
     if (!plan) return;
@@ -538,6 +688,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
 
       // Update credits balance
       if (response.credits_remaining !== undefined) {
+        prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
       }
 
@@ -574,6 +725,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     setMessages([]);
     setMetadata(null);
     setPlan(null);
+    setStructure(null);
     setError(null);
     setSending(false);
     setProgressStep(null);
@@ -582,6 +734,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     setConflicts([]);
     setRestored(false);
     setCreditsBalance(null);
+    setEstimatedSeconds(null);
+    setActiveJobId(null);
+    prevCreditsRef.current = null;
+    if (pollingRef.current) clearInterval(pollingRef.current);
 
     // Delete saved conversation
     if (tripId) {
@@ -589,11 +745,28 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     }
   }, [tripId]);
 
+  // Save conversation state (for AppState listener in AiTripModal)
+  const saveConversationNow = useCallback(() => {
+    if (!tripId || phase === 'idle' || phase === 'completed') return;
+    saveAiConversation(
+      tripId,
+      userId,
+      phase as any,
+      { messages, metadata, plan },
+      {
+        destination: initialContext.destination,
+        startDate: initialContext.startDate,
+        endDate: initialContext.endDate,
+      },
+    ).catch(() => {});
+  }, [tripId, userId, phase, messages, metadata, plan, initialContext.destination, initialContext.startDate, initialContext.endDate]);
+
   return {
     phase,
     messages,
     metadata,
     plan,
+    structure,
     error,
     sending,
     progressStep,
@@ -602,9 +775,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     conflicts,
     restored,
     creditsBalance,
+    estimatedSeconds,
+    activeJobId,
     startConversation,
     sendMessage,
     generatePlan,
+    generateStructure,
+    generateAllViaServer,
+    generateActivitiesClientSide,
     confirmPlan,
     rejectPlan,
     showPreview,
@@ -613,5 +791,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     dismissConflicts,
     confirmWithConflicts,
     reset,
+    saveConversationNow,
   };
 };

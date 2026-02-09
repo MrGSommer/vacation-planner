@@ -15,6 +15,7 @@ export interface AiContext {
   mode?: 'create' | 'enhance';
   travelersCount?: number;
   groupType?: string;
+  tripType?: 'roundtrip' | 'pointtopoint';
   todayDate?: string;
   preferences?: Record<string, any>;
   existingData?: {
