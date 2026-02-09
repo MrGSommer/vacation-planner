@@ -19,9 +19,23 @@ export interface AiContext {
   todayDate?: string;
   preferences?: Record<string, any>;
   existingData?: {
-    activities?: Array<{ title: string; category: string; start_time: string | null }>;
-    stops?: Array<{ name: string; type: string }>;
-    budgetCategories?: Array<{ name: string; color: string }>;
+    activities?: Array<{
+      title: string; category: string;
+      start_time: string | null; end_time: string | null;
+      cost: number | null; description: string | null;
+      location_name: string | null;
+    }>;
+    stops?: Array<{
+      name: string; type: string;
+      arrival_date: string | null; departure_date: string | null;
+      address: string | null; nights: number | null;
+    }>;
+    budgetCategories?: Array<{
+      name: string; color: string; budget_limit: number | null;
+    }>;
+    packingItems?: Array<{
+      name: string; category: string; quantity: number;
+    }>;
   };
   dayDates?: string[];
   userMemory?: string;
@@ -35,7 +49,8 @@ export interface AiResponse {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export type AiTask = 'conversation' | 'plan_generation' | 'plan_activities' | 'plan_generation_full';
+export type AiTask = 'conversation' | 'plan_generation' | 'plan_activities'
+  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan';
 
 export const sendAiMessage = async (
   task: AiTask,

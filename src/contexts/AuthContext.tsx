@@ -10,6 +10,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
+  updateCreditsBalance: (newBalance: number) => void;
   pendingInviteToken: string | null;
   setPendingInviteToken: (token: string | null) => void;
 }
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   refreshProfile: async () => {},
+  updateCreditsBalance: () => {},
   pendingInviteToken: null,
   setPendingInviteToken: () => {},
 });
@@ -40,6 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(p);
       } catch {}
     }
+  };
+
+  const updateCreditsBalance = (newBalance: number) => {
+    setProfile(prev => prev ? { ...prev, ai_credits_balance: newBalance } : prev);
   };
 
   useEffect(() => {
@@ -67,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, pendingInviteToken, setPendingInviteToken }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken }}>
       {children}
     </AuthContext.Provider>
   );

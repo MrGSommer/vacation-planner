@@ -5,7 +5,7 @@ import { getDays, getActivities } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getBudgetCategories } from '../../api/budgets';
 import { getPackingLists, getPackingItems } from '../../api/packing';
-import { printTripHtml, PrintData, PrintOptions } from '../../utils/printHelper';
+import { printTripHtml, exportTripPdf, PrintData, PrintOptions } from '../../utils/printHelper';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../common';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
@@ -23,6 +23,40 @@ const OPTION_LABELS: Record<keyof PrintOptions, string> = {
   notes: 'Notizen',
 };
 
+async function loadPrintData(tripId: string, options: PrintOptions): Promise<PrintData> {
+  const trip = await getTrip(tripId);
+
+  const [daysData, stopsData, budgetData, packingLists] = await Promise.all([
+    options.itinerary ? getDays(tripId) : Promise.resolve([]),
+    options.stops ? getStops(tripId) : Promise.resolve([]),
+    options.budget ? getBudgetCategories(tripId) : Promise.resolve([]),
+    options.packing ? getPackingLists(tripId) : Promise.resolve([]),
+  ]);
+
+  const daysWithActivities = await Promise.all(
+    daysData.map(async (day) => {
+      const activities = await getActivities(day.id);
+      return { ...day, activities };
+    }),
+  );
+
+  let allPackingItems: any[] = [];
+  if (options.packing && packingLists.length > 0) {
+    const itemArrays = await Promise.all(
+      packingLists.map(list => getPackingItems(list.id)),
+    );
+    allPackingItems = itemArrays.flat();
+  }
+
+  return {
+    trip,
+    days: daysWithActivities,
+    stops: stopsData,
+    budgetCategories: budgetData,
+    packingItems: allPackingItems,
+  };
+}
+
 export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
   const { showToast } = useToast();
   const [options, setOptions] = useState<PrintOptions>({
@@ -39,51 +73,24 @@ export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
   };
 
   const handlePrint = async () => {
-    if (Platform.OS !== 'web') {
-      showToast('Drucken ist nur im Browser verfuegbar', 'error');
-      return;
-    }
-
     setLoading(true);
     try {
-      const trip = await getTrip(tripId);
-
-      // Load data based on selected options
-      const [daysData, stopsData, budgetData, packingLists] = await Promise.all([
-        options.itinerary ? getDays(tripId) : Promise.resolve([]),
-        options.stops ? getStops(tripId) : Promise.resolve([]),
-        options.budget ? getBudgetCategories(tripId) : Promise.resolve([]),
-        options.packing ? getPackingLists(tripId) : Promise.resolve([]),
-      ]);
-
-      // Load activities for each day
-      const daysWithActivities = await Promise.all(
-        daysData.map(async (day) => {
-          const activities = await getActivities(day.id);
-          return { ...day, activities };
-        }),
-      );
-
-      // Load packing items from all lists
-      let allPackingItems: any[] = [];
-      if (options.packing && packingLists.length > 0) {
-        const itemArrays = await Promise.all(
-          packingLists.map(list => getPackingItems(list.id)),
-        );
-        allPackingItems = itemArrays.flat();
-      }
-
-      const printData: PrintData = {
-        trip,
-        days: daysWithActivities,
-        stops: stopsData,
-        budgetCategories: budgetData,
-        packingItems: allPackingItems,
-      };
-
-      printTripHtml(printData, options);
+      const printData = await loadPrintData(tripId, options);
+      await printTripHtml(printData, options);
     } catch (e) {
       showToast('Fehler beim Laden der Daten', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    setLoading(true);
+    try {
+      const printData = await loadPrintData(tripId, options);
+      await exportTripPdf(printData, options);
+    } catch (e) {
+      showToast('Fehler beim Erstellen der PDF', 'error');
     } finally {
       setLoading(false);
     }
@@ -115,7 +122,13 @@ export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
       />
 
       {Platform.OS !== 'web' && (
-        <Text style={styles.hint}>Drucken ist nur in der Web-Version verfuegbar.</Text>
+        <Button
+          title="Als PDF teilen"
+          onPress={handleExportPdf}
+          loading={loading}
+          style={styles.pdfBtn}
+          variant="secondary"
+        />
       )}
     </View>
   );
@@ -145,5 +158,5 @@ const styles = StyleSheet.create({
   checkmark: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   optionLabel: { ...typography.body },
   printBtn: { marginTop: spacing.lg },
-  hint: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.md },
+  pdfBtn: { marginTop: spacing.sm },
 });

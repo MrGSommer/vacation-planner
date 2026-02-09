@@ -7,6 +7,9 @@ export const MODELS: Record<string, string> = {
   plan_generation: 'claude-sonnet-4-5-20250929',
   plan_activities: 'claude-sonnet-4-5-20250929',
   plan_generation_full: 'claude-sonnet-4-5-20250929',
+  agent_packing: 'claude-haiku-4-5-20251001',
+  agent_budget: 'claude-haiku-4-5-20251001',
+  agent_day_plan: 'claude-sonnet-4-5-20250929',
 };
 
 // --- Rate limiting (in-memory, per user, 10 req/min) ---
@@ -111,6 +114,12 @@ export function getMaxTokens(task: string): number {
       return 12288; // Activities — can be large
     case 'plan_generation_full':
       return 12288; // Legacy full plan
+    case 'agent_packing':
+      return 4096;
+    case 'agent_budget':
+      return 2048;
+    case 'agent_day_plan':
+      return 4096;
     default:
       return 1024; // Conversation
   }

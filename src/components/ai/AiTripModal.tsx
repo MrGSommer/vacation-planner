@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
@@ -61,6 +62,7 @@ export const AiTripModal: React.FC<Props> = ({
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user: authUser, profile } = useAuth();
+  const { updateCreditsBalance, refreshProfile } = useAuthContext();
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -72,7 +74,8 @@ export const AiTripModal: React.FC<Props> = ({
     generateStructure, generateAllViaServer, generateActivitiesClientSide,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
     dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
-  } = useAiPlanner({ mode, tripId, userId, initialContext });
+    generatePackingList, generateBudgetCategories,
+  } = useAiPlanner({ mode, tripId, userId, initialContext, onCreditsUpdate: updateCreditsBalance });
   const [adjustMode, setAdjustMode] = useState(false);
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
@@ -114,6 +117,7 @@ export const AiTripModal: React.FC<Props> = ({
 
   const handleClose = () => {
     // Don't reset — conversation is persisted and can be resumed
+    refreshProfile(); // fire-and-forget, final DB sync
     onClose();
   };
 
@@ -420,6 +424,31 @@ export const AiTripModal: React.FC<Props> = ({
           </View>
         )}
 
+        {/* Agent action button (enhance mode only) */}
+        {!isPlanReview && metadata?.agent_action && tripId && !sending && (
+          <TouchableOpacity
+            style={styles.agentActionButton}
+            onPress={() => {
+              if (metadata.agent_action === 'packing_list') generatePackingList();
+              else if (metadata.agent_action === 'budget_categories') generateBudgetCategories();
+            }}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[...gradients.ocean]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.agentActionGradient}
+            >
+              <Text style={styles.agentActionText}>
+                {metadata.agent_action === 'packing_list' ? 'Packliste erstellen' :
+                 metadata.agent_action === 'budget_categories' ? 'Budget erstellen' :
+                 'Tagesplan erstellen'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
         {/* Suggestion chips (conversing only) */}
         {!isPlanReview && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
           <ScrollView
@@ -654,6 +683,15 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   chipText: { ...typography.bodySmall, color: colors.secondary },
+
+  // Agent action button
+  agentActionButton: { marginHorizontal: spacing.md, marginBottom: spacing.sm },
+  agentActionGradient: {
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  agentActionText: { ...typography.button, color: '#FFFFFF', fontSize: 14 },
 
   // Generate button
   generateButton: { marginHorizontal: spacing.md, marginBottom: spacing.sm },

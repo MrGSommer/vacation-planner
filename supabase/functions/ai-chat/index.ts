@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
 
     // Credit deduction: plan_generation/plan_generation_full=3, all others=1
     const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1;
+    // Agent tasks: log as their own task_type (already in CHECK constraint)
     const newBalance = await deductCreditsAtomic(user.id, creditsRequired);
 
     if (newBalance === -1) {
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
     const result = await response.json();
     const content = result.content?.[0]?.text || '';
 
-    // Log as valid task_type (plan_generation_full → plan_generation)
+    // Log as valid task_type (plan_generation_full → plan_generation for DB constraint)
     const logTask = task === 'plan_generation_full' ? 'plan_generation' : task;
     logUsage(user.id, context.tripId || null, logTask, creditsRequired, model, result.usage, durationMs);
 

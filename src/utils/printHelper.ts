@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Activity, ItineraryDay, TripStop, BudgetCategory, PackingItem, Trip } from '../types/database';
 import { getDeviceLocale } from './dateHelpers';
 
@@ -167,7 +168,7 @@ function renderNotes(data: PrintData): string {
   return `<h2>Notizen</h2><p>${escapeHtml(data.trip.notes)}</p>`;
 }
 
-function buildPrintHtml(data: PrintData, options: PrintOptions): string {
+export function buildPrintHtml(data: PrintData, options: PrintOptions): string {
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -226,13 +227,31 @@ function buildPrintHtml(data: PrintData, options: PrintOptions): string {
 </html>`;
 }
 
-export function printTripHtml(data: PrintData, options: PrintOptions): void {
+export async function printTripHtml(data: PrintData, options: PrintOptions): Promise<void> {
   const html = buildPrintHtml(data, options);
 
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => printWindow.print();
+  if (Platform.OS === 'web') {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.onload = () => printWindow.print();
+    }
+  } else {
+    const { printAsync } = await import('expo-print');
+    await printAsync({ html });
+  }
+}
+
+export async function exportTripPdf(data: PrintData, options: PrintOptions): Promise<void> {
+  const html = buildPrintHtml(data, options);
+
+  if (Platform.OS === 'web') {
+    await printTripHtml(data, options);
+  } else {
+    const { printToFileAsync } = await import('expo-print');
+    const { shareAsync } = await import('expo-sharing');
+    const { uri } = await printToFileAsync({ html });
+    await shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
   }
 }

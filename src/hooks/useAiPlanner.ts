@@ -4,6 +4,7 @@ import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep }
 import { getActivitiesForTrip } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
+import { getPackingLists, getPackingItems } from '../api/packing';
 import { getProfile } from '../api/auth';
 import { getAiConversation, saveAiConversation, deleteAiConversation } from '../api/aiConversations';
 import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
@@ -26,6 +27,7 @@ export interface AiMetadata {
   preferences_gathered: string[];
   suggested_questions: string[];
   trip_type?: 'roundtrip' | 'pointtopoint' | null;
+  agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
 }
 
 export interface UseAiPlannerOptions {
@@ -44,6 +46,7 @@ export interface UseAiPlannerOptions {
     travelersCount?: number;
     groupType?: string;
   };
+  onCreditsUpdate?: (newBalance: number) => void;
 }
 
 const MAX_MESSAGES = 12;
@@ -131,7 +134,7 @@ function mergePlan(
 
 export type GenerationGranularity = 'all' | 'weekly' | 'daily';
 
-export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlannerOptions) => {
+export const useAiPlanner = ({ mode, tripId, userId, initialContext, onCreditsUpdate }: UseAiPlannerOptions) => {
   const [phase, setPhase] = useState<AiPhase>('idle');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [metadata, setMetadata] = useState<AiMetadata | null>(null);
@@ -202,26 +205,50 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       const profile = await getProfile(userId);
       if (!profile.ai_trip_context_enabled) return undefined;
 
-      const [activities, stops, budgetCategories] = await Promise.all([
+      const [activities, stops, budgetCategories, packingLists] = await Promise.all([
         getActivitiesForTrip(tripId),
         getStops(tripId),
         getBudgetCategories(tripId),
+        getPackingLists(tripId),
       ]);
+
+      // Load packing items from all lists
+      let allPackingItems: Array<{ name: string; category: string; quantity: number }> = [];
+      if (packingLists.length > 0) {
+        const itemArrays = await Promise.all(
+          packingLists.map(list => getPackingItems(list.id)),
+        );
+        allPackingItems = itemArrays.flat().map(item => ({
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+        }));
+      }
 
       return {
         activities: activities.map(a => ({
           title: a.title,
           category: a.category,
           start_time: a.start_time,
+          end_time: a.end_time,
+          cost: a.cost,
+          description: a.description,
+          location_name: a.location_name,
         })),
         stops: stops.map(s => ({
           name: s.name,
           type: s.type,
+          arrival_date: s.arrival_date,
+          departure_date: s.departure_date,
+          address: s.address,
+          nights: s.nights,
         })),
         budgetCategories: budgetCategories.map(b => ({
           name: b.name,
           color: b.color,
+          budget_limit: b.budget_limit,
         })),
+        packingItems: allPackingItems,
       };
     } catch (e) {
       console.error('Failed to load existing data:', e);
@@ -291,6 +318,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
         }
         prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
       }
 
       const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(response.content);
@@ -359,6 +387,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
         }
         prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
       }
 
       const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(response.content);
@@ -484,6 +513,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       if (structureResponse.credits_remaining !== undefined) {
         prevCreditsRef.current = structureResponse.credits_remaining;
         setCreditsBalance(structureResponse.credits_remaining);
+        onCreditsUpdate?.(structureResponse.credits_remaining);
       }
 
       const parsed = parsePlanJson(structureResponse.content);
@@ -690,6 +720,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       if (response.credits_remaining !== undefined) {
         prevCreditsRef.current = response.credits_remaining;
         setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
       }
 
       const parsed = parsePlanJson(response.content);
@@ -761,6 +792,103 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     ).catch(() => {});
   }, [tripId, userId, phase, messages, metadata, plan, initialContext.destination, initialContext.startDate, initialContext.endDate]);
 
+  // Agent: Generate packing list
+  const generatePackingList = useCallback(async () => {
+    if (!tripId || sending) return;
+    setSending(true);
+    setError(null);
+
+    try {
+      const agentMsg: AiMessage = {
+        role: 'user',
+        content: 'Erstelle eine Packliste fuer diese Reise als JSON.',
+      };
+      const response = await sendAiMessage('agent_packing', [agentMsg], contextRef.current);
+
+      if (response.credits_remaining !== undefined) {
+        prevCreditsRef.current = response.credits_remaining;
+        setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
+      }
+
+      // Parse JSON from response
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Ungueltige Antwort vom AI-Service');
+      const parsed = JSON.parse(jsonMatch[0]) as { items: Array<{ name: string; category: string; quantity: number }> };
+
+      if (!parsed.items?.length) throw new Error('Keine Items erhalten');
+
+      // Create packing list + items
+      const { createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
+      const list = await createList(tripId, 'Fable Packliste');
+      await createItems(list.id, parsed.items);
+
+      const successMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: `Packliste erstellt mit **${parsed.items.length} Items** in ${[...new Set(parsed.items.map(i => i.category))].length} Kategorien. Schau im Packlisten-Tab nach!`,
+        timestamp: Date.now(),
+        creditsAfter: response.credits_remaining,
+      };
+      setMessages(prev => [...prev, successMsg]);
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'generatePackingList' } });
+      setError(e.message || 'Packliste konnte nicht erstellt werden');
+    } finally {
+      setSending(false);
+    }
+  }, [tripId, sending, onCreditsUpdate]);
+
+  // Agent: Generate budget categories
+  const generateBudgetCategories = useCallback(async () => {
+    if (!tripId || sending) return;
+    setSending(true);
+    setError(null);
+
+    try {
+      const agentMsg: AiMessage = {
+        role: 'user',
+        content: 'Erstelle Budget-Kategorien fuer diese Reise als JSON.',
+      };
+      const response = await sendAiMessage('agent_budget', [agentMsg], contextRef.current);
+
+      if (response.credits_remaining !== undefined) {
+        prevCreditsRef.current = response.credits_remaining;
+        setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
+      }
+
+      // Parse JSON from response
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Ungueltige Antwort vom AI-Service');
+      const parsed = JSON.parse(jsonMatch[0]) as { categories: Array<{ name: string; color: string; budget_limit: number }> };
+
+      if (!parsed.categories?.length) throw new Error('Keine Kategorien erhalten');
+
+      // Create budget categories
+      const { createBudgetCategory } = await import('../api/budgets');
+      for (const cat of parsed.categories) {
+        await createBudgetCategory(tripId, cat.name, cat.color, cat.budget_limit, 'group');
+      }
+
+      const totalBudget = parsed.categories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);
+      const currency = initialContext.currency || 'CHF';
+      const successMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: `**${parsed.categories.length} Budget-Kategorien** erstellt (Total: ${totalBudget} ${currency}). Schau im Budget-Tab nach!`,
+        timestamp: Date.now(),
+        creditsAfter: response.credits_remaining,
+      };
+      setMessages(prev => [...prev, successMsg]);
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateBudgetCategories' } });
+      setError(e.message || 'Budget-Kategorien konnten nicht erstellt werden');
+    } finally {
+      setSending(false);
+    }
+  }, [tripId, sending, initialContext.currency, onCreditsUpdate]);
+
   return {
     phase,
     messages,
@@ -792,5 +920,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
     confirmWithConflicts,
     reset,
     saveConversationNow,
+    generatePackingList,
+    generateBudgetCategories,
   };
 };
