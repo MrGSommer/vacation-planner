@@ -1,5 +1,5 @@
 export const STRIPE_CONFIG = {
-  publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
+  publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_live_51SxkZwGtIWkM8nDaE4QN5eyaw8EMbHHBiFAJxmBvqBQ6myUoe6TT1a00HiHaCvCG0YwMJvcMxjCu19mWu2mOGP0d00ZcNpDcX0',
   priceMonthly: process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY || 'price_1SxlEiGtIWkM8nDay8lOyYFi',
   priceYearly: process.env.EXPO_PUBLIC_STRIPE_PRICE_YEARLY || 'price_1SxlEoGtIWkM8nDafyxYhBKm',
   priceAiCredits: process.env.EXPO_PUBLIC_STRIPE_PRICE_AI_CREDITS || 'price_1SxlEwGtIWkM8nDajb7o9wz7',
