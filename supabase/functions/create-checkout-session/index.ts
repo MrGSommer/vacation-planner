@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { priceId, mode, customerId: clientCustomerId } = await req.json();
+    const { priceId, mode } = await req.json();
     if (!priceId) return json({ error: 'priceId fehlt' }, origin, 400);
     if (!mode) return json({ error: 'mode fehlt' }, origin, 400);
 
@@ -84,8 +84,8 @@ Deno.serve(async (req) => {
     const user = await getUser(token);
     if (!user?.id) return json({ error: 'Ungültiges Token' }, origin, 401);
 
-    // Get or create Stripe customer
-    let customerId = clientCustomerId || await getCustomerId(user.id);
+    // Always look up customer from DB — never trust client-supplied IDs
+    let customerId = await getCustomerId(user.id);
 
     if (!customerId) {
       const customer = await stripePost('/customers', {

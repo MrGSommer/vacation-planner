@@ -1,4 +1,5 @@
 import { Activity, ItineraryDay, TripStop, BudgetCategory, PackingItem, Trip } from '../types/database';
+import { getDeviceLocale } from './dateHelpers';
 
 export interface PrintData {
   trip: Trip;
@@ -26,7 +27,7 @@ function escapeHtml(str: string): string {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('de-CH', {
+    return new Date(dateStr).toLocaleDateString(getDeviceLocale(), {
       weekday: 'short', day: 'numeric', month: 'long', year: 'numeric',
     });
   } catch {

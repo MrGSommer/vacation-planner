@@ -377,46 +377,17 @@ Deno.serve(async (req) => {
       return json({ error: 'Zu viele Anfragen. Bitte warte kurz.' }, origin, 429);
     }
 
-    // Credit deduction: plan_generation=3, plan_generation_full=3, plan_activities=0 (already paid in plan_generation), conversation=1
-    const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : task === 'plan_activities' ? 0 : 1;
+    // Credit deduction: plan_generation/plan_generation_full=3, all others=1
+    const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1;
+    const newBalance = await deductCreditsAtomic(user.id, creditsRequired);
 
-    if (creditsRequired > 0) {
-      const newBalance = await deductCreditsAtomic(user.id, creditsRequired);
-
-      if (newBalance === -1) {
-        return json({
-          error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
-        }, origin, 403);
-      }
-
-      // Build prompt + call Claude
-      const model = MODELS[task as keyof typeof MODELS] || MODELS.conversation;
-      const systemPrompt = buildSystemPrompt(task, context);
-      const maxTokens = getMaxTokens(task);
-
-      if (!ANTHROPIC_KEY) return json({ error: 'AI-Service nicht konfiguriert' }, origin, 500);
-
-      const response = await callClaude(model, systemPrompt, messages, maxTokens);
-
-      if (!response.ok) {
-        const status = response.status;
-        if (status === 429) return json({ error: 'Rate Limit erreicht – bitte kurz warten', retryable: true }, origin, 429);
-        if (status === 529) return json({ error: 'AI-Service momentan überlastet – bitte kurz warten', retryable: true }, origin, 529);
-        console.error(`Claude API error ${status}:`, await response.text().catch(() => ''));
-        return json({ error: 'AI-Anfrage fehlgeschlagen' }, origin, 502);
-      }
-
-      const result = await response.json();
-      const content = result.content?.[0]?.text || '';
-
-      // Log as valid task_type (plan_generation_full → plan_generation)
-      const logTask = task === 'plan_generation_full' ? 'plan_generation' : task;
-      logUsage(user.id, context.tripId || null, logTask, creditsRequired);
-
-      return json({ content, usage: result.usage, credits_remaining: newBalance }, origin);
+    if (newBalance === -1) {
+      return json({
+        error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
+      }, origin, 403);
     }
 
-    // plan_activities: no credit deduction needed
+    // Build prompt + call Claude
     const model = MODELS[task as keyof typeof MODELS] || MODELS.conversation;
     const systemPrompt = buildSystemPrompt(task, context);
     const maxTokens = getMaxTokens(task);
@@ -436,9 +407,11 @@ Deno.serve(async (req) => {
     const result = await response.json();
     const content = result.content?.[0]?.text || '';
 
-    logUsage(user.id, context.tripId || null, task, 0);
+    // Log as valid task_type (plan_generation_full → plan_generation)
+    const logTask = task === 'plan_generation_full' ? 'plan_generation' : task;
+    logUsage(user.id, context.tripId || null, logTask, creditsRequired);
 
-    return json({ content, usage: result.usage }, origin);
+    return json({ content, usage: result.usage, credits_remaining: newBalance }, origin);
   } catch (e) {
     console.error('ai-chat error:', e);
     return json({ error: (e as Error).message }, origin, 500);

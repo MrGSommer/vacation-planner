@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getSharedTrip, ShareTripData } from '../../api/invitations';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { formatDateMedium } from '../../utils/dateHelpers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripShare'>;
 
@@ -45,7 +46,6 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
   }
 
   const { trip, stops, activities } = data;
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -57,7 +57,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
         <Text style={styles.title}>{trip.name}</Text>
         <Text style={styles.destination}>{trip.destination}</Text>
         <Text style={styles.dates}>
-          {formatDate(trip.start_date)} – {formatDate(trip.end_date)}
+          {formatDateMedium(trip.start_date)} – {formatDateMedium(trip.end_date)}
         </Text>
       </View>
 
@@ -69,8 +69,8 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
               <Text style={styles.cardTitle}>{stop.name}</Text>
               {stop.arrival_date && (
                 <Text style={styles.cardSub}>
-                  {formatDate(stop.arrival_date)}
-                  {stop.departure_date ? ` – ${formatDate(stop.departure_date)}` : ''}
+                  {formatDateMedium(stop.arrival_date)}
+                  {stop.departure_date ? ` – ${formatDateMedium(stop.departure_date)}` : ''}
                 </Text>
               )}
             </View>
@@ -85,7 +85,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
             <View key={act.id} style={styles.card}>
               <Text style={styles.cardTitle}>{act.title}</Text>
               <Text style={styles.cardSub}>
-                {formatDate(act.date)}
+                {formatDateMedium(act.date)}
                 {act.start_time ? ` · ${act.start_time.slice(0, 5)}` : ''}
                 {act.end_time ? ` – ${act.end_time.slice(0, 5)}` : ''}
               </Text>
@@ -98,7 +98,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Möchtest du mitplanen? Registriere dich auf</Text>
-        <Text style={styles.footerLink}>vacation-planner-gs.netlify.app</Text>
+        <Text style={styles.footerLink}>wayfable.ch</Text>
       </View>
     </ScrollView>
   );

@@ -47,14 +47,12 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Nicht authentifiziert' }, origin, 401);
 
-    const body = await req.json().catch(() => ({}));
-    const clientCustomerId = body?.customerId;
-
     const token = authHeader.replace('Bearer ', '');
     const user = await getUser(token);
     if (!user?.id) return json({ error: 'Ungültiges Token' }, origin, 401);
 
-    const customerId = clientCustomerId || await getCustomerId(user.id);
+    // Always look up customer from DB — never trust client-supplied IDs
+    const customerId = await getCustomerId(user.id);
     if (!customerId) return json({ error: 'Kein Stripe-Konto verknüpft' }, origin, 400);
 
     // Create billing portal session via Stripe REST API

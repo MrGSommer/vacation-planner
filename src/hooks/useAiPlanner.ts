@@ -401,28 +401,24 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext }: UseAiPlan
       };
 
       let allActivities: { days: Array<{ date: string; activities: any[] }> } = { days: [] };
+      const BATCH_SIZE = 5;
 
-      if (dayDates.length > 10) {
-        // Batch: split into two halves
-        const mid = Math.ceil(dayDates.length / 2);
-        const batch1Dates = dayDates.slice(0, mid);
-        const batch2Dates = dayDates.slice(mid);
+      if (dayDates.length > BATCH_SIZE) {
+        // Split into batches of BATCH_SIZE days to avoid token truncation
+        const batches: string[][] = [];
+        for (let i = 0; i < dayDates.length; i += BATCH_SIZE) {
+          batches.push(dayDates.slice(i, i + BATCH_SIZE));
+        }
 
-        const batch1Msg: AiMessage = {
-          role: 'user',
-          content: `Erstelle Aktivitäten für die Tage ${batch1Dates.join(', ')} als JSON.`,
-        };
-        const batch1Response = await sendAiMessage('plan_activities', [batch1Msg], { ...activitiesContext, dayDates: batch1Dates });
-        const batch1 = parsePlanJson(batch1Response.content);
-
-        const batch2Msg: AiMessage = {
-          role: 'user',
-          content: `Erstelle Aktivitäten für die Tage ${batch2Dates.join(', ')} als JSON.`,
-        };
-        const batch2Response = await sendAiMessage('plan_activities', [batch2Msg], { ...activitiesContext, dayDates: batch2Dates });
-        const batch2 = parsePlanJson(batch2Response.content);
-
-        allActivities = { days: [...(batch1.days || []), ...(batch2.days || [])] };
+        for (const batchDates of batches) {
+          const batchMsg: AiMessage = {
+            role: 'user',
+            content: `Erstelle Aktivitäten für die Tage ${batchDates.join(', ')} als JSON.`,
+          };
+          const batchResponse = await sendAiMessage('plan_activities', [batchMsg], { ...activitiesContext, dayDates: batchDates });
+          const batch = parsePlanJson(batchResponse.content);
+          allActivities.days.push(...(batch.days || []));
+        }
       } else {
         const activitiesMsg: AiMessage = {
           role: 'user',

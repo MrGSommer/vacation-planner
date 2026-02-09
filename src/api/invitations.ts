@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { TripInvitation, TripCollaborator, Profile } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
-const BASE_URL = 'https://vacation-planner-gs.netlify.app';
+const BASE_URL = 'https://wayfable.ch';
 
 export interface CollaboratorWithProfile extends TripCollaborator {
   profile: Pick<Profile, 'id' | 'email' | 'full_name' | 'avatar_url'>;

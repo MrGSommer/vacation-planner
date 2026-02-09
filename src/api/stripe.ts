@@ -21,12 +21,12 @@ export function getInspirationsUrl(userId: string, email: string): string {
   return buildPaymentLinkUrl(STRIPE_CONFIG.paymentLinkInspirations, userId, email);
 }
 
-export async function createPortalSession(customerId?: string | null): Promise<{ url: string }> {
+export async function createPortalSession(): Promise<{ url: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Nicht authentifiziert');
 
   const res = await supabase.functions.invoke('create-portal-session', {
-    body: { customerId: customerId || undefined },
+    body: {},
   });
 
   if (res.error) throw new Error(res.error.message || 'Portal fehlgeschlagen');

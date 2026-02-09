@@ -124,12 +124,7 @@ export const AiTripModal: React.FC<Props> = ({
     if (phase === 'generating_plan') {
       return (
         <View style={styles.executingContainer}>
-          <LinearGradient colors={[...gradients.ocean]} style={styles.executingGradient}>
-            <AiPlanningAnimation />
-            {progressStep && (
-              <Text style={styles.executingStep}>{PROGRESS_LABELS[progressStep]}</Text>
-            )}
-          </LinearGradient>
+          <AiPlanningAnimation />
         </View>
       );
     }

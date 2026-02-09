@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/common';
 import { useToast } from '../../contexts/ToastContext';
 import { submitFeedback, getMyFeedback, BetaFeedback } from '../../api/feedback';
+import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 
 type Props = {};
@@ -148,7 +149,7 @@ export const FeedbackScreen: React.FC<Props> = () => {
                 <Text style={styles.feedbackTitle}>{fb.title}</Text>
                 <Text style={styles.feedbackDesc} numberOfLines={3}>{fb.description}</Text>
                 <Text style={styles.feedbackDate}>
-                  {new Date(fb.created_at).toLocaleDateString('de-CH')}
+                  {formatDate(fb.created_at)}
                 </Text>
               </View>
             );

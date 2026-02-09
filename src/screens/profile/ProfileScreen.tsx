@@ -154,7 +154,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               setStripeLoading('portal');
               setStripeError(null);
               try {
-                const { url } = await createPortalSession(profile?.stripe_customer_id);
+                const { url } = await createPortalSession();
                 if (Platform.OS === 'web') window.location.href = url;
               } catch (e: any) {
                 setStripeError(e?.message || 'Abo-Verwaltung konnte nicht geladen werden');
