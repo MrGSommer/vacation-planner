@@ -67,7 +67,7 @@ async function deductCreditsAtomic(userId: string, amount: number): Promise<numb
   return typeof result === 'number' ? result : -1;
 }
 
-function logUsage(userId: string, tripId: string | null, taskType: string, credits: number) {
+function logUsage(userId: string, tripId: string | null, taskType: string, credits: number, model: string, usage?: { input_tokens?: number; output_tokens?: number }) {
   // Fire-and-forget — don't block response
   fetch(`${SUPABASE_URL}/rest/v1/ai_usage_logs`, {
     method: 'POST',
@@ -82,6 +82,9 @@ function logUsage(userId: string, tripId: string | null, taskType: string, credi
       trip_id: tripId,
       task_type: taskType,
       credits_charged: credits,
+      input_tokens: usage?.input_tokens || null,
+      output_tokens: usage?.output_tokens || null,
+      model,
     }),
   }).catch(() => {});
 }
@@ -409,7 +412,7 @@ Deno.serve(async (req) => {
 
     // Log as valid task_type (plan_generation_full → plan_generation)
     const logTask = task === 'plan_generation_full' ? 'plan_generation' : task;
-    logUsage(user.id, context.tripId || null, logTask, creditsRequired);
+    logUsage(user.id, context.tripId || null, logTask, creditsRequired, model, result.usage);
 
     return json({ content, usage: result.usage, credits_remaining: newBalance }, origin);
   } catch (e) {
