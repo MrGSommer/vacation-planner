@@ -64,6 +64,76 @@ export const deleteTrip = async (tripId: string): Promise<void> => {
   invalidateCache(`trip:${tripId}`);
 };
 
+export interface ClearTripOptions {
+  activities: boolean;
+  stops: boolean;
+  budget: boolean;
+  packing: boolean;
+  photos: boolean;
+}
+
+export const clearTripData = async (tripId: string, options: ClearTripOptions): Promise<void> => {
+  const promises: Promise<any>[] = [];
+
+  if (options.activities) {
+    // Activities have cascade from days, but we also delete days
+    promises.push(
+      supabase.from('activities').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; }),
+      supabase.from('itinerary_days').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; }),
+    );
+  }
+
+  if (options.stops) {
+    promises.push(
+      supabase.from('trip_stops').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; }),
+    );
+  }
+
+  if (options.budget) {
+    // Delete expenses first (FK to budget_categories)
+    promises.push(
+      supabase.from('expenses').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; })
+        .then(() => supabase.from('budget_categories').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; })),
+    );
+  }
+
+  if (options.packing) {
+    // Get list IDs, then delete items + lists
+    promises.push(
+      supabase.from('packing_lists').select('id').eq('trip_id', tripId).then(({ data }) => {
+        if (data && data.length > 0) {
+          const ids = data.map(l => l.id);
+          return supabase.from('packing_items').delete().in('list_id', ids).then(({ error }) => { if (error) throw error; })
+            .then(() => supabase.from('packing_lists').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; }));
+        }
+      }),
+    );
+  }
+
+  if (options.photos) {
+    // Get photos to delete from storage too
+    promises.push(
+      supabase.from('photos').select('id, storage_path').eq('trip_id', tripId).then(({ data }) => {
+        if (data && data.length > 0) {
+          const paths = data.map(p => p.storage_path).filter(Boolean);
+          const deleteStorage = paths.length > 0
+            ? supabase.storage.from('trip-photos').remove(paths)
+            : Promise.resolve();
+          return deleteStorage.then(() =>
+            supabase.from('photos').delete().eq('trip_id', tripId).then(({ error }) => { if (error) throw error; })
+          );
+        }
+      }),
+    );
+  }
+
+  await Promise.all(promises);
+
+  invalidateCache(`trip:${tripId}`);
+  invalidateCache(`activities:${tripId}`);
+  invalidateCache('trips:');
+};
+
 export const uploadCoverImage = async (tripId: string, uri: string): Promise<string> => {
   const path = `covers/${tripId}_${Date.now()}.jpg`;
   const response = await fetch(uri);

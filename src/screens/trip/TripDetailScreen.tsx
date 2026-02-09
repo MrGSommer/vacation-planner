@@ -19,6 +19,7 @@ import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleto
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { ShareModal } from '../home/ShareModal';
+import { ClearTripModal } from '../../components/common/ClearTripModal';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
@@ -59,6 +60,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
@@ -295,6 +297,11 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={styles.menuIcon}>🔗</Text>
               <Text style={styles.menuLabel}>Teilen & Drucken</Text>
             </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
+              <Text style={styles.menuIcon}>🗑️</Text>
+              <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
+            </TouchableOpacity>
           </View>
         </>
       )}
@@ -448,6 +455,21 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           tripId={trip.id}
           tripName={trip.name}
           userId={user.id}
+        />
+      )}
+
+      {showClearModal && (
+        <ClearTripModal
+          visible={showClearModal}
+          tripId={tripId}
+          onClose={() => setShowClearModal(false)}
+          onCleared={() => {
+            setShowClearModal(false);
+            mapInitializedRef.current = false;
+            mapInstanceRef.current = null;
+            setMapReady(false);
+            loadData();
+          }}
         />
       )}
 
