@@ -16,6 +16,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { PACKING_CATEGORIES } from '../../utils/constants';
 import { TRIP_TYPES, PACKING_TEMPLATES } from '../../utils/packingTemplates';
 import { useRealtime } from '../../hooks/useRealtime';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PackingSkeleton } from '../../components/skeletons/PackingSkeleton';
 import { useToast } from '../../contexts/ToastContext';
@@ -203,7 +204,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const getAssigneeName = (userId: string | null): string | null => {
     if (!userId) return null;
     const collab = collaborators.find(c => c.profile.id === userId);
-    return collab?.profile.full_name || collab?.profile.email || null;
+    return collab ? getDisplayName(collab.profile) || null : null;
   };
 
   const getAssigneeInitial = (userId: string | null): string => {
@@ -425,10 +426,10 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               >
                 <View style={styles.assignOptionAvatar}>
                   <Text style={styles.assignOptionAvatarText}>
-                    {(collab.profile.full_name || collab.profile.email || '?').charAt(0).toUpperCase()}
+                    {(getDisplayName(collab.profile) || '?').charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <Text style={styles.assignOptionName}>{collab.profile.full_name || collab.profile.email}</Text>
+                <Text style={styles.assignOptionName}>{getDisplayName(collab.profile)}</Text>
                 {assignItemId && items.find(i => i.id === assignItemId)?.assigned_to === collab.profile.id && (
                   <Text style={styles.assignCheck}>✓</Text>
                 )}

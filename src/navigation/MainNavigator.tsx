@@ -6,6 +6,7 @@ import { HomeScreen } from '../screens/home/HomeScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { Avatar } from '../components/common';
 import { useAuthContext } from '../contexts/AuthContext';
+import { getDisplayName } from '../utils/profileHelpers';
 import { colors } from '../utils/theme';
 
 const Tab = createBottomTabNavigator();
@@ -40,7 +41,7 @@ export const MainNavigator: React.FC = () => {
           tabBarIcon: () => (
             <Avatar
               uri={profile?.avatar_url}
-              name={profile?.full_name || ''}
+              name={profile ? getDisplayName(profile) : ''}
               size={24}
             />
           ),

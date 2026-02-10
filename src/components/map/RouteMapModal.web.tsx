@@ -128,12 +128,18 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
             stopover: true,
           }));
 
+          // Determine dominant travel mode from travelInfo
+          const modeMap: Record<string, string> = { driving: 'DRIVING', transit: 'TRANSIT', walking: 'WALKING', bicycling: 'BICYCLING' };
+          const modes = Array.from(travelInfo.values()).map(t => t.mode).filter(Boolean);
+          const dominantMode = modes.length > 0 ? modes[0] : 'driving';
+          const gmMode = modeMap[dominantMode] || 'DRIVING';
+
           try {
             const result = await directionsService.route({
               origin,
               destination: dest,
               waypoints,
-              travelMode: google.maps.TravelMode.DRIVING,
+              travelMode: google.maps.TravelMode[gmMode as keyof typeof google.maps.TravelMode] || google.maps.TravelMode.DRIVING,
             });
             directionsRenderer.setDirections(result);
           } catch {

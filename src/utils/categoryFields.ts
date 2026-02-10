@@ -49,6 +49,29 @@ export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
   other: [],
 };
 
+/** Map Google Places types to app activity categories */
+export const GOOGLE_TYPE_TO_CATEGORY: Record<string, string> = {
+  lodging: 'hotel', hotel: 'hotel', hostel: 'hotel', resort_hotel: 'hotel', motel: 'hotel',
+  restaurant: 'food', cafe: 'food', bar: 'food', bakery: 'food', meal_delivery: 'food', meal_takeaway: 'food',
+  museum: 'sightseeing', art_gallery: 'sightseeing', church: 'sightseeing', hindu_temple: 'sightseeing',
+  mosque: 'sightseeing', synagogue: 'sightseeing', tourist_attraction: 'sightseeing', landmark: 'sightseeing',
+  amusement_park: 'activity', bowling_alley: 'activity', aquarium: 'activity', zoo: 'activity', stadium: 'activity',
+  park: 'relaxation', spa: 'relaxation', campground: 'relaxation',
+  shopping_mall: 'shopping', store: 'shopping', clothing_store: 'shopping', book_store: 'shopping',
+  train_station: 'transport', airport: 'transport', bus_station: 'transport', subway_station: 'transport',
+  transit_station: 'transport',
+};
+
+/** Detect app category from an array of Google Places types */
+export function detectCategoryFromTypes(types?: string[]): string {
+  if (!types?.length) return 'sightseeing';
+  for (const t of types) {
+    const cat = GOOGLE_TYPE_TO_CATEGORY[t];
+    if (cat) return cat;
+  }
+  return 'sightseeing';
+}
+
 export const CATEGORY_COLORS: Record<string, string> = {
   transport: '#3498DB',
   hotel: '#8E44AD',

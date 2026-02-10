@@ -10,6 +10,7 @@ import { getCollaboratorsForTrips, CollaboratorWithProfile } from '../../api/inv
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { EmptyState, Avatar } from '../../components/common';
 import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
 import { ShareModal } from './ShareModal';
@@ -64,7 +65,7 @@ const TripCard: React.FC<{
                   <View key={c.id} style={[styles.avatarWrap, i > 0 && styles.avatarOverlap]}>
                     <Avatar
                       uri={c.profile.avatar_url}
-                      name={c.profile.full_name || c.profile.email}
+                      name={getDisplayName(c.profile)}
                       size={26}
                     />
                   </View>

@@ -21,6 +21,7 @@ import {
 } from '../../api/invitations';
 import { Trip } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { CURRENCIES } from '../../utils/constants';
 import { formatDate, getDayDates } from '../../utils/dateHelpers';
@@ -304,7 +305,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleRemoveMember = (member: CollaboratorWithProfile) => {
-    const mName = member.profile.full_name || member.profile.email;
+    const mName = getDisplayName(member.profile);
     const doRemove = async () => {
       try {
         await removeCollaborator(member.id);
@@ -514,18 +515,18 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                 <>
                   {owner && (
                     <View style={styles.memberRow}>
-                      <Avatar uri={owner.profile.avatar_url} name={owner.profile.full_name || owner.profile.email} size={36} />
+                      <Avatar uri={owner.profile.avatar_url} name={getDisplayName(owner.profile)} size={36} />
                       <View style={styles.memberInfo}>
-                        <Text style={styles.memberName} numberOfLines={1}>{owner.profile.full_name || owner.profile.email}</Text>
+                        <Text style={styles.memberName} numberOfLines={1}>{getDisplayName(owner.profile)}</Text>
                         <Text style={styles.memberRole}>{roleLabels.owner}</Text>
                       </View>
                     </View>
                   )}
                   {nonOwnerMembers.map(member => (
                     <View key={member.id} style={styles.memberRow}>
-                      <Avatar uri={member.profile.avatar_url} name={member.profile.full_name || member.profile.email} size={36} />
+                      <Avatar uri={member.profile.avatar_url} name={getDisplayName(member.profile)} size={36} />
                       <View style={styles.memberInfo}>
-                        <Text style={styles.memberName} numberOfLines={1}>{member.profile.full_name || member.profile.email}</Text>
+                        <Text style={styles.memberName} numberOfLines={1}>{getDisplayName(member.profile)}</Text>
                         <TouchableOpacity onPress={() => handleToggleRole(member)}>
                           <Text style={styles.memberRoleTappable}>{roleLabels[member.role] || member.role}  ↻</Text>
                         </TouchableOpacity>

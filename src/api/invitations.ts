@@ -5,14 +5,14 @@ import { cachedQuery, invalidateCache } from '../utils/queryCache';
 const BASE_URL = 'https://wayfable.ch';
 
 export interface CollaboratorWithProfile extends TripCollaborator {
-  profile: Pick<Profile, 'id' | 'email' | 'full_name' | 'avatar_url'>;
+  profile: Pick<Profile, 'id' | 'email' | 'first_name' | 'last_name' | 'avatar_url'>;
 }
 
 export const getCollaboratorsForTrips = async (tripIds: string[]): Promise<Record<string, CollaboratorWithProfile[]>> => {
   if (tripIds.length === 0) return {};
   const { data, error } = await supabase
     .from('trip_collaborators')
-    .select('*, profile:profiles!user_id(id, email, full_name, avatar_url)')
+    .select('*, profile:profiles!user_id(id, email, first_name, last_name, avatar_url)')
     .in('trip_id', tripIds);
   if (error) throw error;
   const result: Record<string, CollaboratorWithProfile[]> = {};
@@ -28,7 +28,7 @@ export const getCollaborators = async (tripId: string): Promise<CollaboratorWith
   return cachedQuery(`collabs:${tripId}`, async () => {
     const { data, error } = await supabase
       .from('trip_collaborators')
-      .select('*, profile:profiles!user_id(id, email, full_name, avatar_url)')
+      .select('*, profile:profiles!user_id(id, email, first_name, last_name, avatar_url)')
       .eq('trip_id', tripId);
     if (error) throw error;
     return (data || []) as unknown as CollaboratorWithProfile[];

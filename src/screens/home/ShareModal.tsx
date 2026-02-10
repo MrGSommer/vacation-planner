@@ -21,6 +21,7 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { Button, Avatar } from '../../components/common';
 import { TripPrintTab } from '../../components/trip/TripPrintTab';
 
@@ -112,7 +113,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const handleRemoveMember = (member: CollaboratorWithProfile) => {
-    const name = member.profile.full_name || member.profile.email;
+    const name = getDisplayName(member.profile);
     const doRemove = async () => {
       try {
         await removeCollaborator(member.id);
@@ -261,12 +262,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     <View style={styles.memberRow}>
                       <Avatar
                         uri={owner.profile.avatar_url}
-                        name={owner.profile.full_name || owner.profile.email}
+                        name={getDisplayName(owner.profile)}
                         size={36}
                       />
                       <View style={styles.memberInfo}>
                         <Text style={styles.memberName} numberOfLines={1}>
-                          {owner.profile.full_name || owner.profile.email}
+                          {getDisplayName(owner.profile)}
                         </Text>
                         <Text style={styles.memberRole}>{roleLabels.owner}</Text>
                       </View>
@@ -278,12 +279,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     <View key={member.id} style={styles.memberRow}>
                       <Avatar
                         uri={member.profile.avatar_url}
-                        name={member.profile.full_name || member.profile.email}
+                        name={getDisplayName(member.profile)}
                         size={36}
                       />
                       <View style={styles.memberInfo}>
                         <Text style={styles.memberName} numberOfLines={1}>
-                          {member.profile.full_name || member.profile.email}
+                          {getDisplayName(member.profile)}
                         </Text>
                         <TouchableOpacity onPress={() => handleToggleRole(member)}>
                           <Text style={styles.memberRoleTappable}>

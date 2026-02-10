@@ -27,7 +27,9 @@ export interface AiMetadata {
   preferences_gathered: string[];
   suggested_questions: string[];
   trip_type?: 'roundtrip' | 'pointtopoint' | null;
+  transport_mode?: 'driving' | 'transit' | 'walking' | 'bicycling' | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
+  form_options?: Array<{ label: string; value: string }> | null;
 }
 
 export interface UseAiPlannerOptions {
@@ -46,6 +48,7 @@ export interface UseAiPlannerOptions {
     travelersCount?: number;
     groupType?: string;
   };
+  initialCredits?: number;
   onCreditsUpdate?: (newBalance: number) => void;
 }
 
@@ -134,7 +137,7 @@ function mergePlan(
 
 export type GenerationGranularity = 'all' | 'weekly' | 'daily';
 
-export const useAiPlanner = ({ mode, tripId, userId, initialContext, onCreditsUpdate }: UseAiPlannerOptions) => {
+export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCredits, onCreditsUpdate }: UseAiPlannerOptions) => {
   const [phase, setPhase] = useState<AiPhase>('idle');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [metadata, setMetadata] = useState<AiMetadata | null>(null);
@@ -147,7 +150,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, onCreditsUp
   const [tokenWarning, setTokenWarning] = useState(false);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [restored, setRestored] = useState(false);
-  const [creditsBalance, setCreditsBalance] = useState<number | null>(null);
+  const [creditsBalance, setCreditsBalance] = useState<number | null>(initialCredits ?? null);
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -344,6 +347,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, onCreditsUp
         if (meta.trip_type) {
           contextRef.current.tripType = meta.trip_type;
         }
+        if (meta.transport_mode) {
+          contextRef.current.transportMode = meta.transport_mode;
+        }
       }
 
       // Save conversation (debounced)
@@ -410,6 +416,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, onCreditsUp
         setMetadata(meta);
         if (meta.trip_type) {
           contextRef.current.tripType = meta.trip_type;
+        }
+        if (meta.transport_mode) {
+          contextRef.current.transportMode = meta.transport_mode;
         }
       }
 

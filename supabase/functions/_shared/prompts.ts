@@ -1,13 +1,13 @@
 // Shared prompt builders for ai-chat and generate-plan Edge Functions
 
 export function buildConversationSystemPrompt(context: any): string {
-  const { destination, startDate, endDate, currency, existingData, userMemory, todayDate, travelersCount, groupType, tripType } = context;
+  const { destination, startDate, endDate, currency, existingData, userMemory, todayDate, travelersCount, groupType, tripType, transportMode, mode: ctxMode } = context;
 
   let prompt = `Du bist Fable, ein freundlicher Reisebegleiter von WayFable. Antworte auf Schweizer Hochdeutsch (kein ß, immer ss).
 
 Hilf dem User, eine Reise zu planen. Stelle gezielte Fragen (1 pro Nachricht), um Vorlieben herauszufinden.
 
-Frage nach (falls nicht bekannt): Reisestil, Stimmung, Interessen, Unterkunft, Budget-Level, besondere Wünsche. Falls Reisedaten fehlen: empfehle die beste Reisezeit. Falls Reisegruppe nicht bekannt: frage ob solo, als Paar, mit Familie, Freunden oder Gruppe. Falls Reiseart nicht bekannt: weise den User darauf hin, dass es relevant ist ob dies eine Rundreise (Rueckkehr zum Ausgangspunkt) oder eine Streckenreise (von A nach B) ist.
+Frage nach (falls nicht bekannt): Reisestil, Stimmung, Interessen, Unterkunft, Budget-Level, besondere Wünsche. Falls Reisedaten fehlen: empfehle die beste Reisezeit. Falls Reisegruppe nicht bekannt: frage ob solo, als Paar, mit Familie, Freunden oder Gruppe. Falls Reiseart nicht bekannt: weise den User darauf hin, dass es relevant ist ob dies eine Rundreise (Rueckkehr zum Ausgangspunkt) oder eine Streckenreise (von A nach B) ist. Falls Transportmittel nicht bekannt: frage wie der User anreisen moechte (Auto, Zug, Flug) und wie er sich vor Ort fortbewegen will.
 
 TOURISTEN-INFOS:
 - Erwaehne proaktiv relevante Touristen-Angebote fuer das Reiseziel:
@@ -24,7 +24,8 @@ Kontext:
 - Währung: ${currency || 'CHF'}
 - Reisende: ${travelersCount || 'nicht festgelegt'} Person(en)
 - Reisegruppe: ${groupType || 'nicht festgelegt'}
-- Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}`;
+- Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}
+- Transportmittel: ${transportMode || 'nicht festgelegt'}`;
 
   if (userMemory) {
     prompt += `\n\nWas du über diesen Reisenden weisst:\n${userMemory}\nNutze dieses Wissen, um bessere Vorschläge zu machen. Frage nicht nochmal nach Dingen, die du schon weisst.`;
@@ -81,18 +82,20 @@ Falls du etwas Neues über die Vorlieben des Reisenden lernst (z.B. Ernährung, 
 Nur einfügen wenn sich wirklich etwas Neues ergibt. Maximal 200 Zeichen.
 
 Am Ende JEDER Antwort:
-<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "agent_action": null}</metadata>
+<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "transport_mode": null, "agent_action": null, "form_options": null}</metadata>
 
 ready_to_plan=true wenn genug Infos + User bestätigt, oder User explizit Plan will.
 suggested_questions: 2-3 kurze ANTWORT-Vorschläge (nicht Fragen) passend zu deiner Frage.
 trip_type: "roundtrip" oder "pointtopoint" wenn bekannt, sonst null.
-agent_action: NUR im enhance-Modus (bestehender Trip). Setze auf "packing_list" wenn User eine Packliste will, "budget_categories" fuer Budget-Kategorien, "day_plan" fuer Tagesplan. Sonst null.`;
+transport_mode: "driving", "transit", "walking" oder "bicycling" wenn bekannt, sonst null. Setze basierend auf User-Antwort (Auto→driving, Zug/Bus/oeV→transit, zu Fuss→walking, Fahrrad→bicycling).
+agent_action: NUR im enhance-Modus (bestehender Trip). Setze auf "packing_list" wenn User eine Packliste will, "budget_categories" fuer Budget-Kategorien, "day_plan" fuer Tagesplan. Sonst null.
+form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswahl anbietest (z.B. Transportmittel, Unterkunftstyp, Budget-Level). Format: [{"label": "Auto", "value": "driving"}, {"label": "Zug/oeV", "value": "transit"}, ...]. Sonst null. Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmoeglichkeiten hat.`;
 
   return prompt;
 }
 
 export function buildStructureSystemPrompt(context: any): string {
-  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, userMemory, todayDate, travelersCount, groupType, tripType } = context;
+  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, userMemory, todayDate, travelersCount, groupType, tripType, transportMode } = context;
 
   let prompt = `Du bist ein Experte für Reiseplanung. Generiere die GRUNDSTRUKTUR eines Reiseplans als JSON.
 
@@ -105,6 +108,7 @@ REISE-DETAILS:
 - Reisende: ${travelersCount || 1} Person(en)
 - Reisegruppe: ${groupType || 'nicht festgelegt'}
 - Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}
+- Transportmittel: ${transportMode || 'nicht festgelegt'}
 - Modus: ${mode === 'enhance' ? 'Ergänzung eines bestehenden Trips' : 'Neuer Trip'}
 
 USER-VORLIEBEN:
@@ -162,7 +166,7 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 }
 
 export function buildActivitiesSystemPrompt(context: any): string {
-  const { destination, startDate, endDate, currency, preferences, existingData, mode, dayDates, userMemory, todayDate, travelersCount, groupType, tripType } = context;
+  const { destination, startDate, endDate, currency, preferences, existingData, mode, dayDates, userMemory, todayDate, travelersCount, groupType, tripType, transportMode } = context;
 
   let prompt = `Du bist ein Experte für Reiseplanung. Generiere detaillierte Aktivitäten für eine Reise als JSON.
 
@@ -174,6 +178,7 @@ REISE-DETAILS:
 - Reisende: ${travelersCount || 1} Person(en)
 - Reisegruppe: ${groupType || 'nicht festgelegt'}
 - Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}
+- Transportmittel: ${transportMode || 'nicht festgelegt'}
 
 USER-VORLIEBEN:
 ${JSON.stringify(preferences, null, 2)}`;
@@ -222,8 +227,10 @@ ORTE:
 
 HOTELS:
 - Hotels als erste Aktivität des Tages mit category "hotel"
+- KEINE start_time/end_time setzen (null statt "00:00"). Setze NUR check_in_date und check_out_date.
 - Setze "check_in_date" und "check_out_date" als Top-Level-Felder im Activity-Objekt (Format: YYYY-MM-DD)
-- Setze "booking_url" in category_data: https://www.google.com/travel/hotels/{destination}?q={hotel_name}&dates={check_in_date},{check_out_date}&guests=${travelersCount || 1}
+- booking_url in category_data ist PFLICHT fuer Hotels: https://www.google.com/travel/hotels/{destination}?q={hotel_name}&dates={check_in_date},{check_out_date}&guests=${travelersCount || 1}
+- website_url in category_data setzen falls bekannt (wird spaeter via Google Places API angereichert)
 - Passe Hotelvorschlaege an die Reisegruppe an (Familienzimmer, Doppelzimmer, etc.)
 - BUDGET-REALISMUS fuer Hotels:
   * Budget/Hostel: 30-80 ${currency}/Nacht (Europa-Durchschnitt)
@@ -241,7 +248,7 @@ TOURISTEN-TRANSPORT:
 
 Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 {
-  "days": [{ "date": "YYYY-MM-DD", "activities": [{ "title": "string", "description": "string|null", "category": "string", "start_time": "HH:MM|null", "end_time": "HH:MM|null", "location_name": "string|null", "location_lat": number|null, "location_lng": number|null, "location_address": "string|null", "cost": number|null, "sort_order": number, "check_in_date": "YYYY-MM-DD|null", "check_out_date": "YYYY-MM-DD|null", "category_data": { "google_maps_url": "string|null", "booking_url": "string|null" } }] }]
+  "days": [{ "date": "YYYY-MM-DD", "activities": [{ "title": "string", "description": "string|null", "category": "string", "start_time": "HH:MM|null", "end_time": "HH:MM|null", "location_name": "string|null", "location_lat": number|null, "location_lng": number|null, "location_address": "string|null", "cost": number|null, "sort_order": number, "check_in_date": "YYYY-MM-DD|null", "check_out_date": "YYYY-MM-DD|null", "category_data": { "google_maps_url": "string|null", "booking_url": "string|null", "website_url": "string|null" } }] }]
 }`;
 
   return prompt;
@@ -249,7 +256,7 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 
 // Legacy: full plan in one shot (used for adjustPlan / retry with short trips)
 export function buildPlanGenerationSystemPrompt(context: any): string {
-  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, userMemory, todayDate, travelersCount, groupType, tripType } = context;
+  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, userMemory, todayDate, travelersCount, groupType, tripType, transportMode } = context;
 
   let prompt = `Du bist ein Experte für Reiseplanung. Generiere einen detaillierten, strukturierten Reiseplan als JSON.
 
@@ -262,6 +269,7 @@ REISE-DETAILS:
 - Reisende: ${travelersCount || 1} Person(en)
 - Reisegruppe: ${groupType || 'nicht festgelegt'}
 - Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}
+- Transportmittel: ${transportMode || 'nicht festgelegt'}
 - Modus: ${mode === 'enhance' ? 'Ergänzung eines bestehenden Trips' : 'Neuer Trip'}
 
 USER-VORLIEBEN:
@@ -332,8 +340,10 @@ ORTE:
 
 HOTELS:
 - Hotels als erste Aktivität des Tages mit category "hotel"
+- KEINE start_time/end_time setzen (null statt "00:00"). Setze NUR check_in_date und check_out_date.
 - Setze "check_in_date" und "check_out_date" als Top-Level-Felder im Activity-Objekt (Format: YYYY-MM-DD)
-- Setze "booking_url" in category_data: https://www.google.com/travel/hotels/{destination}?q={hotel_name}&dates={check_in_date},{check_out_date}&guests=${travelersCount || 1}
+- booking_url in category_data ist PFLICHT fuer Hotels: https://www.google.com/travel/hotels/{destination}?q={hotel_name}&dates={check_in_date},{check_out_date}&guests=${travelersCount || 1}
+- website_url in category_data setzen falls bekannt (wird spaeter via Google Places API angereichert)
 - Passe Hotelvorschlaege an die Reisegruppe an (Familienzimmer, Doppelzimmer, etc.)
 - BUDGET-REALISMUS fuer Hotels:
   * Budget/Hostel: 30-80 ${currency}/Nacht (Europa-Durchschnitt)
@@ -355,7 +365,7 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 {
   ${mode === 'create' ? `"trip": { "name": "string", "destination": "string", "destination_lat": number, "destination_lng": number, "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "currency": "string", "notes": "string|null" },` : ''}
   "stops": [{ "name": "string", "lat": number, "lng": number, "address": "string|null", "type": "overnight|waypoint", "nights": number|null, "arrival_date": "YYYY-MM-DD|null", "departure_date": "YYYY-MM-DD|null", "sort_order": number }],
-  "days": [{ "date": "YYYY-MM-DD", "activities": [{ "title": "string", "description": "string|null", "category": "string", "start_time": "HH:MM|null", "end_time": "HH:MM|null", "location_name": "string|null", "location_lat": number|null, "location_lng": number|null, "location_address": "string|null", "cost": number|null, "sort_order": number, "check_in_date": "YYYY-MM-DD|null", "check_out_date": "YYYY-MM-DD|null", "category_data": { "google_maps_url": "string|null", "booking_url": "string|null" } }] }],
+  "days": [{ "date": "YYYY-MM-DD", "activities": [{ "title": "string", "description": "string|null", "category": "string", "start_time": "HH:MM|null", "end_time": "HH:MM|null", "location_name": "string|null", "location_lat": number|null, "location_lng": number|null, "location_address": "string|null", "cost": number|null, "sort_order": number, "check_in_date": "YYYY-MM-DD|null", "check_out_date": "YYYY-MM-DD|null", "category_data": { "google_maps_url": "string|null", "booking_url": "string|null", "website_url": "string|null" } }] }],
   "budget_categories": [{ "name": "string", "color": "#HEXHEX", "budget_limit": number|null }]
 }`;
 

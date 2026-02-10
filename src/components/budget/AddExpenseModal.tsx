@@ -4,6 +4,7 @@ import { Input, Button } from '../common';
 import { SplitWithPicker } from './SplitWithPicker';
 import { BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 
 interface AddExpenseModalProps {
@@ -131,7 +132,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                       onPress={() => setPaidBy(c.user_id)}
                     >
                       <Text style={[styles.catText, paidBy === c.user_id && { color: '#fff' }]}>
-                        {c.profile.full_name || c.profile.email.split('@')[0]}
+                        {getDisplayName(c.profile)}
                       </Text>
                     </TouchableOpacity>
                   ))}

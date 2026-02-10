@@ -121,6 +121,61 @@ export function exportGeoJSON(activities: { title: string; lat: number; lng: num
   }, null, 2);
 }
 
+/**
+ * Export activities as KML (Google My Maps import format)
+ */
+export function exportKML(
+  tripName: string,
+  activities: { title: string; location_lat?: number | null; location_lng?: number | null; category: string; description?: string | null }[],
+): string {
+  const categoryStyles: Record<string, { icon: string; color: string }> = {
+    hotel: { icon: 'lodging', color: 'ff8E44AD' },
+    food: { icon: 'restaurants', color: 'ff22E6E7' },
+    sightseeing: { icon: 'flag', color: 'ff3C4CE7' },
+    activity: { icon: 'hiker', color: 'ff60AE27' },
+    transport: { icon: 'bus', color: 'ffDB9834' },
+    shopping: { icon: 'shopping', color: 'ff9343E8' },
+    relaxation: { icon: 'spa', color: 'ffC9CE00' },
+    other: { icon: 'info', color: 'ff72636E' },
+  };
+
+  const placemarks = activities
+    .filter(a => a.location_lat && a.location_lng)
+    .map(a => {
+      const style = categoryStyles[a.category] || categoryStyles.other;
+      const desc = a.description ? escapeXml(a.description) : '';
+      return `    <Placemark>
+      <name>${escapeXml(a.title)}</name>
+      <description>${desc}</description>
+      <Style>
+        <IconStyle><color>${style.color}</color></IconStyle>
+      </Style>
+      <Point>
+        <coordinates>${a.location_lng},${a.location_lat},0</coordinates>
+      </Point>
+    </Placemark>`;
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeXml(tripName)}</name>
+    <description>Exportiert von WayFable</description>
+${placemarks}
+  </Document>
+</kml>`;
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 function decodeXml(str: string): string {
   return str
     .replace(/&amp;/g, '&')

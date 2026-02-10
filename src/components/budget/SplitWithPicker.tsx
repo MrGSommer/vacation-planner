@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Avatar } from '../common';
 import { CollaboratorWithProfile } from '../../api/invitations';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 
 interface SplitWithPickerProps {
@@ -36,11 +37,11 @@ export const SplitWithPicker: React.FC<SplitWithPickerProps> = ({
           >
             <Avatar
               uri={c.profile.avatar_url}
-              name={c.profile.full_name || c.profile.email}
+              name={getDisplayName(c.profile)}
               size={32}
             />
             <Text style={[styles.name, isSelected && styles.nameSelected]} numberOfLines={1}>
-              {c.profile.full_name || c.profile.email.split('@')[0]}
+              {getDisplayName(c.profile)}
             </Text>
             <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
               {isSelected && <Text style={styles.checkmark}>✓</Text>}

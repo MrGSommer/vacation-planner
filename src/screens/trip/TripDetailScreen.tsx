@@ -4,7 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTrip } from '../../api/trips';
-import { getActivitiesForTrip, getDays } from '../../api/itineraries';
+import { getActivitiesForTrip } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getTripExpenseTotal } from '../../api/budgets';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
@@ -14,7 +14,9 @@ import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateH
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
-import { Card, TripBottomNav, Avatar } from '../../components/common';
+import { getDisplayName } from '../../utils/profileHelpers';
+import { Card, TripBottomNav, Avatar, ActivityModal } from '../../components/common';
+import type { ActivityFormData } from '../../components/common';
 import { TripDetailSkeleton } from '../../components/skeletons/TripDetailSkeleton';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
@@ -23,7 +25,10 @@ import { ClearTripModal } from '../../components/common/ClearTripModal';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
-import { importMapsLibrary } from '../../components/common/PlaceAutocomplete';
+import { importMapsLibrary, PlaceAutocomplete, PlaceResult } from '../../components/common/PlaceAutocomplete';
+import { detectCategoryFromTypes } from '../../utils/categoryFields';
+import { createActivity, createDay, getDays } from '../../api/itineraries';
+import { exportKML } from '../../utils/geoImport';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
@@ -64,6 +69,9 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
+  const [showAddActivity, setShowAddActivity] = useState(false);
+  const [addActivityDefaults, setAddActivityDefaults] = useState<{ category: string; categoryData: Record<string, any>; title?: string; locationName?: string; locationLat?: number | null; locationLng?: number | null; locationAddress?: string | null } | null>(null);
+  const [showMapSearch, setShowMapSearch] = useState(false);
 
   const loadData = async () => {
     try {
@@ -83,6 +91,84 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMapPlaceSelect = (place: PlaceResult) => {
+    const category = detectCategoryFromTypes(place.types);
+    const categoryData: Record<string, any> = {};
+    if (place.website) categoryData.website_url = place.website;
+    if (category === 'hotel' && trip) {
+      categoryData.check_in_date = trip.start_date;
+      categoryData.check_out_date = trip.end_date;
+    }
+    setAddActivityDefaults({
+      category,
+      categoryData,
+      title: place.name,
+      locationName: place.name,
+      locationLat: place.lat,
+      locationLng: place.lng,
+      locationAddress: place.address,
+    });
+    setShowMapSearch(false);
+    setShowAddActivity(true);
+  };
+
+  const handleSaveMapActivity = async (data: ActivityFormData) => {
+    if (!trip) return;
+    try {
+      // Find or create day (use first day of trip)
+      const days = await getDays(tripId);
+      let dayId: string;
+      if (days.length > 0) {
+        dayId = days[0].id;
+      } else {
+        const newDay = await createDay(tripId, trip.start_date);
+        dayId = newDay.id;
+      }
+      await createActivity({
+        day_id: dayId,
+        trip_id: tripId,
+        title: data.title,
+        description: data.notes || null,
+        category: data.category,
+        start_time: data.startTime || null,
+        end_time: null,
+        location_name: data.locationName || null,
+        location_lat: data.locationLat,
+        location_lng: data.locationLng,
+        location_address: data.locationAddress,
+        cost: null,
+        currency: trip.currency,
+        sort_order: activityCount,
+        check_in_date: data.categoryData?.check_in_date || null,
+        check_out_date: data.categoryData?.check_out_date || null,
+        category_data: data.categoryData || {},
+      });
+      setShowAddActivity(false);
+      setAddActivityDefaults(null);
+      mapInitializedRef.current = false;
+      mapInstanceRef.current = null;
+      setMapReady(false);
+      loadData();
+    } catch (e) {
+      console.error('Failed to add activity from map:', e);
+    }
+  };
+
+  const handleExportToMaps = () => {
+    if (!trip) return;
+    const activities = activitiesRef.current;
+    const kml = exportKML(trip.name, activities);
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${trip.name.replace(/[^a-zA-Z0-9äöüÄÖÜ ]/g, '_')}.kml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -265,7 +351,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }]}>
                   <Avatar
                     uri={c.profile.avatar_url}
-                    name={c.profile.full_name || c.profile.email}
+                    name={getDisplayName(c.profile)}
                     size={28}
                   />
                 </View>
@@ -387,45 +473,63 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <View style={styles.mapHeader}>
                 <Text style={styles.mapTitle}>Karte</Text>
                 {mapReady && (
-                  <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.fullscreenBtn}>
-                    <Text style={styles.fullscreenBtnText}>⛶</Text>
-                  </TouchableOpacity>
+                  <View style={styles.mapHeaderActions}>
+                    <TouchableOpacity onPress={handleExportToMaps} style={styles.fullscreenBtn}>
+                      <Text style={styles.fullscreenBtnText}>{'📤'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.fullscreenBtn}>
+                      <Text style={styles.fullscreenBtnText}>{'🔍'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.fullscreenBtn}>
+                      <Text style={styles.fullscreenBtnText}>⛶</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
+              {showMapSearch && (
+                <View style={styles.mapSearchOverlay}>
+                  <PlaceAutocomplete
+                    placeholder="Ort suchen und hinzufügen..."
+                    onSelect={handleMapPlaceSelect}
+                  />
+                </View>
+              )}
               <div ref={mapRef} style={{ width: '100%', height: 300, borderRadius: 12 }} />
             </Card>
           )}
 
-          {/* Fable — Reisebegleiter */}
-          {isFeatureAllowed('ai') ? (
-            <TouchableOpacity
-              style={styles.aiCard}
-              onPress={() => setShowAiModal(true)}
-              activeOpacity={0.7}
-            >
-              <LinearGradient
-                colors={[...gradients.ocean]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.aiCardGradient}
+          {/* Fable — Reisebegleiter (hidden in fullscreen map) */}
+          {!mapFullscreen && (
+            isFeatureAllowed('ai') ? (
+              <TouchableOpacity
+                style={styles.aiCard}
+                onPress={() => setShowAiModal(true)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.aiCardText}>{'✨ Fable fragen'}</Text>
-                <Text style={styles.aiCardSubtext}>{`Aktivitäten und Stops generieren · ${aiCredits} Inspirationen ›`}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ marginBottom: spacing.lg }}>
-              <UpgradePrompt
-                icon="✨"
-                title="Fable — Dein Reisebegleiter"
-                message="Kaufe Inspirationen um Fable zu nutzen"
-                inline
-                buyInspirations
-              />
-            </View>
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.aiCardGradient}
+                >
+                  <Text style={styles.aiCardText}>{'✨ Fable fragen'}</Text>
+                  <Text style={styles.aiCardSubtext}>{`Aktivitäten und Stops generieren · ${aiCredits} Inspirationen ›`}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <View style={{ marginBottom: spacing.lg }}>
+                <UpgradePrompt
+                  icon="✨"
+                  title="Fable — Dein Reisebegleiter"
+                  message="Kaufe Inspirationen um Fable zu nutzen"
+                  inline
+                  buyInspirations
+                />
+              </View>
+            )
           )}
 
-          {trip.notes && (
+          {!mapFullscreen && trip.notes && (
             <Card style={styles.notesCard}>
               <Text style={styles.notesTitle}>Notizen</Text>
               <Text style={styles.notesText}>{trip.notes}</Text>
@@ -437,12 +541,26 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       <TripBottomNav tripId={tripId} activeTab="TripDetail" />
 
       {Platform.OS === 'web' && mapFullscreen && (
-        <TouchableOpacity
-          onPress={() => setMapFullscreen(false)}
-          style={[styles.fullscreenCloseBtn, { top: insets.top + spacing.sm }]}
-        >
-          <Text style={styles.fullscreenCloseText}>← Schliessen</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            onPress={() => setMapFullscreen(false)}
+            style={[styles.fullscreenCloseBtn, { top: insets.top + spacing.sm }]}
+          >
+            <Text style={styles.fullscreenCloseText}>← Schliessen</Text>
+          </TouchableOpacity>
+          <View style={[styles.fullscreenSearchBar, { top: insets.top + spacing.sm }]}>
+            <PlaceAutocomplete
+              placeholder="Ort suchen und hinzufügen..."
+              onSelect={handleMapPlaceSelect}
+            />
+          </View>
+          <TouchableOpacity
+            onPress={handleExportToMaps}
+            style={[styles.fullscreenExportBtn, { top: insets.top + spacing.sm }]}
+          >
+            <Text style={styles.fullscreenExportText}>{'📤 KML'}</Text>
+          </TouchableOpacity>
+        </>
       )}
 
       {showShareModal && trip && user && (
@@ -498,6 +616,37 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           }}
         />
       )}
+
+      {showAddActivity && addActivityDefaults && (
+        <ActivityModal
+          visible={showAddActivity}
+          activity={{
+            id: '',
+            day_id: '',
+            trip_id: tripId,
+            title: addActivityDefaults.title || '',
+            description: null,
+            category: addActivityDefaults.category,
+            start_time: null,
+            end_time: null,
+            location_name: addActivityDefaults.locationName || null,
+            location_lat: addActivityDefaults.locationLat || null,
+            location_lng: addActivityDefaults.locationLng || null,
+            location_address: addActivityDefaults.locationAddress || null,
+            cost: null,
+            currency: trip?.currency || 'CHF',
+            sort_order: 0,
+            check_in_date: addActivityDefaults.categoryData?.check_in_date || null,
+            check_out_date: addActivityDefaults.categoryData?.check_out_date || null,
+            category_data: addActivityDefaults.categoryData || {},
+            created_at: new Date().toISOString(),
+          } as Activity}
+          tripStartDate={trip?.start_date}
+          tripEndDate={trip?.end_date}
+          onSave={handleSaveMapActivity}
+          onCancel={() => { setShowAddActivity(false); setAddActivityDefaults(null); }}
+        />
+      )}
     </View>
   );
 };
@@ -541,10 +690,15 @@ const styles = StyleSheet.create({
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
   mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   mapTitle: { ...typography.h3 },
+  mapHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   fullscreenBtn: { padding: spacing.xs },
   fullscreenBtnText: { fontSize: 20, color: colors.primary },
-  fullscreenCloseBtn: { position: 'absolute' as any, left: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
+  mapSearchOverlay: { marginBottom: spacing.sm, zIndex: 100 },
+  fullscreenCloseBtn: { position: 'fixed' as any, left: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
   fullscreenCloseText: { ...typography.body, fontWeight: '600' as const, color: colors.primary },
+  fullscreenSearchBar: { position: 'fixed' as any, left: 140, right: 100, zIndex: 10000 },
+  fullscreenExportBtn: { position: 'fixed' as any, right: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
+  fullscreenExportText: { ...typography.bodySmall, fontWeight: '600' as const, color: colors.primary },
   aiCard: { marginBottom: spacing.lg, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.sm },
   aiCardGradient: { padding: spacing.md, flexDirection: 'column' },
   aiCardText: { ...typography.body, fontWeight: '600', color: '#FFFFFF' },

@@ -75,7 +75,7 @@ export const AiTripModal: React.FC<Props> = ({
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
     dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
     generatePackingList, generateBudgetCategories,
-  } = useAiPlanner({ mode, tripId, userId, initialContext, onCreditsUpdate: updateCreditsBalance });
+  } = useAiPlanner({ mode, tripId, userId, initialContext, initialCredits: profile?.ai_credits_balance, onCreditsUpdate: updateCreditsBalance });
   const [adjustMode, setAdjustMode] = useState(false);
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
@@ -449,8 +449,24 @@ export const AiTripModal: React.FC<Props> = ({
           </TouchableOpacity>
         )}
 
-        {/* Suggestion chips (conversing only) */}
-        {!isPlanReview && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
+        {/* Form options (structured choices — vertical buttons) */}
+        {!isPlanReview && metadata?.form_options && metadata.form_options.length > 0 && !sending && (
+          <View style={styles.formOptionsContainer}>
+            {metadata.form_options.map((opt, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.formOption}
+                onPress={() => handleChipPress(opt.label)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.formOptionText}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Suggestion chips (conversing only — horizontal) */}
+        {!isPlanReview && !metadata?.form_options?.length && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -683,6 +699,29 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   chipText: { ...typography.bodySmall, color: colors.secondary },
+
+  // Form options (vertical buttons for structured choices)
+  formOptionsContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  formOption: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.secondary,
+    backgroundColor: colors.card,
+    alignItems: 'center' as const,
+  },
+  formOptionText: {
+    ...typography.body,
+    fontWeight: '600' as const,
+    color: colors.secondary,
+  },
 
   // Agent action button
   agentActionButton: { marginHorizontal: spacing.md, marginBottom: spacing.sm },

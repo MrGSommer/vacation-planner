@@ -9,6 +9,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
 import { createPortalSession } from '../../api/stripe';
 import { deleteAiUserMemory } from '../../api/aiMemory';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import appJson from '../../../app.json';
 
@@ -88,7 +89,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       <Text style={styles.title}>Profil</Text>
 
       <View style={styles.profileSection}>
-        <Avatar uri={profile?.avatar_url} name={profile?.full_name || user?.email || ''} size={80} />
+        <Avatar uri={profile?.avatar_url} name={profile ? getDisplayName(profile) : (user?.email || '')} size={80} />
         <Text style={styles.name}>{[profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Reisender'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
       </View>

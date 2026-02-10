@@ -4,6 +4,7 @@ import { Card, Avatar } from '../common';
 import { Expense } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
 import { formatDate } from '../../utils/dateHelpers';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 
 interface ExpenseItemProps {
@@ -48,11 +49,11 @@ export const ExpenseItem: React.FC<ExpenseItemProps> = ({
                 <View style={styles.paidBy}>
                   <Avatar
                     uri={paidByCollab.profile.avatar_url}
-                    name={paidByCollab.profile.full_name || paidByCollab.profile.email}
+                    name={getDisplayName(paidByCollab.profile)}
                     size={18}
                   />
                   <Text style={styles.paidByText} numberOfLines={1}>
-                    {paidByCollab.profile.full_name || paidByCollab.profile.email.split('@')[0]}
+                    {getDisplayName(paidByCollab.profile)}
                   </Text>
                 </View>
               )}

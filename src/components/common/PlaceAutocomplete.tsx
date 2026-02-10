@@ -12,6 +12,7 @@ export interface PlaceResult {
   lng: number;
   opening_hours?: string;
   website?: string;
+  types?: string[];
 }
 
 interface Props {
@@ -67,6 +68,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const selectingRef = useRef(false);
 
   useEffect(() => {
     if (value !== undefined && value !== query) setQuery(value);
@@ -101,12 +103,13 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   };
 
   const handleSelect = async (prediction: any) => {
+    selectingRef.current = true;
     setShowDropdown(false);
     setQuery(prediction.text?.text || prediction.mainText?.text || '');
 
     try {
       const place = prediction.toPlace();
-      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'regularOpeningHours', 'websiteURI'] });
+      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'regularOpeningHours', 'websiteURI', 'types'] });
       const loc = place.location;
       if (loc) {
         let opening_hours: string | undefined;
@@ -121,6 +124,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           lng: loc.lng(),
           opening_hours,
           website: place.websiteURI || undefined,
+          types: place.types || undefined,
         });
       }
     } catch {
@@ -145,7 +149,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           placeholder={placeholder || 'Ort suchen...'}
           placeholderTextColor={colors.textLight}
           onFocus={() => { setFocused(true); if (predictions.length) setShowDropdown(true); }}
-          onBlur={() => { setFocused(false); setTimeout(() => setShowDropdown(false), 200); }}
+          onBlur={() => { setFocused(false); setTimeout(() => { if (!selectingRef.current) setShowDropdown(false); selectingRef.current = false; }, 300); }}
         />
       </View>
       {showDropdown && predictions.length > 0 && (
@@ -154,6 +158,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
             <TouchableOpacity
               key={item.placeId}
               style={styles.dropdownItem}
+              onPressIn={() => { selectingRef.current = true; }}
               onPress={() => handleSelect(item)}
             >
               <Text style={styles.dropdownMain}>
