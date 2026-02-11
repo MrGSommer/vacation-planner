@@ -62,7 +62,6 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [rect, setRect] = useState({ top: 0, left: 0, width: 0 });
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selectingRef = useRef(false);
-  // Real DOM ref for reliable getBoundingClientRect on web
   const anchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,7 +71,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const measure = useCallback(() => {
     if (Platform.OS !== 'web' || !anchorRef.current) return;
     const r = anchorRef.current.getBoundingClientRect();
-    setRect({ top: r.top + 4, left: r.left, width: r.width });
+    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
   }, []);
 
   const search = useCallback(async (text: string) => {
@@ -125,7 +124,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const handleBlur = () => { setFocused(false); setTimeout(() => { if (!selectingRef.current) setShowDropdown(false); selectingRef.current = false; }, 200); };
   const handleClear = () => { setQuery(''); setPredictions([]); setShowDropdown(false); onChangeText?.(''); };
 
-  /* ── Web dropdown: position fixed, escapes all overflow ── */
+  /* ── Web dropdown ── */
   const webDropdown = showDropdown && predictions.length > 0 && rect.width > 0 ? (
     <div
       onMouseDown={(e) => e.preventDefault()}
@@ -134,7 +133,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
         zIndex: 99999, background: colors.card,
         borderRadius: borderRadius.md, border: `1px solid ${colors.border}`,
         boxShadow: '0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
-        maxHeight: 260, overflowY: 'auto',
+        maxHeight: 280, overflowY: 'auto',
         scrollbarWidth: 'thin' as any, scrollbarColor: `${colors.border} transparent`,
       }}
     >
@@ -143,6 +142,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           key={item.placeId}
           onClick={() => handleSelect(item)}
           style={{
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12,
             padding: `10px ${spacing.md}px`, cursor: 'pointer',
             borderBottom: i < predictions.length - 1 ? `1px solid ${colors.border}` : 'none',
             transition: 'background-color 0.15s ease',
@@ -150,26 +150,28 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.background; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
-          <div style={{
-            fontSize: 15, fontWeight: 500, color: colors.text,
-            whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {item.mainText?.text || item.text?.text || ''}
-          </div>
-          {item.secondaryText?.text && (
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: 12, color: colors.textLight, marginTop: 2,
+              fontSize: 15, fontWeight: 500, color: colors.text,
               whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
             }}>
-              {item.secondaryText.text}
+              {item.mainText?.text || item.text?.text || ''}
             </div>
-          )}
+            {item.secondaryText?.text && (
+              <div style={{
+                fontSize: 12, color: colors.textLight, marginTop: 1,
+                whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {item.secondaryText.text}
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </div>
   ) : null;
 
-  /* ── Native dropdown: absolute, within parent ── */
+  /* ── Native dropdown ── */
   const nativeDropdown = showDropdown && predictions.length > 0 ? (
     <View style={nStyles.dropdown}>
       <ScrollView keyboardShouldPersistTaps="always" nestedScrollEnabled style={{ maxHeight: 248 }}>
@@ -198,26 +200,45 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
-        <Text style={styles.searchIcon}>🔍</Text>
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={handleChange}
-          placeholder={placeholder || 'Ort suchen...'}
-          placeholderTextColor={colors.textLight}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-        />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.clearIcon}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      {/* Invisible anchor directly after the input — guaranteed DOM element for measurement */}
-      {Platform.OS === 'web' && (
-        <div ref={anchorRef} style={{ height: 0, width: '100%', overflow: 'hidden' }} />
+      {/* Invisible anchor wraps the input — guaranteed DOM element for measuring position */}
+      {Platform.OS === 'web' ? (
+        <div ref={anchorRef}>
+          <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.input}
+              value={query}
+              onChangeText={handleChange}
+              placeholder={placeholder || 'Ort suchen...'}
+              placeholderTextColor={colors.textLight}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.clearIcon}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </div>
+      ) : (
+        <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.input}
+            value={query}
+            onChangeText={handleChange}
+            placeholder={placeholder || 'Ort suchen...'}
+            placeholderTextColor={colors.textLight}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.clearIcon}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
       {Platform.OS === 'web' ? webDropdown : nativeDropdown}
     </View>
