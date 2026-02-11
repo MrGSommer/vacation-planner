@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
-import { getActivitiesForTrip } from '../api/itineraries';
+import { getActivitiesForTrip, getDays } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
 import { getPackingLists, getPackingItems } from '../api/packing';
@@ -209,19 +209,23 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     }, SAVE_DEBOUNCE_MS);
   }, [tripId, userId, initialContext.destination, initialContext.startDate, initialContext.endDate]);
 
-  const loadExistingData = useCallback(async (): Promise<AiContext['existingData'] | undefined> => {
+  const loadExistingData = useCallback(async (profileOverride?: { ai_trip_context_enabled: boolean }): Promise<AiContext['existingData'] | undefined> => {
     if (mode !== 'enhance' || !tripId) return undefined;
 
     try {
-      const profile = await getProfile(userId);
-      if (!profile.ai_trip_context_enabled) return undefined;
+      const contextEnabled = profileOverride ? profileOverride.ai_trip_context_enabled : (await getProfile(userId)).ai_trip_context_enabled;
+      if (!contextEnabled) return undefined;
 
-      const [activities, stops, budgetCategories, packingLists] = await Promise.all([
+      const [activities, stops, budgetCategories, packingLists, days] = await Promise.all([
         getActivitiesForTrip(tripId),
         getStops(tripId),
         getBudgetCategories(tripId),
         getPackingLists(tripId),
+        getDays(tripId),
       ]);
+
+      // Build day_id → date map
+      const dayDateMap = new Map(days.map(d => [d.id, d.date]));
 
       // Load packing items from all lists
       let allPackingItems: Array<{ name: string; category: string; quantity: number }> = [];
@@ -248,6 +252,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
           check_in_date: a.check_in_date,
           check_out_date: a.check_out_date,
           day_id: a.day_id,
+          date: dayDateMap.get(a.day_id) || null,
         })),
         stops: stops.map(s => ({
           name: s.name,
@@ -276,9 +281,11 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     setSending(true);
 
     try {
-      // Load user memory + existing data in parallel
+      // Load profile once, then use for context check + custom instruction
+      const profile = await getProfile(userId);
+
       const [existingData, userMemory, savedConversation] = await Promise.all([
-        loadExistingData(),
+        loadExistingData(profile),
         getAiUserMemory().catch(() => null),
         tripId ? getAiConversation(tripId).catch(() => null) : null,
       ]);
@@ -289,6 +296,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
       if (userMemory) {
         contextRef.current.userMemory = userMemory;
         userMemoryRef.current = userMemory;
+      }
+      if (profile.ai_custom_instruction) {
+        contextRef.current.customInstruction = profile.ai_custom_instruction;
       }
 
       // Check for saved conversation (staleness check)
@@ -866,11 +876,15 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     setError(null);
 
     try {
-      const agentMsg: AiMessage = {
+      // Include conversation history so AI knows what was discussed
+      const conversationHistory: AiMessage[] = trimMessages(messages).map(m => ({
+        role: m.role, content: m.content,
+      }));
+      conversationHistory.push({
         role: 'user',
-        content: 'Erstelle einen Tagesplan für den nächsten leeren Tag als JSON.',
-      };
-      const response = await sendAiMessage('agent_day_plan', [agentMsg], contextRef.current);
+        content: 'Basierend auf unserem Gespräch: Erstelle einen Tagesplan für den nächsten leeren Tag als JSON.',
+      });
+      const response = await sendAiMessage('agent_day_plan', conversationHistory, contextRef.current);
 
       if (response.credits_remaining !== undefined) {
         prevCreditsRef.current = response.credits_remaining;
@@ -937,7 +951,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, initialContext.currency, onCreditsUpdate]);
+  }, [tripId, sending, messages, initialContext.currency, onCreditsUpdate]);
 
   // Agent: Generate budget categories
   const generateBudgetCategories = useCallback(async () => {

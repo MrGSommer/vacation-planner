@@ -28,6 +28,7 @@ export interface AiContext {
       check_in_date?: string | null;
       check_out_date?: string | null;
       day_id?: string;
+      date?: string | null;
     }>;
     stops?: Array<{
       name: string; type: string;
@@ -43,6 +44,7 @@ export interface AiContext {
   };
   dayDates?: string[];
   userMemory?: string;
+  customInstruction?: string;
 }
 
 export interface AiResponse {

@@ -540,7 +540,7 @@ export const AiTripModal: React.FC<Props> = ({
         )}
 
         {/* Generate plan button (conversing only) */}
-        {!isPlanReview && metadata?.ready_to_plan && !sending && (
+        {!isPlanReview && metadata?.ready_to_plan && !sending && !metadata?.agent_action && (
           <TouchableOpacity style={styles.generateButton} onPress={generatePlan} activeOpacity={0.8}>
             <LinearGradient
               colors={[...gradients.ocean]}

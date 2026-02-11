@@ -20,6 +20,7 @@ import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { NotificationsScreen } from '../screens/profile/NotificationsScreen';
 import { LanguageCurrencyScreen } from '../screens/profile/LanguageCurrencyScreen';
 import { FeedbackScreen } from '../screens/profile/FeedbackScreen';
+import { FableSettingsScreen } from '../screens/profile/FableSettingsScreen';
 import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
 import { TripShareScreen } from '../screens/share/TripShareScreen';
 import { SubscriptionScreen } from '../screens/subscription/SubscriptionScreen';
@@ -57,6 +58,7 @@ const linking = {
       EditProfile: 'profile/edit',
       Notifications: 'notifications',
       LanguageCurrency: 'settings/language',
+      FableSettings: 'settings/fable',
       Subscription: 'subscription',
       Datenschutz: 'datenschutz',
       AGB: 'agb',
@@ -143,6 +145,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
               <Stack.Screen name="Notifications" component={NotificationsScreen} />
               <Stack.Screen name="LanguageCurrency" component={LanguageCurrencyScreen} />
+              <Stack.Screen name="FableSettings" component={FableSettingsScreen} />
               <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
               <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />
