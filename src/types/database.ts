@@ -212,3 +212,52 @@ export interface TripInvitation {
   type: 'info' | 'collaborate';
   created_at: string;
 }
+
+// --- Stripe Admin Types ---
+
+export interface StripeCharge {
+  id: string;
+  amount: number;
+  fee: number;
+  net: number;
+  currency: string;
+  status: string;
+  created: number;
+  description: string | null;
+}
+
+export interface StripeInvoice {
+  id: string;
+  number: string | null;
+  amount_due: number;
+  amount_paid: number;
+  currency: string;
+  status: string;
+  created: number;
+  invoice_pdf: string | null;
+  hosted_invoice_url: string | null;
+}
+
+export interface StripeSubscriptionDetail {
+  id: string;
+  status: string;
+  current_period_start: number;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+  canceled_at: number | null;
+  trial_start: number | null;
+  trial_end: number | null;
+  plan_amount: number;
+  plan_currency: string;
+  plan_interval: string;
+  plan_product_name: string | null;
+}
+
+export interface RevenueStats {
+  total_revenue_gross: number;
+  total_fees: number;
+  total_revenue_net: number;
+  mrr: number;
+  active_subscriptions: number;
+  currency: string;
+}

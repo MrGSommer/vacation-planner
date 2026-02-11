@@ -4,10 +4,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdminGuard } from '../../components/admin/AdminGuard';
 import { Card, Avatar } from '../../components/common';
-import { adminGetStats, adminGetRecentSignups } from '../../api/admin';
+import { adminGetStats, adminGetRecentSignups, adminGetRevenueStats } from '../../api/admin';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
-import { Profile } from '../../types/database';
+import { Profile, RevenueStats } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'> };
@@ -16,7 +16,10 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState({ totalUsers: 0, premiumUsers: 0, totalTrips: 0, totalAiUsage: 0 });
   const [recentUsers, setRecentUsers] = useState<Profile[]>([]);
+  const [revenue, setRevenue] = useState<RevenueStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const formatCHF = (cents: number) => `CHF ${(cents / 100).toFixed(2)}`;
 
   useEffect(() => {
     const load = async () => {
@@ -24,6 +27,8 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         const [s, r] = await Promise.all([adminGetStats(), adminGetRecentSignups(8)]);
         setStats(s);
         setRecentUsers(r);
+        // Load revenue stats in parallel but don't block initial render
+        adminGetRevenueStats().then(setRevenue).catch((e) => console.error('Revenue stats error:', e));
       } catch (e) {
         console.error('Admin stats error:', e);
       } finally {
@@ -38,6 +43,8 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     { label: 'Premium', value: stats.premiumUsers, color: colors.secondary },
     { label: 'Reisen', value: stats.totalTrips, color: colors.accent },
     { label: 'AI-Nutzung', value: stats.totalAiUsage, color: colors.sky },
+    { label: 'Umsatz (Netto)', value: revenue ? formatCHF(revenue.total_revenue_net) : '...', color: colors.success, isText: true },
+    { label: 'MRR', value: revenue ? formatCHF(revenue.mrr) : '...', color: colors.secondary, isText: true },
   ];
 
   const formatDate = (iso: string) => {
@@ -62,7 +69,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.kpiGrid}>
               {kpis.map((kpi) => (
                 <Card key={kpi.label} style={styles.kpiCard}>
-                  <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+                  <Text style={[kpi.isText ? styles.kpiValueText : styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
                   <Text style={styles.kpiLabel}>{kpi.label}</Text>
                 </Card>
               ))}
@@ -113,6 +120,7 @@ const styles = StyleSheet.create({
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.xl },
   kpiCard: { flex: 1, minWidth: 140, alignItems: 'center', paddingVertical: spacing.lg },
   kpiValue: { fontSize: 32, fontWeight: '700' },
+  kpiValueText: { fontSize: 20, fontWeight: '700' },
   kpiLabel: { ...typography.bodySmall, marginTop: spacing.xs },
   sectionCard: { marginBottom: spacing.xl },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
