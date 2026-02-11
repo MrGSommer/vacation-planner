@@ -10,7 +10,7 @@ import { ToastProvider } from './src/contexts/ToastContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
-import { TrialExpiredModal } from './src/components/common/TrialExpiredModal';
+
 import { logCritical } from './src/services/errorLogger';
 
 function UnhandledRejectionHandler({ children }: { children: React.ReactNode }) {
@@ -40,7 +40,6 @@ export default function App() {
                   <TripProvider>
                     <StatusBar style="auto" />
                     <UpdateBanner />
-                    <TrialExpiredModal />
                     <AppNavigator />
                   </TripProvider>
                 </SubscriptionProvider>

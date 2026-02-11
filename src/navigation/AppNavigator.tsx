@@ -32,6 +32,7 @@ import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
+import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -161,6 +162,7 @@ export const AppNavigator: React.FC = () => {
           <Stack.Screen name="TripShare" component={TripShareScreen} />
         </Stack.Navigator>
         {showFab && <FloatingFeedbackButton />}
+        {session && <TrialExpiredModal />}
       </View>
     </NavigationContainer>
   );
