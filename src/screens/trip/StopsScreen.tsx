@@ -14,6 +14,7 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
@@ -409,7 +410,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                         {(() => {
                           const detail = formatCategoryDetail(activity.category, activity.category_data || {});
                           return detail ? (
-                            <Text style={[styles.stopDetail, { color: CATEGORY_COLORS[activity.category] || colors.primary }]}>{detail}</Text>
+                            <Text style={[styles.stopDetail, { color: CATEGORY_COLORS[activity.category] || colors.primary }]}>{linkifyText(detail)}</Text>
                           ) : null;
                         })()}
                       </View>

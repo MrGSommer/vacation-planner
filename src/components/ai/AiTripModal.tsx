@@ -13,15 +13,18 @@ import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 import { ProgressStep } from '../../services/ai/planExecutor';
 
 function renderMarkdown(text: string): React.ReactNode {
+  // Split on bold markers first
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <Text key={i} style={{ fontWeight: '700' }}>{part.slice(2, -2)}</Text>;
+      return <Text key={i} style={{ fontWeight: '700' }}>{linkifyText(part.slice(2, -2))}</Text>;
     }
-    return part;
+    // Linkify plain text segments
+    return <React.Fragment key={i}>{linkifyText(part)}</React.Fragment>;
   });
 }
 

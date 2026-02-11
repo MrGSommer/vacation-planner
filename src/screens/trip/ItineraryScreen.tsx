@@ -14,6 +14,7 @@ import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton';
 import { ImportPlacesModal } from '../../components/common/ImportPlacesModal';
@@ -381,7 +382,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text style={styles.travelDayIcon}>{icon}</Text>
           <View style={styles.travelDayInfo}>
             <Text style={styles.travelDayTitle}>{transport.title}</Text>
-            {detail && <Text style={styles.travelDayDetail}>{detail}</Text>}
+            {detail && <Text style={styles.travelDayDetail}>{linkifyText(detail)}</Text>}
             {transport.location_name && <Text style={styles.accommodationAddress}>📍 {transport.location_name}</Text>}
           </View>
         </TouchableOpacity>
@@ -412,7 +413,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const renderActivityDetail = (activity: Activity) => {
     const detail = formatCategoryDetail(activity.category, activity.category_data || {});
-    if (detail) return <Text style={styles.activityDetail}>{detail}</Text>;
+    if (detail) return <Text style={styles.activityDetail}>{linkifyText(detail)}</Text>;
     // Fallback to legacy fields
     if (activity.check_in_date) return <Text style={styles.activityDesc}>Check-in: {activity.check_in_date}</Text>;
     return null;
@@ -506,7 +507,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                     </View>
                   )}
                   {renderActivityDetail(activity)}
-                  {activity.description && <Text style={styles.activityDesc}>{activity.description}</Text>}
+                  {activity.description && <Text style={styles.activityDesc}>{linkifyText(activity.description)}</Text>}
                 </Card>
               </TouchableOpacity>
             ))

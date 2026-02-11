@@ -6,6 +6,7 @@ import { CATEGORY_FIELDS, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 
 interface Props {
   visible: boolean;
@@ -112,7 +113,7 @@ export const ActivityViewModal: React.FC<Props> = ({
                   return (
                     <View key={field.key} style={styles.detailRow}>
                       <Text style={styles.detailLabel}>{field.label}</Text>
-                      <Text style={styles.detailValue}>{value}</Text>
+                      <Text style={styles.detailValue}>{linkifyText(value)}</Text>
                     </View>
                   );
                 })}
@@ -123,7 +124,7 @@ export const ActivityViewModal: React.FC<Props> = ({
             {activity.description && (
               <View style={styles.notesSection}>
                 <Text style={styles.sectionLabel}>Notizen</Text>
-                <Text style={styles.notesText}>{activity.description}</Text>
+                <Text style={styles.notesText}>{linkifyText(activity.description)}</Text>
               </View>
             )}
 

@@ -14,6 +14,7 @@ import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateH
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { Card, TripBottomNav, Avatar, ActivityModal } from '../../components/common';
 import type { ActivityFormData } from '../../components/common';
@@ -532,7 +533,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           {!mapFullscreen && trip.notes && (
             <Card style={styles.notesCard}>
               <Text style={styles.notesTitle}>Notizen</Text>
-              <Text style={styles.notesText}>{trip.notes}</Text>
+              <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
             </Card>
           )}
         </View>

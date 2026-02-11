@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getSharedTrip, ShareTripData } from '../../api/invitations';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 import { formatDateMedium } from '../../utils/dateHelpers';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripShare'>;
@@ -90,7 +91,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
                 {act.end_time ? ` – ${act.end_time.slice(0, 5)}` : ''}
               </Text>
               {act.location_name && <Text style={styles.cardSub}>{act.location_name}</Text>}
-              {act.description && <Text style={styles.cardDesc}>{act.description}</Text>}
+              {act.description && <Text style={styles.cardDesc}>{linkifyText(act.description)}</Text>}
             </View>
           ))}
         </View>

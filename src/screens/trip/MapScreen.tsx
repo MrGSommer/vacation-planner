@@ -13,6 +13,7 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { linkifyText } from '../../utils/linkify';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 
@@ -245,11 +246,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
               {selected.start_time && <Text style={styles.sheetTime}>🕐 {selected.start_time}</Text>}
               {(() => {
                 const detail = formatCategoryDetail(selected.category, selected.category_data || {});
-                return detail ? <Text style={[styles.sheetTime, { color: CATEGORY_COLORS[selected.category] }]}>{detail}</Text> : null;
+                return detail ? <Text style={[styles.sheetTime, { color: CATEGORY_COLORS[selected.category] }]}>{linkifyText(detail)}</Text> : null;
               })()}
             </View>
           </View>
-          {selected.description && <Text style={styles.sheetDesc}>{selected.description}</Text>}
+          {selected.description && <Text style={styles.sheetDesc}>{linkifyText(selected.description)}</Text>}
         </Card>
       )}
 
