@@ -61,21 +61,12 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [rect, setRect] = useState({ top: 0, left: 0, width: 0 });
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selectingRef = useRef(false);
-  const anchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (value !== undefined && value !== query) setQuery(value);
   }, [value]);
-
-  /* ── measure input for fixed-position dropdown ── */
-  const measure = useCallback(() => {
-    if (Platform.OS !== 'web' || !anchorRef.current) return;
-    const r = anchorRef.current.getBoundingClientRect();
-    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
-  }, []);
 
   /* ── Google Places search ── */
   const search = useCallback(async (text: string) => {
@@ -87,10 +78,10 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
       });
       const mapped = suggestions.filter((s: any) => s.placePrediction).map((s: any) => s.placePrediction);
       setPredictions(mapped);
-      if (mapped.length > 0) { measure(); setShowDropdown(true); }
+      if (mapped.length > 0) setShowDropdown(true);
       else setShowDropdown(false);
     } catch { setPredictions([]); }
-  }, [measure]);
+  }, []);
 
   const handleChange = (text: string) => {
     setQuery(text);
@@ -124,25 +115,25 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     }
   };
 
-  const handleFocus = () => { setFocused(true); if (predictions.length) { measure(); setShowDropdown(true); } };
+  const handleFocus = () => { setFocused(true); if (predictions.length) setShowDropdown(true); };
   const handleBlur = () => { setFocused(false); setTimeout(() => { if (!selectingRef.current) setShowDropdown(false); selectingRef.current = false; }, 200); };
 
   /* ── clear button ── */
   const handleClear = () => { setQuery(''); setPredictions([]); setShowDropdown(false); onChangeText?.(''); };
 
-  /* ═══════════════════════ Web Dropdown (position: fixed) ═══════════════════════ */
+  /* ═══════════════════════ Web Dropdown (position: absolute) ═══════════════════════ */
   const renderWebDropdown = () => {
-    if (!showDropdown || !predictions.length || rect.width === 0) return null;
+    if (!showDropdown || !predictions.length) return null;
     return (
       <div
         onMouseDown={(e) => e.preventDefault()}
         style={{
-          position: 'fixed', top: rect.top, left: rect.left, width: rect.width || undefined,
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
           zIndex: 99999, background: colors.card,
           borderRadius: borderRadius.md, border: `1px solid ${colors.border}`,
           boxShadow: '0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
           maxHeight: 280, overflowY: 'auto',
-          // custom scrollbar
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
           scrollbarWidth: 'thin' as any, scrollbarColor: `${colors.border} transparent`,
         }}
       >
@@ -151,7 +142,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
             key={item.placeId}
             onClick={() => handleSelect(item)}
             style={{
-              display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12,
+              display: 'flex', flexDirection: 'row', alignItems: 'center',
               padding: `10px ${spacing.md}px`, cursor: 'pointer',
               borderBottom: i < predictions.length - 1 ? `1px solid ${colors.border}` : 'none',
               transition: 'background-color 0.15s ease',
@@ -159,18 +150,9 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.background; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            {/* pin icon */}
-            <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: `${colors.primary}12`, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15,
-            }}>
-              📍
-            </div>
-            {/* text */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontSize: 15, fontWeight: 500, color: colors.text,
+                fontSize: 16, fontWeight: 400, color: colors.text,
                 whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {item.mainText?.text || item.text?.text || ''}
@@ -204,9 +186,6 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
               onPress={() => handleSelect(item)}
               activeOpacity={0.6}
             >
-              <View style={nativeStyles.iconBox}>
-                <Text style={{ fontSize: 15 }}>📍</Text>
-              </View>
               <View style={{ flex: 1 }}>
                 <Text style={nativeStyles.mainText} numberOfLines={1}>
                   {item.mainText?.text || item.text?.text || ''}
@@ -226,45 +205,23 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      {Platform.OS === 'web' ? (
-        <div ref={anchorRef}>
-          <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.input}
-              value={query}
-              onChangeText={handleChange}
-              placeholder={placeholder || 'Ort suchen...'}
-              placeholderTextColor={colors.textLight}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.clearIcon}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </div>
-      ) : (
-        <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.input}
-            value={query}
-            onChangeText={handleChange}
-            placeholder={placeholder || 'Ort suchen...'}
-            placeholderTextColor={colors.textLight}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.clearIcon}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.input}
+          value={query}
+          onChangeText={handleChange}
+          placeholder={placeholder || 'Ort suchen...'}
+          placeholderTextColor={colors.textLight}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.clearIcon}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       {Platform.OS === 'web' ? renderWebDropdown() : renderNativeDropdown()}
     </View>
   );
@@ -273,7 +230,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
 /* ═══════════════════════ Styles ═══════════════════════ */
 
 const styles = StyleSheet.create({
-  container: { marginBottom: spacing.md, zIndex: 10 },
+  container: { marginBottom: spacing.md, zIndex: 100, position: 'relative' },
   label: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
   inputBox: {
     flexDirection: 'row',
@@ -305,11 +262,6 @@ const nativeStyles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  iconBox: {
-    width: 32, height: 32, borderRadius: 8, marginRight: spacing.sm,
-    backgroundColor: `${colors.primary}12`,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  mainText: { fontSize: 15, fontWeight: '500', color: colors.text },
+  mainText: { fontSize: 16, fontWeight: '400', color: colors.text },
   subText: { fontSize: 12, color: colors.textLight, marginTop: 1 },
 });

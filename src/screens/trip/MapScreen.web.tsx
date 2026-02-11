@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { Header, LoadingScreen, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
@@ -23,6 +23,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
 
 interface DayInfo { date: string; dayNumber: number; }
+
+interface PreviewPlace {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  isCustomPin: boolean;
+}
 
 function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   const icon = getCategoryIcon(act.category);
@@ -57,6 +65,13 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const [newLocationAddress, setNewLocationAddress] = useState<string | null>(null);
   const [newNotes, setNewNotes] = useState('');
   const [newCategoryData, setNewCategoryData] = useState<Record<string, any>>({});
+
+  // Preview / search state
+  const [previewPlace, setPreviewPlace] = useState<PreviewPlace | null>(null);
+  const [customPinName, setCustomPinName] = useState('');
+  const previewMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
+  const markerLibRef = useRef<any>(null);
 
   const initMap = useCallback(async () => {
     try {
@@ -99,7 +114,24 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       });
       googleMapRef.current = map;
 
+      // Click-to-pin: drop temp marker on empty map clicks
+      map.addListener('click', async (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        addPreviewMarker(lat, lng);
+        const address = await reverseGeocode(lat, lng);
+        setPreviewPlace({ name: '', address, lat, lng, isCustomPin: true });
+        setCustomPinName('');
+      });
+
       const { AdvancedMarkerElement, PinElement } = markerLib;
+      markerLibRef.current = markerLib;
+
+      // Load geocoding for reverse geocode on click
+      await importMapsLibrary('geocoding');
+      geocoderRef.current = new google.maps.Geocoder();
+
       const bounds = new google.maps.LatLngBounds();
       let openInfoWindow: google.maps.InfoWindow | null = null;
 
@@ -292,15 +324,129 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     setNewCategoryData({});
   };
 
+  const clearPreviewMarker = () => {
+    if (previewMarkerRef.current) {
+      previewMarkerRef.current.map = null;
+      previewMarkerRef.current = null;
+    }
+  };
+
+  const dismissPreview = () => {
+    clearPreviewMarker();
+    setPreviewPlace(null);
+    setCustomPinName('');
+  };
+
+  const addPreviewMarker = (lat: number, lng: number) => {
+    clearPreviewMarker();
+    const map = googleMapRef.current;
+    const lib = markerLibRef.current;
+    if (!map || !lib) return;
+    const { AdvancedMarkerElement, PinElement } = lib;
+    const pin = new PinElement({
+      background: colors.accent,
+      borderColor: '#FFFFFF',
+      scale: 1.3,
+      glyphColor: '#FFFFFF',
+    });
+    // Add a glow shadow to the pin element
+    pin.element.style.filter = `drop-shadow(0 0 6px ${colors.accent}80)`;
+    const marker = new AdvancedMarkerElement({
+      position: { lat, lng },
+      map,
+      content: pin.element,
+    });
+    previewMarkerRef.current = marker;
+  };
+
+  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    try {
+      if (!geocoderRef.current) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const resp = await geocoderRef.current.geocode({ location: { lat, lng } });
+      if (resp.results?.[0]?.formatted_address) return resp.results[0].formatted_address;
+    } catch { /* ignore */ }
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  };
+
+  const handleSearchSelect = (place: PlaceResult) => {
+    const map = googleMapRef.current;
+    if (!map) return;
+    map.panTo({ lat: place.lat, lng: place.lng });
+    map.setZoom(15);
+    addPreviewMarker(place.lat, place.lng);
+    setPreviewPlace({
+      name: place.name,
+      address: place.address,
+      lat: place.lat,
+      lng: place.lng,
+      isCustomPin: false,
+    });
+  };
+
+  const openAddActivityFromPreview = () => {
+    if (!previewPlace) return;
+    const name = previewPlace.isCustomPin ? customPinName.trim() : previewPlace.name;
+    setNewLocation(name || previewPlace.address);
+    setNewLocationLat(previewPlace.lat);
+    setNewLocationLng(previewPlace.lng);
+    setNewLocationAddress(previewPlace.address);
+    if (name) setNewTitle(name);
+    dismissPreview();
+    setShowModal(true);
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Karte" onBack={() => navigation.goBack()} />
       {loading && <LoadingScreen />}
       <div ref={mapRef} style={{ flex: 1, width: '100%', height: '100%', display: loading ? 'none' : 'block' }} />
 
+      {/* Search bar overlay */}
+      {!loading && (
+        <div style={{
+          position: 'absolute', top: 72, left: spacing.md, right: spacing.md,
+          zIndex: 1000,
+        }}>
+          <PlaceAutocomplete
+            placeholder="Ort suchen..."
+            onSelect={handleSearchSelect}
+            onChangeText={() => {}}
+          />
+        </div>
+      )}
+
+      {/* Preview card */}
+      {previewPlace && !showModal && (
+        <View style={styles.previewCard}>
+          <TouchableOpacity style={styles.previewClose} onPress={dismissPreview}>
+            <Text style={styles.previewCloseText}>✕</Text>
+          </TouchableOpacity>
+          {previewPlace.isCustomPin ? (
+            <TextInput
+              style={styles.previewNameInput}
+              value={customPinName}
+              onChangeText={setCustomPinName}
+              placeholder="Name eingeben..."
+              placeholderTextColor={colors.textLight}
+            />
+          ) : (
+            <Text style={styles.previewName} numberOfLines={1}>{previewPlace.name}</Text>
+          )}
+          <Text style={styles.previewAddress} numberOfLines={2}>{previewPlace.address}</Text>
+          <Text style={styles.previewCoords}>
+            {previewPlace.lat.toFixed(4)}° N, {previewPlace.lng.toFixed(4)}° E
+          </Text>
+          <Button
+            title="Aktivität hinzufügen"
+            onPress={openAddActivityFromPreview}
+            style={{ marginTop: spacing.sm }}
+          />
+        </View>
+      )}
+
       {/* FAB */}
       {!loading && (
-        <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+        <TouchableOpacity style={[styles.fab, previewPlace && { bottom: 200 }]} onPress={() => setShowModal(true)}>
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
@@ -403,4 +549,55 @@ const styles = StyleSheet.create({
   catLabelActive: { color: colors.primary, fontWeight: '600' },
   modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   modalBtn: { flex: 1 },
+  // Preview card
+  previewCard: {
+    position: 'absolute',
+    bottom: spacing.xl + 8,
+    left: spacing.md,
+    right: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    ...shadows.lg,
+    zIndex: 500,
+  },
+  previewClose: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  previewCloseText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  previewName: {
+    ...typography.h3,
+    paddingRight: 32,
+  },
+  previewNameInput: {
+    ...typography.h3,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.accent,
+    paddingBottom: spacing.xs,
+    paddingRight: 32,
+    outlineStyle: 'none' as any,
+  },
+  previewAddress: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  previewCoords: {
+    ...typography.caption,
+    color: colors.textLight,
+    marginTop: 2,
+  },
 });
