@@ -25,6 +25,9 @@ export interface AiContext {
       start_time: string | null; end_time: string | null;
       cost: number | null; description: string | null;
       location_name: string | null;
+      check_in_date?: string | null;
+      check_out_date?: string | null;
+      day_id?: string;
     }>;
     stops?: Array<{
       name: string; type: string;

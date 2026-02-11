@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -31,6 +31,7 @@ import { ImpressumScreen } from '../screens/legal/ImpressumScreen';
 import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
+import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -63,6 +64,7 @@ const linking = {
       AdminDashboard: 'admin',
       AdminUserList: 'admin/users',
       AdminUserDetail: 'admin/users/:userId',
+      ResetPassword: 'reset-password',
       Main: {
         screens: {
           Home: '',
@@ -74,7 +76,7 @@ const linking = {
 };
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading, pendingInviteToken, setPendingInviteToken } = useAuthContext();
+  const { session, loading, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   const [currentRoute, setCurrentRoute] = useState('');
@@ -100,6 +102,16 @@ export const AppNavigator: React.FC = () => {
     }
     prevSessionRef.current = session;
   }, [session, pendingInviteToken, setPendingInviteToken]);
+
+  // PASSWORD_RECOVERY event → navigate to ResetPassword screen
+  useEffect(() => {
+    if (session && passwordRecovery) {
+      setTimeout(() => {
+        navigationRef.current?.navigate('ResetPassword');
+        clearPasswordRecovery();
+      }, 100);
+    }
+  }, [session, passwordRecovery, clearPasswordRecovery]);
 
   if (loading) return <LoadingScreen />;
 
@@ -141,6 +153,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
               <Stack.Screen name="AdminUserList" component={AdminUserListScreen} />
               <Stack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
+              <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthNavigator} />

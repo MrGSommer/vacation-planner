@@ -160,14 +160,10 @@ export const adminGetUserSubscription = async (
 export const adminGrantTrial = async (
   userId: string,
   trialDays: number,
-  stripeCustomerId?: string | null,
-  stripeSubscriptionId?: string | null,
-): Promise<{ success: boolean; subscription_id: string; trial_end: number }> => {
+): Promise<{ success: boolean; trial_end: number }> => {
   return adminStripeCall('grant_trial', {
     user_id: userId,
     trial_days: trialDays,
-    stripe_customer_id: stripeCustomerId || undefined,
-    stripe_subscription_id: stripeSubscriptionId || undefined,
   });
 };
 

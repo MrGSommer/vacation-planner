@@ -158,12 +158,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
     const doGrant = async () => {
       setGrantingTrial(true);
       try {
-        await adminGrantTrial(
-          userId,
-          days,
-          profile?.stripe_customer_id,
-          profile?.stripe_subscription_id,
-        );
+        await adminGrantTrial(userId, days);
         // Reload profile to reflect changes
         const updated = await adminGetUser(userId);
         setProfile(updated);

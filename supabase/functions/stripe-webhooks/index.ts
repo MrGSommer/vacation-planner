@@ -15,7 +15,7 @@ const json = (data: unknown, origin: string, status = 200) =>
     headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
   });
 
-const AI_CREDITS_MONTHLY = 20;
+const AI_CREDITS_MONTHLY = 30;
 
 /**
  * Resolve profile by stripe_customer_id, with fallback to client_reference_id (Supabase UUID).

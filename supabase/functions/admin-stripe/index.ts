@@ -182,66 +182,18 @@ async function userSubscription(subscriptionId: string) {
   };
 }
 
-async function grantTrial(params: { user_id: string; trial_days: number; stripe_customer_id?: string; stripe_subscription_id?: string }) {
-  const { user_id, trial_days, stripe_customer_id, stripe_subscription_id } = params;
+async function grantTrial(params: { user_id: string; trial_days: number }) {
+  const { user_id, trial_days } = params;
   const trialEnd = Math.floor(Date.now() / 1000) + trial_days * 86400;
 
-  if (stripe_subscription_id) {
-    // Extend trial on existing subscription
-    const sub = await stripePost(`/subscriptions/${stripe_subscription_id}`, {
-      'trial_end': String(trialEnd),
-    });
-    if (sub.error) throw new Error(sub.error.message);
-
-    await updateProfile(user_id, {
-      subscription_tier: 'premium',
-      subscription_status: 'trialing',
-      subscription_period_end: new Date(trialEnd * 1000).toISOString(),
-    });
-
-    return { success: true, subscription_id: sub.id, trial_end: trialEnd };
-  }
-
-  // No existing subscription — create one with trial
-  let customerId = stripe_customer_id;
-
-  if (!customerId) {
-    // Look up user email for Stripe customer creation
-    const profileRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user_id}&select=email`,
-      { headers: { 'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 'apikey': SERVICE_ROLE_KEY } },
-    );
-    const rows = await profileRes.json();
-    const email = rows?.[0]?.email;
-
-    const customer = await stripePost('/customers', {
-      ...(email ? { 'email': email } : {}),
-      'metadata[supabase_user_id]': user_id,
-    });
-    if (customer.error) throw new Error(customer.error.message);
-    customerId = customer.id;
-
-    await updateProfile(user_id, { stripe_customer_id: customerId });
-  }
-
-  // Create subscription with trial (auto-cancels when trial ends without payment method)
-  const sub = await stripePost('/subscriptions', {
-    'customer': customerId!,
-    'items[0][price]': 'price_1SxlEiGtIWkM8nDay8lOyYFi', // monthly price
-    'trial_end': String(trialEnd),
-    'payment_behavior': 'default_incomplete',
-    'trial_settings[end_behavior][missing_payment_method]': 'cancel',
-  });
-  if (sub.error) throw new Error(sub.error.message);
-
+  // DB-only trial — no Stripe subscription, no invoice risk
   await updateProfile(user_id, {
     subscription_tier: 'premium',
     subscription_status: 'trialing',
-    stripe_subscription_id: sub.id,
     subscription_period_end: new Date(trialEnd * 1000).toISOString(),
   });
 
-  return { success: true, subscription_id: sub.id, trial_end: trialEnd };
+  return { success: true, trial_end: trialEnd };
 }
 
 async function revenueStats() {
@@ -349,9 +301,9 @@ Deno.serve(async (req) => {
       }
 
       case 'grant_trial': {
-        const { user_id, trial_days, stripe_customer_id, stripe_subscription_id } = body;
+        const { user_id, trial_days } = body;
         if (!user_id || !trial_days) return json({ error: 'user_id und trial_days erforderlich' }, origin, 400);
-        const result = await grantTrial({ user_id, trial_days, stripe_customer_id, stripe_subscription_id });
+        const result = await grantTrial({ user_id, trial_days });
         return json(result, origin);
       }
 

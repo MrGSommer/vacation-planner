@@ -25,6 +25,7 @@ export type RootStackParamList = {
   AdminDashboard: undefined;
   AdminUserList: undefined;
   AdminUserDetail: { userId: string };
+  ResetPassword: undefined;
 };
 
 export type MainTabParamList = {

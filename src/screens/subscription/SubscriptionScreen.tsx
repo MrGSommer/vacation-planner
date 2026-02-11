@@ -56,7 +56,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             { icon: '👥', title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
             { icon: '📸', title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
             { icon: '🗺️', title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
-            { icon: '✨', title: 'Reisebegleiter Fable', desc: 'Dein persönlicher Reisebegleiter plant für dich' },
+            { icon: '✨', title: 'Reisebegleiter Fable', desc: '30 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
           ].map((f, i) => (
             <View key={i} style={styles.featureRow}>
               <Text style={styles.featureIcon}>{f.icon}</Text>

@@ -245,6 +245,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
           cost: a.cost,
           description: a.description,
           location_name: a.location_name,
+          check_in_date: a.check_in_date,
+          check_out_date: a.check_out_date,
+          day_id: a.day_id,
         })),
         stops: stops.map(s => ({
           name: s.name,
@@ -856,6 +859,86 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     }
   }, [tripId, sending, onCreditsUpdate]);
 
+  // Agent: Generate day plan
+  const generateDayPlan = useCallback(async () => {
+    if (!tripId || sending) return;
+    setSending(true);
+    setError(null);
+
+    try {
+      const agentMsg: AiMessage = {
+        role: 'user',
+        content: 'Erstelle einen Tagesplan für den nächsten leeren Tag als JSON.',
+      };
+      const response = await sendAiMessage('agent_day_plan', [agentMsg], contextRef.current);
+
+      if (response.credits_remaining !== undefined) {
+        prevCreditsRef.current = response.credits_remaining;
+        setCreditsBalance(response.credits_remaining);
+        onCreditsUpdate?.(response.credits_remaining);
+      }
+
+      // Parse JSON from response
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Ungültige Antwort vom AI-Service');
+      const parsed = JSON.parse(jsonMatch[0]) as { activities: Array<{ date: string; title: string; description: string | null; category: string; start_time: string | null; end_time: string | null; location_name: string | null; location_lat: number | null; location_lng: number | null; location_address: string | null; cost: number | null; sort_order: number; check_in_date: string | null; check_out_date: string | null; category_data: Record<string, any> }> };
+
+      if (!parsed.activities?.length) throw new Error('Keine Aktivitäten erhalten');
+
+      // Find or create the day for the target date
+      const { getDays, createDay } = await import('../api/itineraries');
+      const { createActivities } = await import('../api/itineraries');
+      const days = await getDays(tripId);
+      const targetDate = parsed.activities[0].date;
+
+      let dayId: string | undefined;
+      const existingDay = days.find(d => d.date === targetDate);
+      if (existingDay) {
+        dayId = existingDay.id;
+      } else {
+        const newDay = await createDay(tripId, targetDate);
+        dayId = newDay.id;
+      }
+
+      // Create activities
+      const activitiesToCreate = parsed.activities.map((a, i) => ({
+        day_id: dayId!,
+        trip_id: tripId,
+        title: a.title,
+        description: a.description,
+        category: a.category,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        location_name: a.location_name,
+        location_lat: a.location_lat,
+        location_lng: a.location_lng,
+        location_address: a.location_address,
+        cost: a.cost,
+        currency: initialContext.currency || 'CHF',
+        sort_order: a.sort_order ?? i,
+        check_in_date: a.check_in_date,
+        check_out_date: a.check_out_date,
+        category_data: a.category_data || {},
+      }));
+
+      await createActivities(activitiesToCreate);
+
+      const successMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: `Tagesplan für **${targetDate}** erstellt mit **${parsed.activities.length} Aktivitäten**. Schau im Tagesplan nach!`,
+        timestamp: Date.now(),
+        creditsAfter: response.credits_remaining,
+      };
+      setMessages(prev => [...prev, successMsg]);
+    } catch (e: any) {
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateDayPlan' } });
+      setError(e.message || 'Tagesplan konnte nicht erstellt werden');
+    } finally {
+      setSending(false);
+    }
+  }, [tripId, sending, initialContext.currency, onCreditsUpdate]);
+
   // Agent: Generate budget categories
   const generateBudgetCategories = useCallback(async () => {
     if (!tripId || sending) return;
@@ -939,5 +1022,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
     saveConversationNow,
     generatePackingList,
     generateBudgetCategories,
+    generateDayPlan,
   };
 };

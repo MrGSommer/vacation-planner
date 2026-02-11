@@ -74,9 +74,10 @@ export const AiTripModal: React.FC<Props> = ({
     generateStructure, generateAllViaServer, generateActivitiesClientSide,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
     dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
-    generatePackingList, generateBudgetCategories,
+    generatePackingList, generateBudgetCategories, generateDayPlan,
   } = useAiPlanner({ mode, tripId, userId, initialContext, initialCredits: profile?.ai_credits_balance, onCreditsUpdate: updateCreditsBalance });
   const [adjustMode, setAdjustMode] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'packing_list' | 'budget_categories' | 'day_plan' | null>(null);
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
 
@@ -424,14 +425,11 @@ export const AiTripModal: React.FC<Props> = ({
           </View>
         )}
 
-        {/* Agent action button (enhance mode only) */}
-        {!isPlanReview && metadata?.agent_action && tripId && !sending && (
+        {/* Agent action button (enhance mode only) — triggers confirmation */}
+        {!isPlanReview && metadata?.agent_action && tripId && !sending && !pendingAction && (
           <TouchableOpacity
             style={styles.agentActionButton}
-            onPress={() => {
-              if (metadata.agent_action === 'packing_list') generatePackingList();
-              else if (metadata.agent_action === 'budget_categories') generateBudgetCategories();
-            }}
+            onPress={() => setPendingAction(metadata.agent_action!)}
             activeOpacity={0.8}
           >
             <LinearGradient
@@ -447,6 +445,58 @@ export const AiTripModal: React.FC<Props> = ({
               </Text>
             </LinearGradient>
           </TouchableOpacity>
+        )}
+
+        {/* Confirmation dialog for agent actions */}
+        {pendingAction && !sending && (
+          <View style={styles.confirmationContainer}>
+            <View style={[styles.messageBubble, styles.aiBubble, { maxWidth: '100%' }]}>
+              <Text style={[styles.messageText, styles.aiText]}>
+                {pendingAction === 'packing_list' ? 'Soll ich die Packliste jetzt erstellen?' :
+                 pendingAction === 'budget_categories' ? 'Soll ich die Budget-Kategorien jetzt erstellen?' :
+                 'Soll ich den Tagesplan jetzt erstellen?'}
+              </Text>
+            </View>
+            <View style={styles.confirmationActions}>
+              <TouchableOpacity
+                style={styles.confirmBtn}
+                onPress={() => {
+                  const action = pendingAction;
+                  setPendingAction(null);
+                  if (action === 'packing_list') generatePackingList();
+                  else if (action === 'budget_categories') generateBudgetCategories();
+                  else if (action === 'day_plan') generateDayPlan();
+                }}
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.confirmBtnGradient}
+                >
+                  <Text style={styles.confirmBtnTextPrimary}>Ja</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmBtnSecondary}
+                onPress={() => setPendingAction(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmBtnText}>Nein</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmBtnSecondary}
+                onPress={() => {
+                  setPendingAction(null);
+                  // Focus the input — just clearing pendingAction reveals it
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmBtnText}>Frage stellen</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {/* Form options (structured choices — vertical buttons) */}
@@ -722,6 +772,40 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.secondary,
   },
+
+  // Confirmation dialog
+  confirmationContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  confirmationActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  confirmBtn: {
+    flex: 1,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+  },
+  confirmBtnGradient: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+  },
+  confirmBtnTextPrimary: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
+  confirmBtnSecondary: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  confirmBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.text },
 
   // Agent action button
   agentActionButton: { marginHorizontal: spacing.md, marginBottom: spacing.sm },

@@ -23,3 +23,4 @@ export { StripeBuyButton } from './StripeBuyButton';
 export { BuyInspirationenModal } from './BuyInspirationenModal';
 export { UpdateBanner } from './UpdateBanner';
 export { PaymentWarningBanner } from './PaymentWarningBanner';
+export { TrialExpiredModal } from './TrialExpiredModal';

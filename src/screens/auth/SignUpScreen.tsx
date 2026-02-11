@@ -4,6 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { supabase } from '../../api/supabase';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
 
@@ -23,6 +24,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
   const { signUp, loading, error, clearError } = useAuth();
+  const { pendingInviteToken } = useAuthContext();
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
@@ -128,6 +130,12 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.title}>Konto erstellen</Text>
           <Text style={styles.subtitle}>Erstelle ein Konto, um loszulegen</Text>
 
+          {pendingInviteToken && (
+            <View style={styles.inviteBanner}>
+              <Text style={styles.inviteBannerText}>Du wurdest zu einer Reise eingeladen! Erstelle ein Konto, um die Einladung anzunehmen.</Text>
+            </View>
+          )}
+
           {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -167,6 +175,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: spacing.xxl },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl, lineHeight: 24 },
+  inviteBanner: { backgroundColor: colors.accent + '15', borderLeftWidth: 3, borderLeftColor: colors.accent, padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
+  inviteBannerText: { ...typography.bodySmall, color: colors.accent, fontWeight: '500', lineHeight: 20 },
   errorBox: { backgroundColor: '#FFEAEA', padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
   agbRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.md },

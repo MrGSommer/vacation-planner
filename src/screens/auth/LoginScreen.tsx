@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Tou
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 
@@ -12,6 +13,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, loading, error, clearError } = useAuth();
+  const { pendingInviteToken } = useAuthContext();
   const { showToast } = useToast();
 
   const handleLogin = async () => {
@@ -28,6 +30,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>Willkommen zurück!</Text>
           <Text style={styles.subtitle}>Melde dich an, um deine Reisen zu verwalten</Text>
+
+          {pendingInviteToken && (
+            <View style={styles.inviteBanner}>
+              <Text style={styles.inviteBannerText}>Du wurdest zu einer Reise eingeladen! Melde dich an, um die Einladung anzunehmen.</Text>
+            </View>
+          )}
 
           {error && <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
 
@@ -68,6 +76,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: spacing.xxl },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl },
+  inviteBanner: { backgroundColor: colors.accent + '15', borderLeftWidth: 3, borderLeftColor: colors.accent, padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
+  inviteBannerText: { ...typography.bodySmall, color: colors.accent, fontWeight: '500', lineHeight: 20 },
   errorBox: { backgroundColor: '#FFEAEA', padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
   loginButton: { marginTop: spacing.md },
