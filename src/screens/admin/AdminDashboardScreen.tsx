@@ -93,9 +93,9 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.userName} numberOfLines={1}>{getDisplayName(user)}</Text>
                     <Text style={styles.userEmail} numberOfLines={1}>{user.email}</Text>
                   </View>
-                  <View style={[styles.tierBadge, user.subscription_tier === 'premium' && styles.tierPremium]}>
-                    <Text style={[styles.tierText, user.subscription_tier === 'premium' && styles.tierTextPremium]}>
-                      {user.subscription_tier === 'premium' ? 'Premium' : 'Free'}
+                  <View style={[styles.tierBadge, user.subscription_tier === 'premium' && styles.tierPremium, user.subscription_status === 'trialing' && styles.tierTrialing]}>
+                    <Text style={[styles.tierText, user.subscription_tier === 'premium' && styles.tierTextPremium, user.subscription_status === 'trialing' && styles.tierTextTrialing]}>
+                      {user.subscription_status === 'trialing' ? 'Trialing' : user.subscription_tier === 'premium' ? 'Premium' : 'Free'}
                     </Text>
                   </View>
                   <Text style={styles.dateText}>{formatDate(user.created_at)}</Text>
@@ -132,7 +132,9 @@ const styles = StyleSheet.create({
   userEmail: { ...typography.caption, color: colors.textSecondary },
   tierBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm, backgroundColor: colors.border },
   tierPremium: { backgroundColor: colors.secondary + '20' },
+  tierTrialing: { backgroundColor: colors.accent + '20' },
   tierText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
   tierTextPremium: { color: colors.secondary },
+  tierTextTrialing: { color: colors.accent },
   dateText: { ...typography.caption, color: colors.textLight, minWidth: 75, textAlign: 'right' },
 });

@@ -3,7 +3,7 @@ import { Profile, Trip, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscript
 
 interface AdminListUsersParams {
   search?: string;
-  tier?: 'free' | 'premium';
+  tier?: 'free' | 'premium' | 'trialing';
   limit?: number;
   offset?: number;
 }
@@ -21,7 +21,9 @@ export const adminListUsers = async ({
   if (search) {
     query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
   }
-  if (tier) {
+  if (tier === 'trialing') {
+    query = query.eq('subscription_status', 'trialing');
+  } else if (tier) {
     query = query.eq('subscription_tier', tier);
   }
 

@@ -19,7 +19,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const [users, setUsers] = useState<Profile[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState('');
-  const [tierFilter, setTierFilter] = useState<'all' | 'free' | 'premium'>('all');
+  const [tierFilter, setTierFilter] = useState<'all' | 'free' | 'premium' | 'trialing'>('all');
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -58,10 +58,11 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
     return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`;
   };
 
-  const filters: { label: string; value: 'all' | 'free' | 'premium' }[] = [
+  const filters: { label: string; value: 'all' | 'free' | 'premium' | 'trialing' }[] = [
     { label: 'Alle', value: 'all' },
     { label: 'Free', value: 'free' },
     { label: 'Premium', value: 'premium' },
+    { label: 'Trialing', value: 'trialing' },
   ];
 
   return (
@@ -114,9 +115,9 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.userName} numberOfLines={1}>{getDisplayName(user)}</Text>
                   <Text style={styles.userEmail} numberOfLines={1}>{user.email}</Text>
                 </View>
-                <View style={[styles.tierBadge, user.subscription_tier === 'premium' && styles.tierPremium]}>
-                  <Text style={[styles.tierText, user.subscription_tier === 'premium' && styles.tierTextPremium]}>
-                    {user.subscription_tier === 'premium' ? 'Premium' : 'Free'}
+                <View style={[styles.tierBadge, user.subscription_tier === 'premium' && styles.tierPremium, user.subscription_status === 'trialing' && styles.tierTrialing]}>
+                  <Text style={[styles.tierText, user.subscription_tier === 'premium' && styles.tierTextPremium, user.subscription_status === 'trialing' && styles.tierTextTrialing]}>
+                    {user.subscription_status === 'trialing' ? 'Trialing' : user.subscription_tier === 'premium' ? 'Premium' : 'Free'}
                   </Text>
                 </View>
                 <Text style={styles.creditsText}>{user.ai_credits_balance}</Text>
@@ -175,8 +176,10 @@ const styles = StyleSheet.create({
   userEmail: { ...typography.caption, color: colors.textSecondary },
   tierBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm, backgroundColor: colors.border },
   tierPremium: { backgroundColor: colors.secondary + '20' },
+  tierTrialing: { backgroundColor: colors.accent + '20' },
   tierText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
   tierTextPremium: { color: colors.secondary },
+  tierTextTrialing: { color: colors.accent },
   creditsText: { ...typography.bodySmall, color: colors.accent, fontWeight: '600', minWidth: 30, textAlign: 'center' },
   dateText: { ...typography.caption, color: colors.textLight, minWidth: 75, textAlign: 'right' },
   arrow: { ...typography.body, color: colors.textLight, marginLeft: spacing.xs },
