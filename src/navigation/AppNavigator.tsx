@@ -28,6 +28,9 @@ import { SubscriptionCancelScreen } from '../screens/subscription/SubscriptionCa
 import { DatenschutzScreen } from '../screens/legal/DatenschutzScreen';
 import { AGBScreen } from '../screens/legal/AGBScreen';
 import { ImpressumScreen } from '../screens/legal/ImpressumScreen';
+import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
+import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
+import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -57,6 +60,9 @@ const linking = {
       AGB: 'agb',
       Impressum: 'impressum',
       FeedbackModal: 'feedback',
+      AdminDashboard: 'admin',
+      AdminUserList: 'admin/users',
+      AdminUserDetail: 'admin/users/:userId',
       Main: {
         screens: {
           Home: '',
@@ -132,6 +138,9 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AGB" component={AGBScreen} />
               <Stack.Screen name="Impressum" component={ImpressumScreen} />
               <Stack.Screen name="FeedbackModal" component={FeedbackScreen} />
+              <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+              <Stack.Screen name="AdminUserList" component={AdminUserListScreen} />
+              <Stack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthNavigator} />

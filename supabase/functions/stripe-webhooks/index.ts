@@ -153,25 +153,17 @@ Deno.serve(async (req) => {
         const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
         if (!customerId) break;
 
-        // Check if this is a subscription renewal (not the first payment)
-        if (invoice.billing_reason === 'subscription_cycle') {
-          // Reset AI credits to monthly quota
-          await supabase
-            .from('profiles')
-            .update({
-              ai_credits_balance: AI_CREDITS_MONTHLY,
-              ai_credits_monthly_quota: AI_CREDITS_MONTHLY,
-            })
-            .eq('stripe_customer_id', customerId);
-        } else if (invoice.billing_reason === 'subscription_create') {
-          // First subscription: set initial credits
+        if (invoice.billing_reason === 'subscription_cycle' || invoice.billing_reason === 'subscription_create') {
+          // ADD credits (don't reset) — preserves purchased Inspirationen
           const profile = await resolveProfile(supabase, customerId, null);
           if (profile) {
             await supabase
               .from('profiles')
               .update({
-                ai_credits_balance: AI_CREDITS_MONTHLY,
+                ai_credits_balance: (profile.ai_credits_balance || 0) + AI_CREDITS_MONTHLY,
                 ai_credits_monthly_quota: AI_CREDITS_MONTHLY,
+                subscription_status: 'active',
+                payment_error_message: null,
               })
               .eq('id', profile.id);
           }
@@ -184,9 +176,24 @@ Deno.serve(async (req) => {
         const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
         if (!customerId) break;
 
+        // Extract human-readable error from Stripe
+        const charge = invoice.charge;
+        let errorMessage: string | null = null;
+        if (charge && typeof charge === 'string') {
+          try {
+            const chargeObj = await stripe.charges.retrieve(charge);
+            errorMessage = chargeObj.failure_message || chargeObj.outcome?.seller_message || null;
+          } catch {
+            // Ignore — keep null
+          }
+        }
+
         await supabase
           .from('profiles')
-          .update({ subscription_status: 'past_due' })
+          .update({
+            subscription_status: 'past_due',
+            payment_error_message: errorMessage || 'Zahlung fehlgeschlagen',
+          })
           .eq('stripe_customer_id', customerId);
         break;
       }

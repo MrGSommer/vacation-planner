@@ -1,16 +1,8 @@
-const CACHE_NAME = 'vacation-planner-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/favicon.png',
-];
+const CACHE_NAME = 'wayfable-cache-v2';
 
-// Install: pre-cache static shell
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
+// Install: no pre-caching, let runtime caching handle it
+self.addEventListener('install', () => {
+  // Don't auto-activate — wait for client to send SKIP_WAITING
 });
 
 // Activate: clean up old caches
@@ -23,7 +15,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API/Supabase, cache-first for static assets
+// Listen for SKIP_WAITING from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// Fetch strategies
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -31,25 +30,21 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Network-first for API calls (Supabase, external services)
+  // Network-only for API calls (Supabase, Google, Stripe, Anthropic)
   if (
     url.hostname.includes('supabase') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('maps.google') ||
+    url.hostname.includes('stripe.com') ||
+    url.hostname.includes('anthropic.com') ||
     url.pathname.startsWith('/rest/') ||
     url.pathname.startsWith('/auth/')
   ) {
-    event.respondWith(
-      fetch(request).catch(() => caches.match(request))
-    );
-    return;
+    return; // Let browser handle natively (network-only)
   }
 
-  // Cache-first for static assets (JS bundles, CSS, images, fonts)
-  if (
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2?|ttf|eot|ico)$/) ||
-    url.pathname.startsWith('/static/')
-  ) {
+  // Cache-first for hashed assets (JS/CSS bundles from Expo — contain hash in filename)
+  if (url.pathname.match(/\/static\/.*\.[a-f0-9]{8,}\.(js|css)$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
@@ -65,7 +60,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for navigation (HTML pages)
+  // Cache-first for fonts and images (immutable by nature)
+  if (url.pathname.match(/\.(woff2?|ttf|eot)$/) || url.pathname.match(/\.(png|jpg|jpeg|svg|ico|webp)$/)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Network-first for HTML/navigation and unhashed JS/CSS
   event.respondWith(
     fetch(request)
       .then((response) => {

@@ -80,10 +80,10 @@ export const AiTripModal: React.FC<Props> = ({
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
 
-  // Auto-start conversation when modal opens
+  // Refresh profile (credits) when modal opens, then auto-start conversation
   useEffect(() => {
     if (visible && phase === 'idle') {
-      startConversation();
+      refreshProfile().then(() => startConversation());
     }
     if (visible) { setCreditPurchased(false); setShowBuyModal(false); }
   }, [visible, phase]);
@@ -573,10 +573,10 @@ export const AiTripModal: React.FC<Props> = ({
 
         <BuyInspirationenModal
           visible={showBuyModal}
-          onClose={() => setShowBuyModal(false)}
+          onClose={() => { setShowBuyModal(false); refreshProfile(); }}
           userId={userId}
           email={authUser?.email || ''}
-          onPurchaseDetected={() => setCreditPurchased(true)}
+          onPurchaseDetected={() => { setCreditPurchased(true); refreshProfile(); }}
         />
       </View>
     </Modal>

@@ -9,6 +9,7 @@ import { TripProvider } from './src/contexts/TripContext';
 import { ToastProvider } from './src/contexts/ToastContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
+import { UpdateBanner } from './src/components/common/UpdateBanner';
 import { logCritical } from './src/services/errorLogger';
 
 function UnhandledRejectionHandler({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,7 @@ export default function App() {
                 <SubscriptionProvider>
                   <TripProvider>
                     <StatusBar style="auto" />
+                    <UpdateBanner />
                     <AppNavigator />
                   </TripProvider>
                 </SubscriptionProvider>

@@ -170,6 +170,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCred
   const userMemoryRef = useRef<string | undefined>(undefined);
   const prevCreditsRef = useRef<number | null>(null);
 
+  // Sync creditsBalance when profile refreshes (e.g., modal open triggers refreshProfile)
+  useEffect(() => {
+    if (initialCredits != null) {
+      setCreditsBalance(initialCredits);
+      prevCreditsRef.current = initialCredits;
+    }
+  }, [initialCredits]);
+
   // Time estimation: 8s structure + 12s per 5-day batch
   const estimateTime = useCallback((days: number) => {
     const batches = Math.ceil(days / 5);

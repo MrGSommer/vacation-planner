@@ -22,6 +22,9 @@ export type RootStackParamList = {
   AGB: undefined;
   Impressum: undefined;
   FeedbackModal: undefined;
+  AdminDashboard: undefined;
+  AdminUserList: undefined;
+  AdminUserDetail: { userId: string };
 };
 
 export type MainTabParamList = {

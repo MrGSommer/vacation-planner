@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Switch } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar, Card, Button, BuyInspirationenModal } from '../../components/common';
+import { Avatar, Card, Button, BuyInspirationenModal, PaymentWarningBanner } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useAdmin } from '../../hooks/useAdmin';
 import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
@@ -17,8 +19,9 @@ type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const { isAdmin } = useAdmin();
   const { trips } = useTrips();
-  const { isPremium, aiCredits, isFeatureAllowed } = useSubscription();
+  const { isPremium, aiCredits, isFeatureAllowed, paymentWarning, paymentErrorMessage } = useSubscription();
   const insets = useSafeAreaInsets();
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
   const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
@@ -26,6 +29,13 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [memoryDeleting, setMemoryDeleting] = useState(false);
   const [memoryDeleted, setMemoryDeleted] = useState(false);
+
+  // Refresh profile (and credits) every time this tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile?.();
+    }, [refreshProfile])
+  );
 
   const handleDeleteMemory = async () => {
     const doDelete = async () => {
@@ -129,6 +139,10 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </Card>
 
+      {paymentWarning && (
+        <PaymentWarningBanner message={paymentErrorMessage} />
+      )}
+
       {/* Subscription */}
       <Card style={styles.aiSettingsCard}>
         <Text style={styles.aiSettingsTitle}>Abonnement</Text>
@@ -226,6 +240,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </Card>
       )}
 
+      {isAdmin && (
+        <Card style={styles.settingsCard} onPress={() => navigation.navigate('AdminDashboard')}>
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsIcon}>&#x2699;&#xFE0F;</Text>
+            <Text style={styles.settingsText}>Admin Dashboard</Text>
+            <Text style={styles.arrow}>{'>'}</Text>
+          </View>
+        </Card>
+      )}
+
       {/* Legal */}
       <Card style={styles.settingsCard}>
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Datenschutz')}>
@@ -253,7 +277,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <BuyInspirationenModal
         visible={showBuyModal}
-        onClose={() => setShowBuyModal(false)}
+        onClose={() => { setShowBuyModal(false); refreshProfile?.(); }}
         userId={user?.id || ''}
         email={user?.email || ''}
       />

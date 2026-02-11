@@ -5,13 +5,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
-import { EmptyState, Avatar } from '../../components/common';
+import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/common';
 import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
 import { ShareModal } from './ShareModal';
 
@@ -122,6 +123,7 @@ const Separator = () => <View style={styles.separator} />;
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips, remove } = useTrips();
   const { user } = useAuthContext();
+  const { paymentWarning, paymentErrorMessage } = useSubscription();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [shareTrip, setShareTrip] = useState<Trip | null>(null);
@@ -204,6 +206,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </View>
         <Text style={styles.headerTitle}>Meine Reisen</Text>
         <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
+        {paymentWarning && (
+          <PaymentWarningBanner message={paymentErrorMessage} />
+        )}
       </View>
 
       {initialLoad && loading ? (

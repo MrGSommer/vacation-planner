@@ -15,6 +15,8 @@ export interface Profile {
   subscription_period_end: string | null;
   ai_credits_balance: number;
   ai_credits_monthly_quota: number;
+  payment_error_message: string | null;
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }

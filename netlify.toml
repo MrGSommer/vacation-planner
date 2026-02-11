@@ -1,0 +1,29 @@
+# Service worker must never be cached by the browser
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, no-cache"
+
+# HTML should always be revalidated
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, no-cache"
+
+# Hashed JS bundles are immutable (Expo adds content hash to filenames)
+[[headers]]
+  for = "/static/js/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Hashed CSS bundles are immutable
+[[headers]]
+  for = "/static/css/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Manifest should be fresh
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, no-cache"
