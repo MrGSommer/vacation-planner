@@ -1,4 +1,5 @@
-const CACHE_NAME = 'wayfable-cache-v2';
+const APP_VERSION = '1.4.0';
+const CACHE_NAME = `wayfable-cache-${APP_VERSION}`;
 
 // Install: no pre-caching, let runtime caching handle it
 self.addEventListener('install', () => {

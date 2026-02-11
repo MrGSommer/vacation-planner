@@ -1,12 +1,20 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { useServiceWorkerUpdate } from '../../hooks/useServiceWorkerUpdate';
+import { useAuthContext } from '../../contexts/AuthContext';
 
 export const UpdateBanner: React.FC = () => {
+  const { session } = useAuthContext();
   const { updateAvailable, applyUpdate } = useServiceWorkerUpdate();
 
-  if (Platform.OS !== 'web' || !updateAvailable) return null;
+  useEffect(() => {
+    if (updateAvailable && session) {
+      applyUpdate();
+    }
+  }, [updateAvailable, session]);
+
+  if (Platform.OS !== 'web' || !updateAvailable || session) return null;
 
   return (
     <View style={styles.banner}>
