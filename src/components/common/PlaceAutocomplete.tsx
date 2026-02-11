@@ -30,16 +30,12 @@ const ensureGoogleMaps = (): Promise<void> => {
   if (mapsLoading) return mapsLoading;
   mapsLoading = new Promise<void>((resolve, reject) => {
     const waitForApi = () => {
-      // Wait until importLibrary is available (needed for loading=async)
       if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
       setTimeout(waitForApi, 50);
     };
     if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
     const existing = document.getElementById('google-maps-script');
-    if (existing) {
-      waitForApi();
-      return;
-    }
+    if (existing) { waitForApi(); return; }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,marker&loading=async`;
@@ -54,70 +50,55 @@ const ensureGoogleMaps = (): Promise<void> => {
 /** Import a Google Maps library, waiting for the core script first. */
 export const importMapsLibrary = async (lib: string): Promise<any> => {
   await ensureGoogleMaps();
-  // google.maps.importLibrary is the new async way to load libraries
-  if (google.maps.importLibrary) {
-    return google.maps.importLibrary(lib);
-  }
-  // Fallback for older API versions
+  if (google.maps.importLibrary) return google.maps.importLibrary(lib);
   return (google.maps as any)[lib] || google.maps;
 };
+
+/* ─────────────────────────── Component ─────────────────────────── */
 
 export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, onSelect, onChangeText }) => {
   const [query, setQuery] = useState(value || '');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [dropdownRect, setDropdownRect] = useState({ top: 0, left: 0, width: 0 });
+  const [rect, setRect] = useState({ top: 0, left: 0, width: 0 });
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selectingRef = useRef(false);
-  const inputContainerRef = useRef<View>(null);
+  const inputBoxRef = useRef<View>(null);
 
   useEffect(() => {
     if (value !== undefined && value !== query) setQuery(value);
   }, [value]);
 
-  // Measure input position for fixed dropdown on web
-  const measureInput = useCallback(() => {
-    if (Platform.OS !== 'web' || !inputContainerRef.current) return;
+  /* ── measure input for fixed-position dropdown ── */
+  const measure = useCallback(() => {
+    if (Platform.OS !== 'web' || !inputBoxRef.current) return;
     try {
-      const node = inputContainerRef.current as any;
-      // In React Native Web, the ref is the DOM element or has a _nativeTag
-      const domNode: HTMLElement | null =
+      const node = inputBoxRef.current as any;
+      const el: HTMLElement | null =
         node instanceof HTMLElement ? node :
-        node._nativeTag ? document.getElementById(String(node._nativeTag)) :
-        null;
-      if (domNode?.getBoundingClientRect) {
-        const rect = domNode.getBoundingClientRect();
-        setDropdownRect({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+        node._nativeTag ? document.getElementById(String(node._nativeTag)) : null;
+      if (el?.getBoundingClientRect) {
+        const r = el.getBoundingClientRect();
+        setRect({ top: r.bottom + 4, left: r.left, width: r.width });
       }
-    } catch { /* measurement failed, dropdown still works with fallback */ }
+    } catch { /* noop */ }
   }, []);
 
+  /* ── Google Places search ── */
   const search = useCallback(async (text: string) => {
-    if (!text.trim() || text.length < 3) {
-      setPredictions([]);
-      return;
-    }
+    if (!text.trim() || text.length < 3) { setPredictions([]); setShowDropdown(false); return; }
     try {
-      const placesLib = await importMapsLibrary('places');
-      const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-        input: text,
-        language: 'de',
+      const lib = await importMapsLibrary('places');
+      const { suggestions } = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input: text, language: 'de',
       });
-      const mapped = suggestions
-        .filter((s: any) => s.placePrediction)
-        .map((s: any) => s.placePrediction);
+      const mapped = suggestions.filter((s: any) => s.placePrediction).map((s: any) => s.placePrediction);
       setPredictions(mapped);
-      if (mapped.length > 0) {
-        measureInput();
-        setShowDropdown(true);
-      } else {
-        setShowDropdown(false);
-      }
-    } catch {
-      setPredictions([]);
-    }
-  }, [measureInput]);
+      if (mapped.length > 0) { measure(); setShowDropdown(true); }
+      else setShowDropdown(false);
+    } catch { setPredictions([]); }
+  }, [measure]);
 
   const handleChange = (text: string) => {
     setQuery(text);
@@ -129,116 +110,119 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
   const handleSelect = async (prediction: any) => {
     selectingRef.current = true;
     setShowDropdown(false);
-    setQuery(prediction.text?.text || prediction.mainText?.text || '');
-
+    const label = prediction.text?.text || prediction.mainText?.text || '';
+    setQuery(label);
     try {
       const place = prediction.toPlace();
       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'regularOpeningHours', 'websiteURI', 'types'] });
       const loc = place.location;
       if (loc) {
-        let opening_hours: string | undefined;
-        if (place.regularOpeningHours?.weekdayDescriptions) {
-          opening_hours = place.regularOpeningHours.weekdayDescriptions.join('\n');
-        }
         onSelect({
           name: place.displayName || prediction.mainText?.text || '',
           place_id: prediction.placeId,
           address: place.formattedAddress || prediction.text?.text || '',
-          lat: loc.lat(),
-          lng: loc.lng(),
-          opening_hours,
+          lat: loc.lat(), lng: loc.lng(),
+          opening_hours: place.regularOpeningHours?.weekdayDescriptions?.join('\n'),
           website: place.websiteURI || undefined,
           types: place.types || undefined,
         });
       }
     } catch {
-      onSelect({
-        name: prediction.mainText?.text || prediction.text?.text || '',
-        place_id: prediction.placeId,
-        address: prediction.text?.text || '',
-        lat: 0,
-        lng: 0,
-      });
+      onSelect({ name: label, place_id: prediction.placeId, address: prediction.text?.text || '', lat: 0, lng: 0 });
     }
   };
 
-  const handleFocus = () => {
-    setFocused(true);
-    if (predictions.length) {
-      measureInput();
-      setShowDropdown(true);
-    }
-  };
+  const handleFocus = () => { setFocused(true); if (predictions.length) { measure(); setShowDropdown(true); } };
+  const handleBlur = () => { setFocused(false); setTimeout(() => { if (!selectingRef.current) setShowDropdown(false); selectingRef.current = false; }, 200); };
 
-  const handleBlur = () => {
-    setFocused(false);
-    setTimeout(() => {
-      if (!selectingRef.current) setShowDropdown(false);
-      selectingRef.current = false;
-    }, 300);
-  };
+  /* ── clear button ── */
+  const handleClear = () => { setQuery(''); setPredictions([]); setShowDropdown(false); onChangeText?.(''); };
 
+  /* ═══════════════════════ Web Dropdown (position: fixed) ═══════════════════════ */
   const renderWebDropdown = () => {
-    if (!showDropdown || predictions.length === 0) return null;
+    if (!showDropdown || !predictions.length) return null;
     return (
       <div
-        style={{
-          position: 'fixed',
-          top: dropdownRect.top,
-          left: dropdownRect.left,
-          width: dropdownRect.width || undefined,
-          backgroundColor: colors.card,
-          borderRadius: borderRadius.md,
-          border: `1px solid ${colors.border}`,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          zIndex: 99999,
-          maxHeight: 250,
-          overflowY: 'auto' as const,
-        }}
         onMouseDown={(e) => e.preventDefault()}
+        style={{
+          position: 'fixed', top: rect.top, left: rect.left, width: rect.width || undefined,
+          zIndex: 99999, background: colors.card,
+          borderRadius: borderRadius.md, border: `1px solid ${colors.border}`,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)',
+          maxHeight: 280, overflowY: 'auto',
+          // custom scrollbar
+          scrollbarWidth: 'thin' as any, scrollbarColor: `${colors.border} transparent`,
+        }}
       >
-        {predictions.map((item) => (
+        {predictions.map((item, i) => (
           <div
             key={item.placeId}
-            style={{
-              padding: `${spacing.sm}px ${spacing.md}px`,
-              borderBottom: `1px solid ${colors.border}`,
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.background; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
             onClick={() => handleSelect(item)}
+            style={{
+              display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12,
+              padding: `10px ${spacing.md}px`, cursor: 'pointer',
+              borderBottom: i < predictions.length - 1 ? `1px solid ${colors.border}` : 'none',
+              transition: 'background-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.background; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
-            <Text style={styles.dropdownMain}>
-              {item.mainText?.text || item.text?.text || ''}
-            </Text>
-            <Text style={styles.dropdownSecondary} numberOfLines={1}>
-              {item.secondaryText?.text || ''}
-            </Text>
+            {/* pin icon */}
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: `${colors.primary}12`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 15,
+            }}>
+              📍
+            </div>
+            {/* text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 15, fontWeight: 500, color: colors.text,
+                whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {item.mainText?.text || item.text?.text || ''}
+              </div>
+              {item.secondaryText?.text && (
+                <div style={{
+                  fontSize: 12, color: colors.textLight, marginTop: 1,
+                  whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {item.secondaryText.text}
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
     );
   };
 
+  /* ═══════════════════════ Native Dropdown ═══════════════════════ */
   const renderNativeDropdown = () => {
-    if (!showDropdown || predictions.length === 0) return null;
+    if (!showDropdown || !predictions.length) return null;
     return (
-      <View style={styles.dropdown}>
-        <ScrollView keyboardShouldPersistTaps="always" nestedScrollEnabled style={styles.dropdownScroll}>
-          {predictions.map((item) => (
+      <View style={nativeStyles.dropdown}>
+        <ScrollView keyboardShouldPersistTaps="always" nestedScrollEnabled style={{ maxHeight: 248 }}>
+          {predictions.map((item, i) => (
             <TouchableOpacity
               key={item.placeId}
-              style={styles.dropdownItem}
+              style={[nativeStyles.item, i === predictions.length - 1 && { borderBottomWidth: 0 }]}
               onPressIn={() => { selectingRef.current = true; }}
               onPress={() => handleSelect(item)}
+              activeOpacity={0.6}
             >
-              <Text style={styles.dropdownMain}>
-                {item.mainText?.text || item.text?.text || ''}
-              </Text>
-              <Text style={styles.dropdownSecondary} numberOfLines={1}>
-                {item.secondaryText?.text || ''}
-              </Text>
+              <View style={nativeStyles.iconBox}>
+                <Text style={{ fontSize: 15 }}>📍</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={nativeStyles.mainText} numberOfLines={1}>
+                  {item.mainText?.text || item.text?.text || ''}
+                </Text>
+                {item.secondaryText?.text ? (
+                  <Text style={nativeStyles.subText} numberOfLines={1}>{item.secondaryText.text}</Text>
+                ) : null}
+              </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -246,10 +230,12 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
     );
   };
 
+  /* ═══════════════════════ Render ═══════════════════════ */
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View ref={inputContainerRef} style={[styles.inputContainer, focused && styles.focused]}>
+      <View ref={inputBoxRef} style={[styles.inputBox, focused && styles.inputBoxFocused]}>
+        <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.input}
           value={query}
@@ -259,47 +245,57 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           onFocus={handleFocus}
           onBlur={handleBlur}
         />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.clearIcon}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
       {Platform.OS === 'web' ? renderWebDropdown() : renderNativeDropdown()}
     </View>
   );
 };
 
+/* ═══════════════════════ Styles ═══════════════════════ */
+
 const styles = StyleSheet.create({
   container: { marginBottom: spacing.md, zIndex: 10 },
   label: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  inputContainer: {
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: borderRadius.md,
     backgroundColor: colors.card,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 4,
+    height: 48,
   },
-  focused: { borderColor: colors.primary },
-  input: { height: 48, ...typography.body, color: colors.text, outlineStyle: 'none' as any },
+  inputBoxFocused: { borderColor: colors.primary },
+  searchIcon: { fontSize: 14, marginRight: spacing.sm, opacity: 0.45 },
+  input: { flex: 1, height: 48, ...typography.body, color: colors.text, outlineStyle: 'none' as any },
+  clearIcon: { fontSize: 13, color: colors.textLight, padding: spacing.xs },
+});
+
+const nativeStyles = StyleSheet.create({
   dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.md,
+    position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+    backgroundColor: colors.card, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.border,
+    ...shadows.lg,
     ...(Platform.OS === 'web' ? { zIndex: 1000 } : { elevation: 10 }),
-    maxHeight: 250,
-    overflow: 'hidden',
+    maxHeight: 250, overflow: 'hidden',
   },
-  dropdownScroll: {
-    maxHeight: 248,
+  item: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  dropdownItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  iconBox: {
+    width: 32, height: 32, borderRadius: 8, marginRight: spacing.sm,
+    backgroundColor: `${colors.primary}12`,
+    alignItems: 'center', justifyContent: 'center',
   },
-  dropdownMain: { ...typography.body, fontWeight: '500' },
-  dropdownSecondary: { ...typography.caption, marginTop: 2 },
+  mainText: { fontSize: 15, fontWeight: '500', color: colors.text },
+  subText: { fontSize: 12, color: colors.textLight, marginTop: 1 },
 });
