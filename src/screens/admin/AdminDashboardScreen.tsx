@@ -56,7 +56,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     <AdminGuard>
       <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main', { screen: 'Profile' } as any)} style={styles.backBtn}>
             <Text style={styles.backText}>{'<'} Zurück</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Admin Dashboard</Text>
