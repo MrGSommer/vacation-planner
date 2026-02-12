@@ -11,8 +11,9 @@ import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { getToday } from '../../utils/dateHelpers';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
-import { openInGoogleMaps } from '../../utils/openInMaps';
+import { openInGoogleMaps, openGoogleMapsDirections } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
@@ -49,9 +50,11 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
 
-  // Travel mode picker
+  // Travel mode picker & route menu
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
+  const [showRouteMenu, setShowRouteMenu] = useState<string | null>(null);
   const { showToast } = useToast();
+  const today = getToday();
 
   // Extract the primary date from category data for day mapping & sorting
   const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
@@ -60,6 +63,15 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       case 'stop': return catData.date;
       default: return catData.date;
     }
+  };
+
+  const isActivityToday = (activity: Activity): boolean => {
+    if (activity.category === 'hotel') {
+      const ci = activity.category_data?.check_in_date;
+      const co = activity.category_data?.check_out_date;
+      return !!(ci && co && today >= ci && today <= co);
+    }
+    return getActivityDate(activity.category, activity.category_data || {}) === today;
   };
 
   // Resolve the correct day_id for a given date string
@@ -302,6 +314,26 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  // Find the day route (hotel→stops→hotel) for a given travel segment index
+  const getDayRoute = (index: number): { origin: Activity; destination: Activity; waypoints: Activity[] } | null => {
+    // Search backwards for the start hotel (the stop before index)
+    let startIdx = -1;
+    for (let j = index - 1; j >= 0; j--) {
+      if (activities[j].category === 'hotel') { startIdx = j; break; }
+    }
+    // Search forwards for the end hotel (at index or later)
+    let endIdx = -1;
+    for (let j = index; j < activities.length; j++) {
+      if (activities[j].category === 'hotel') { endIdx = j; break; }
+    }
+    if (startIdx === -1 || endIdx === -1 || startIdx === endIdx) return null;
+    const origin = activities[startIdx];
+    const destination = activities[endIdx];
+    if (!origin.location_lat || !origin.location_lng || !destination.location_lat || !destination.location_lng) return null;
+    const waypoints = activities.slice(startIdx + 1, endIdx).filter(a => a.location_lat && a.location_lng);
+    return { origin, destination, waypoints };
+  };
+
   if (!isFeatureAllowed('stops')) {
     return (
       <View style={styles.container}>
@@ -330,7 +362,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       />
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardDismissMode="on-drag">
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardDismissMode="on-drag" onScrollBeginDrag={() => { setShowTravelModePicker(null); setShowRouteMenu(null); }}>
         {loading ? (
           <StopsSkeleton />
         ) : activities.length === 0 ? (
@@ -350,20 +382,78 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Text style={styles.travelText}>Berechne...</Text>
                     </View>
                   ) : travelInfo.has(activity.id) ? (
-                    <TouchableOpacity
-                      style={styles.travelBadge}
-                      onPress={() => setShowTravelModePicker(
-                        showTravelModePicker === activity.id ? null : activity.id
-                      )}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.travelIcon}>{getTravelIcon(travelInfo.get(activity.id)!.mode)}</Text>
-                      <Text style={styles.travelText}>
-                        {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
-                      </Text>
-                      <Text style={styles.travelChevron}>▾</Text>
-                    </TouchableOpacity>
+                    <View style={styles.travelBadgeRow}>
+                      <TouchableOpacity
+                        style={styles.travelBadge}
+                        onPress={() => {
+                          setShowRouteMenu(null);
+                          setShowTravelModePicker(
+                            showTravelModePicker === activity.id ? null : activity.id
+                          );
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.travelIcon}>{getTravelIcon(travelInfo.get(activity.id)!.mode)}</Text>
+                        <Text style={styles.travelText}>
+                          {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
+                        </Text>
+                        <Text style={styles.travelChevron}>▾</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.routeMenuBtn}
+                        onPress={() => {
+                          setShowTravelModePicker(null);
+                          setShowRouteMenu(showRouteMenu === activity.id ? null : activity.id);
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.routeMenuDots}>⋮</Text>
+                      </TouchableOpacity>
+                    </View>
                   ) : null}
+
+                  {showRouteMenu === activity.id && (() => {
+                    const dayRoute = getDayRoute(i);
+                    const mode = travelInfo.get(activity.id)?.mode || 'driving';
+                    const prev = activities[i - 1];
+                    return (
+                      <View style={styles.routeMenuDropdown}>
+                        <TouchableOpacity
+                          style={[styles.routeMenuItem, !dayRoute && { opacity: 0.4 }]}
+                          disabled={!dayRoute}
+                          onPress={() => {
+                            if (!dayRoute) return;
+                            setShowRouteMenu(null);
+                            openGoogleMapsDirections(
+                              { lat: dayRoute.origin.location_lat!, lng: dayRoute.origin.location_lng! },
+                              { lat: dayRoute.destination.location_lat!, lng: dayRoute.destination.location_lng! },
+                              dayRoute.waypoints.map(w => ({ lat: w.location_lat!, lng: w.location_lng! })),
+                              mode,
+                            );
+                          }}
+                        >
+                          <Text style={styles.routeMenuIcon}>🗺️</Text>
+                          <Text style={styles.routeMenuLabel}>Gesamte Tagesroute</Text>
+                        </TouchableOpacity>
+                        <View style={styles.routeMenuDivider} />
+                        <TouchableOpacity
+                          style={styles.routeMenuItem}
+                          onPress={() => {
+                            setShowRouteMenu(null);
+                            openGoogleMapsDirections(
+                              { lat: prev.location_lat!, lng: prev.location_lng! },
+                              { lat: activity.location_lat!, lng: activity.location_lng! },
+                              [],
+                              mode,
+                            );
+                          }}
+                        >
+                          <Text style={styles.routeMenuIcon}>↗️</Text>
+                          <Text style={styles.routeMenuLabel}>Abschnitt öffnen</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
 
                   {showTravelModePicker === activity.id && (
                     <View style={styles.travelModeRow}>
@@ -386,7 +476,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
 
               <TouchableOpacity activeOpacity={0.7} onPress={() => setViewActivity(activity)}>
-                <Card style={styles.stopCard}>
+                <Card style={[styles.stopCard, isActivityToday(activity) && styles.stopCardToday]}>
                   <View style={styles.stopHeader}>
                     <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
                     <View style={styles.stopInfo}>
@@ -485,6 +575,22 @@ const styles = StyleSheet.create({
   travelIcon: { fontSize: 14, marginRight: spacing.xs },
   travelText: { ...typography.caption, color: colors.sky, fontWeight: '600' },
   travelChevron: { fontSize: 10, color: colors.sky, marginLeft: spacing.xs },
+  travelBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  routeMenuBtn: { padding: 4 },
+  routeMenuDots: { fontSize: 16, color: colors.sky, fontWeight: '700' },
+  routeMenuDropdown: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+    overflow: 'hidden',
+  },
+  routeMenuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  routeMenuIcon: { fontSize: 16, marginRight: spacing.sm },
+  routeMenuLabel: { ...typography.bodySmall, fontWeight: '500' },
+  routeMenuDivider: { height: 1, backgroundColor: colors.border },
   travelModeRow: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -508,6 +614,7 @@ const styles = StyleSheet.create({
   travelModeLabel: { ...typography.caption, fontSize: 11 },
   travelModeLabelActive: { color: colors.sky, fontWeight: '600' },
   stopCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stopCardToday: { borderLeftWidth: 3, borderLeftColor: colors.secondary, backgroundColor: colors.secondary + '08' },
   stopHeader: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   stopIcon: { fontSize: 28, marginRight: spacing.sm },
   stopInfo: { flex: 1 },

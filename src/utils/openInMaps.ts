@@ -17,3 +17,17 @@ export function openInGoogleMaps(lat: number, lng: number, label?: string) {
     Linking.openURL(url!);
   }
 }
+
+export function openGoogleMapsDirections(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  waypoints?: { lat: number; lng: number }[],
+  travelMode: string = 'driving',
+) {
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&travelmode=${travelMode}`;
+  if (waypoints && waypoints.length > 0) {
+    const wp = waypoints.map(w => `${w.lat},${w.lng}`).join('|');
+    url += `&waypoints=${wp}`;
+  }
+  Linking.openURL(url);
+}

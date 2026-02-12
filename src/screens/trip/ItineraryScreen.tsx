@@ -7,7 +7,7 @@ import type { ActivityFormData } from '../../components/common';
 import { getDays, getActivities, getActivitiesForTrip, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { getDayDates, formatDateShort, formatTime } from '../../utils/dateHelpers';
+import { getDayDates, formatDateShort, formatTime, getToday } from '../../utils/dateHelpers';
 import { getTrip } from '../../api/trips';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { useRealtime } from '../../hooks/useRealtime';
@@ -79,10 +79,21 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setDays(existingDays);
 
       if (!selectedDayId && existingDays.length > 0) {
-        const firstDayId = existingDays[0].id;
-        setSelectedDayId(firstDayId);
-        const acts = await getActivities(firstDayId);
+        const today = getToday();
+        const todayDay = existingDays.find(d => d.date === today);
+        const targetDay = todayDay || existingDays[0];
+        setSelectedDayId(targetDay.id);
+        const acts = await getActivities(targetDay.id);
         setActivities(acts);
+        if (todayDay) {
+          const idx = existingDays.indexOf(todayDay);
+          setTimeout(() => {
+            if (tabScrollRef.current && idx > 0) {
+              const offset = Math.max(0, idx * 88 - 80);
+              tabScrollRef.current.scrollTo({ x: offset, animated: true });
+            }
+          }, 100);
+        }
       }
     } catch (e) {
       console.error(e);

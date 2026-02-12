@@ -21,7 +21,7 @@ export const ImpressumScreen: React.FC<Props> = ({ navigation }) => {
 
         <Text style={styles.h2}>Kontakt</Text>
         <Text style={styles.body}>
-          E-Mail: kontakt@wayfable.com
+          E-Mail: programmable.work@gmail.com
         </Text>
 
         <Text style={styles.h2}>Rechtsform</Text>

@@ -9,7 +9,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip } from '../../types/database';
-import { formatDateRange, getDayCount } from '../../utils/dateHelpers';
+import { formatDateRange, getDayCount, isTripActive } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/common';
@@ -47,6 +47,10 @@ const TripCard: React.FC<{
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
 
+  const isTraveling = isTripActive(trip.start_date, trip.end_date);
+  const displayLabel = isTraveling ? 'Unterwegs' : (statusLabels[trip.status] || trip.status);
+  const displayColor = isTraveling ? colors.secondary : (statusColors[trip.status] || colors.textLight);
+
   const cardInner = (
     <LinearGradient
       colors={trip.cover_image_url ? ['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.65)'] : [...gradients.sunset]}
@@ -56,8 +60,8 @@ const TripCard: React.FC<{
     >
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
-          <View style={[styles.badge, { backgroundColor: statusColors[trip.status] || colors.textLight }]}>
-            <Text style={styles.badgeText}>{statusLabels[trip.status] || trip.status}</Text>
+          <View style={[styles.badge, { backgroundColor: displayColor }]}>
+            <Text style={styles.badgeText}>{displayLabel}</Text>
           </View>
           <View style={styles.cardTopRight}>
             {shown.length > 0 && (

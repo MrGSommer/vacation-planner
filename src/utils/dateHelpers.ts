@@ -50,6 +50,8 @@ export const getDayDates = (startDate: string, endDate: string): string[] => {
   return days;
 };
 
+export const getToday = (): string => format(new Date(), 'yyyy-MM-dd');
+
 export const isTripActive = (startDate: string, endDate: string): boolean => {
   const now = new Date();
   return isWithinInterval(now, { start: parseISO(startDate), end: parseISO(endDate) });

@@ -18,7 +18,7 @@ export const DatenschutzScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.body}>
           Gabriel Sommer{'\n'}
           Schweiz{'\n'}
-          E-Mail: kontakt@wayfable.com
+          E-Mail: programmable.work@gmail.com
         </Text>
 
         <Text style={styles.h2}>2. Erhobene Daten</Text>
@@ -88,7 +88,7 @@ export const DatenschutzScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.h2}>10. Kontakt</Text>
         <Text style={styles.body}>
           Bei Fragen zum Datenschutz kontaktiere uns unter:{'\n'}
-          kontakt@wayfable.com
+          programmable.work@gmail.com
         </Text>
       </ScrollView>
     </View>
