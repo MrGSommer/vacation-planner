@@ -36,7 +36,7 @@ export interface UseAiPlannerOptions {
   mode: 'create' | 'enhance';
   tripId?: string;
   userId: string;
-  initialContext: {
+  initialContext?: {
     destination?: string;
     destinationLat?: number | null;
     destinationLng?: number | null;
@@ -137,7 +137,7 @@ function mergePlan(
 
 export type GenerationGranularity = 'all' | 'weekly' | 'daily';
 
-export const useAiPlanner = ({ mode, tripId, userId, initialContext, initialCredits, onCreditsUpdate }: UseAiPlannerOptions) => {
+export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initialCredits, onCreditsUpdate }: UseAiPlannerOptions) => {
   const [phase, setPhase] = useState<AiPhase>('idle');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [metadata, setMetadata] = useState<AiMetadata | null>(null);

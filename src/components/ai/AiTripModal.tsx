@@ -34,7 +34,7 @@ interface Props {
   mode: 'create' | 'enhance';
   tripId?: string;
   userId: string;
-  initialContext: {
+  initialContext?: {
     destination?: string;
     destinationLat?: number | null;
     destinationLng?: number | null;
@@ -60,7 +60,7 @@ const PROGRESS_LABELS: Record<ProgressStep, string> = {
 };
 
 export const AiTripModal: React.FC<Props> = ({
-  visible, onClose, mode, tripId, userId, initialContext, onComplete,
+  visible, onClose, mode, tripId, userId, initialContext = {}, onComplete,
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
