@@ -30,7 +30,7 @@ import { importMapsLibrary, PlaceAutocomplete, PlaceResult } from '../../compone
 import { detectCategoryFromTypes } from '../../utils/categoryFields';
 import { createActivity, createDay, getDays } from '../../api/itineraries';
 import { exportKML } from '../../utils/geoImport';
-import { ensureContrast } from '../../utils/colorExtraction';
+import { ensureContrast, tintWithWhite } from '../../utils/colorExtraction';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
@@ -339,6 +339,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const rawThemeColor = trip.theme_color || colors.secondary;
   const themeColor = ensureContrast(rawThemeColor);
+  const themeTint = tintWithWhite(rawThemeColor, 0.92);
 
   const days = getDayCount(trip.start_date, trip.end_date);
   const nonOwnerCollabs = collaborators.filter(c => c.user_id !== user?.id);
@@ -432,7 +433,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         <View style={styles.content}>
           {/* Stats */}
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, { backgroundColor: themeTint }]}>
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: themeColor }]}>{days}</Text>
               <Text style={styles.statLabel}>Tage</Text>
@@ -495,7 +496,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Map */}
           {Platform.OS === 'web' && (
-            <Card style={styles.mapCard}>
+            <Card style={[styles.mapCard, { backgroundColor: rawThemeColor + '10' }]}>
               <View style={styles.mapHeader}>
                 <Text style={styles.mapTitle}>Karte</Text>
                 {mapReady && (
@@ -525,7 +526,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
 
           {!mapFullscreen && trip.notes && (
-            <Card style={styles.notesCard}>
+            <Card style={[styles.notesCard, { backgroundColor: rawThemeColor + '10' }]}>
               <Text style={styles.notesTitle}>Notizen</Text>
               <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
             </Card>

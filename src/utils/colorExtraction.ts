@@ -59,6 +59,18 @@ function contrastRatio(l1: number, l2: number): number {
 }
 
 /**
+ * Mix a hex color with white to produce an opaque tinted color.
+ * @param amount 0 = pure color, 1 = pure white (e.g. 0.94 = very subtle tint)
+ */
+export function tintWithWhite(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const tr = Math.round(r + (255 - r) * amount);
+  const tg = Math.round(g + (255 - g) * amount);
+  const tb = Math.round(b + (255 - b) * amount);
+  return `#${tr.toString(16).padStart(2, '0')}${tg.toString(16).padStart(2, '0')}${tb.toString(16).padStart(2, '0')}`;
+}
+
+/**
  * Darken/saturate a hex color until it has sufficient contrast on white.
  * Keeps the original hue.
  */
