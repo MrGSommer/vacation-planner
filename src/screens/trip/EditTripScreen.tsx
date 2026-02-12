@@ -26,6 +26,7 @@ import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { CURRENCIES } from '../../utils/constants';
 import { formatDate, getDayDates } from '../../utils/dateHelpers';
 import { EditTripSkeleton } from '../../components/skeletons/EditTripSkeleton';
+import { extractDominantColor } from '../../utils/colorExtraction';
 
 type CoverMode = 'none' | 'upload' | 'unsplash';
 
@@ -121,6 +122,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     await update(tripId, {
       cover_image_url: photo.urls.regular,
       cover_image_attribution: `${photo.user.name}|${photo.user.links.html}|${photo.links.html}`,
+      theme_color: photo.color || null,
     } as any);
   };
 
@@ -160,7 +162,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     setCoverMode('none');
     unsplashCache.current = [];
     unsplashIndex.current = 0;
-    await update(tripId, { cover_image_url: null, cover_image_attribution: null } as any);
+    await update(tripId, { cover_image_url: null, cover_image_attribution: null, theme_color: null } as any);
   };
 
   const handleDatePress = (day: DateData) => {
@@ -406,7 +408,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                       const url = await uploadCoverImage(tripId, result.assets[0].uri);
                       setCoverImageUrl(url);
                       setCoverMode('upload');
-                      await update(tripId, { cover_image_url: url, cover_image_attribution: null } as any);
+                      const themeColor = await extractDominantColor(url).catch(() => null);
+                      await update(tripId, { cover_image_url: url, cover_image_attribution: null, theme_color: themeColor } as any);
                     } catch { Alert.alert('Fehler', 'Bild konnte nicht hochgeladen werden'); }
                     finally { setUploadingCover(false); }
                   }}

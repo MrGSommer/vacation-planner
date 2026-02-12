@@ -18,9 +18,11 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../utils/
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 import { RouteMapModal } from '../../components/map/RouteMapModal';
+import { AiTripModal } from '../../components/ai/AiTripModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
@@ -37,6 +39,8 @@ interface CachedTravel {
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { isFeatureAllowed } = useSubscription();
+  const { user } = useAuthContext();
+  const [showAiModal, setShowAiModal] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -354,11 +358,18 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Route & Stops"
         onBack={() => navigation.goBack()}
         rightAction={
-          activities.length >= 2 ? (
-            <TouchableOpacity onPress={() => setShowMapModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ fontSize: 20 }}>🗺️</Text>
-            </TouchableOpacity>
-          ) : undefined
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {isFeatureAllowed('ai') && (
+              <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 22 }}>✨</Text>
+              </TouchableOpacity>
+            )}
+            {activities.length >= 2 && (
+              <TouchableOpacity onPress={() => setShowMapModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 20 }}>🗺️</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         }
       />
 
@@ -549,6 +560,16 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         stops={activities}
         travelInfo={travelInfo}
       />
+
+      {showAiModal && user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="enhance"
+          tripId={tripId}
+          userId={user.id}
+        />
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Stops" />
     </View>

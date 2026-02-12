@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'rea
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, TripBottomNav } from '../../components/common';
+import { AiTripModal } from '../../components/ai/AiTripModal';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { ScopeToggle } from '../../components/budget/ScopeToggle';
 import { BudgetOverviewCard } from '../../components/budget/BudgetOverviewCard';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
@@ -26,6 +28,8 @@ type TabType = 'budget' | 'expenses';
 export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
+  const { isFeatureAllowed } = useSubscription();
+  const [showAiModal, setShowAiModal] = useState(false);
   const [scope, setScope] = useState<'group' | 'personal'>('group');
   const [tab, setTab] = useState<TabType>('budget');
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -125,7 +129,17 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Budget & Ausgaben" onBack={() => navigation.goBack()} />
+      <Header
+        title="Budget & Ausgaben"
+        onBack={() => navigation.goBack()}
+        rightAction={
+          isFeatureAllowed('ai') ? (
+            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ fontSize: 22 }}>✨</Text>
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
 
       {loading && !trip ? (
         <BudgetSkeleton />
@@ -266,6 +280,16 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         currency={currency}
         scope={scope}
       />
+
+      {showAiModal && user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="enhance"
+          tripId={tripId}
+          userId={user.id}
+        />
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Budget" />
     </View>

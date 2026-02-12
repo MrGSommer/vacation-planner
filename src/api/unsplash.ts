@@ -2,6 +2,7 @@ const ACCESS_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || '';
 
 export interface UnsplashPhoto {
   id: string;
+  color: string;
   urls: { regular: string; small: string };
   user: { name: string; links: { html: string } };
   links: { html: string; download_location: string };

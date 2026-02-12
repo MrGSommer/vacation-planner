@@ -16,6 +16,8 @@ interface AuthContextType {
   setPendingInviteToken: (token: string | null) => void;
   passwordRecovery: boolean;
   clearPasswordRecovery: () => void;
+  pendingSetPassword: boolean;
+  clearPendingSetPassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,6 +31,8 @@ const AuthContext = createContext<AuthContextType>({
   setPendingInviteToken: () => {},
   passwordRecovery: false,
   clearPasswordRecovery: () => {},
+  pendingSetPassword: false,
+  clearPendingSetPassword: () => {},
 });
 
 export const useAuthContext = () => useContext(AuthContext);
@@ -39,6 +43,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+
+  // Detect invite hash synchronously before Supabase clears it
+  const [pendingSetPassword, setPendingSetPassword] = useState(() => {
+    if (Platform.OS === 'web') {
+      try { return window.location.hash.includes('type=invite'); } catch { return false; }
+    }
+    return false;
+  });
+
+  const clearPendingSetPassword = useCallback(() => setPendingSetPassword(false), []);
 
   // Invite token: persist in sessionStorage (survives page reloads within same tab)
   const [pendingInviteToken, setPendingInviteTokenState] = useState<string | null>(() => {
@@ -101,7 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword }}>
       {children}
     </AuthContext.Provider>
   );

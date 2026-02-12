@@ -221,6 +221,7 @@ export const executePlan = async (
         await updateTrip(finalTripId, {
           cover_image_url: photo.urls.regular,
           cover_image_attribution: `${photo.user.name}|${photo.user.links.html}|${photo.links.html}`,
+          theme_color: photo.color || null,
         });
         triggerDownload(photo);
       }

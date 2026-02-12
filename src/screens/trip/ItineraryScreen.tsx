@@ -17,15 +17,18 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../utils/
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton';
-import { ImportPlacesModal } from '../../components/common/ImportPlacesModal';
-import { createActivities } from '../../api/itineraries';
-import { exportGeoJSON, ImportedPlace } from '../../utils/geoImport';
+import { AiTripModal } from '../../components/ai/AiTripModal';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useAuthContext } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
 export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { showToast } = useToast();
+  const { user } = useAuthContext();
+  const { isFeatureAllowed } = useSubscription();
+  const [showAiModal, setShowAiModal] = useState(false);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
@@ -38,8 +41,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [allTripActivities, setAllTripActivities] = useState<Activity[]>([]);
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [modalDefaultCategory, setModalDefaultCategory] = useState<string | undefined>(undefined);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
   const tabScrollRef = useRef<ScrollView>(null);
@@ -316,64 +317,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
-  const handleImportPlaces = async (places: ImportedPlace[]) => {
-    if (!selectedDayId) return;
-    const batch = places.map((place, i) => ({
-      day_id: selectedDayId,
-      trip_id: tripId,
-      title: place.name,
-      description: place.description || null,
-      category: 'sightseeing' as string,
-      start_time: null,
-      end_time: null,
-      location_name: place.name,
-      location_lat: place.lat,
-      location_lng: place.lng,
-      location_address: place.address || null,
-      cost: null,
-      currency: 'CHF',
-      sort_order: activities.length + i,
-      check_in_date: null,
-      check_out_date: null,
-      category_data: selectedDate ? { date: selectedDate } : {},
-    }));
-    await createActivities(batch);
-    const allActs = await getActivitiesForTrip(tripId);
-    setAllTripActivities(allActs);
-    setHotelActivities(allActs.filter(a => a.category === 'hotel'));
-    if (selectedDayId) await loadDayActivities(selectedDayId);
-  };
-
-  const handleExport = () => {
-    setShowMoreMenu(false);
-    const withCoords = allTripActivities.filter(a => a.location_lat && a.location_lng);
-    if (withCoords.length === 0) {
-      showToast('Keine Orte mit Koordinaten vorhanden', 'error');
-      return;
-    }
-    const geojson = exportGeoJSON(withCoords.map(a => ({
-      title: a.title,
-      lat: a.location_lat!,
-      lng: a.location_lng!,
-      category: a.category,
-      description: a.description,
-    })));
-
-    if (Platform.OS === 'web') {
-      const blob = new Blob([geojson], { type: 'application/geo+json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'trip-export.geojson';
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Export heruntergeladen', 'success');
-    } else {
-      // Native: use expo-sharing
-      showToast('Export nur auf Web verfugbar', 'error');
-    }
-  };
-
   const renderTravelCard = (type: 'arrival' | 'departure', transport: Activity | null | undefined) => {
     const label = type === 'arrival' ? 'Anreise' : 'Abreise';
     const icon = type === 'arrival' ? '🛬' : '🛫';
@@ -436,21 +379,11 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Programm"
         onBack={() => navigation.goBack()}
         rightAction={
-          <View>
-            <TouchableOpacity onPress={() => setShowMoreMenu(!showMoreMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ fontSize: 18 }}>⋮</Text>
+          isFeatureAllowed('ai') ? (
+            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ fontSize: 22 }}>✨</Text>
             </TouchableOpacity>
-            {showMoreMenu && (
-              <View style={styles.moreMenu}>
-                <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMoreMenu(false); setShowImportModal(true); }}>
-                  <Text style={styles.menuItemText}>📂 Importieren</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={handleExport}>
-                  <Text style={styles.menuItemText}>📤 Exportieren</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          ) : undefined
         }
       />
 
@@ -566,12 +499,15 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       </>
       )}
 
-      <ImportPlacesModal
-        visible={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImport={handleImportPlaces}
-        dayDates={dayDates}
-      />
+      {showAiModal && user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="enhance"
+          tripId={tripId}
+          userId={user.id}
+        />
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
@@ -637,7 +573,4 @@ const styles = StyleSheet.create({
   travelDayDetail: { ...typography.caption, color: colors.accent, marginTop: 2, fontWeight: '500' },
   travelDayPlaceholder: { ...typography.bodySmall, color: colors.textLight, flex: 1 },
   travelDayPlus: { fontSize: 24, color: colors.primary, fontWeight: '300' },
-  moreMenu: { position: 'absolute', top: 28, right: 0, backgroundColor: '#FFFFFF', borderRadius: borderRadius.md, ...shadows.lg, zIndex: 100, minWidth: 160 },
-  menuItem: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  menuItemText: { ...typography.bodySmall, fontWeight: '500' },
 });

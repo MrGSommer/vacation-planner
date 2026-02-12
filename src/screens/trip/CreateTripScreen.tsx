@@ -100,6 +100,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         destination_lat: destinationLat,
         destination_lng: destinationLng,
         cover_image_url: null,
+        theme_color: null,
         start_date: startDate,
         end_date: endDate,
         status: 'planning',

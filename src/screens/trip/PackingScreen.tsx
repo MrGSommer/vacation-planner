@@ -20,12 +20,18 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PackingSkeleton } from '../../components/skeletons/PackingSkeleton';
 import { useToast } from '../../contexts/ToastContext';
+import { AiTripModal } from '../../components/ai/AiTripModal';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useAuthContext } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 
 export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { showToast } = useToast();
+  const { user } = useAuthContext();
+  const { isFeatureAllowed } = useSubscription();
+  const [showAiModal, setShowAiModal] = useState(false);
   const [listId, setListId] = useState<string | null>(null);
   const [items, setItems] = useState<PackingItem[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -241,9 +247,16 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Packliste"
         onBack={() => navigation.goBack()}
         rightAction={
-          <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.headerBtn}>📋</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {isFeatureAllowed('ai') && (
+              <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 22 }}>✨</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.headerBtn}>📋</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
 
@@ -445,6 +458,16 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
       </TouchableOpacity>
+
+      {showAiModal && user && (
+        <AiTripModal
+          visible={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          mode="enhance"
+          tripId={tripId}
+          userId={user.id}
+        />
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Packing" />
     </View>

@@ -70,6 +70,7 @@ export interface Trip {
   travelers_count: number;
   group_type: 'solo' | 'couple' | 'family' | 'friends' | 'group';
   notes: string | null;
+  theme_color: string | null;
   created_at: string;
   updated_at: string;
 }

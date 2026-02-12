@@ -49,7 +49,7 @@ export const DatenschutzScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.bold}>Stripe</Text> (Zahlungsabwicklung) — Verarbeitet Zahlungsdaten gemäss PCI DSS.{'\n\n'}
           <Text style={styles.bold}>Google Maps</Text> (Kartenanzeige, Routenberechnung) — IP-Adresse und Standortdaten werden übermittelt.{'\n\n'}
           <Text style={styles.bold}>Unsplash</Text> (Coverbilder) — Keine personenbezogenen Daten werden übermittelt.{'\n\n'}
-          <Text style={styles.bold}>Anthropic</Text> (Reisebegleiter Fable) — Reisedaten werden für die Plangeneration übermittelt, nicht gespeichert.
+          <Text style={styles.bold}>Anthropic</Text> (Reisebegleiter Fable) — Reisedaten werden für die Plangeneration übermittelt.
         </Text>
 
         <Text style={styles.h2}>5. Deine Rechte</Text>

@@ -30,6 +30,7 @@ import { importMapsLibrary, PlaceAutocomplete, PlaceResult } from '../../compone
 import { detectCategoryFromTypes } from '../../utils/categoryFields';
 import { createActivity, createDay, getDays } from '../../api/itineraries';
 import { exportKML } from '../../utils/geoImport';
+import { ensureContrast } from '../../utils/colorExtraction';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
@@ -336,6 +337,9 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (loading || !trip) return <TripDetailSkeleton />;
 
+  const rawThemeColor = trip.theme_color || colors.secondary;
+  const themeColor = ensureContrast(rawThemeColor);
+
   const days = getDayCount(trip.start_date, trip.end_date);
   const nonOwnerCollabs = collaborators.filter(c => c.user_id !== user?.id);
 
@@ -421,7 +425,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             })()}
           </ImageBackground>
         ) : (
-          <LinearGradient colors={[...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <LinearGradient colors={trip.theme_color ? [themeColor, rawThemeColor + 'CC'] : [...gradients.ocean]} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
             {headerContent}
           </LinearGradient>
         )}
@@ -430,43 +434,64 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>{days}</Text>
+              <Text style={[styles.statValue, { color: themeColor }]}>{days}</Text>
               <Text style={styles.statLabel}>Tage</Text>
             </View>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>{activityCount}</Text>
+              <Text style={[styles.statValue, { color: themeColor }]}>{activityCount}</Text>
               <Text style={styles.statLabel}>Aktivitäten</Text>
             </View>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>{totalSpent.toFixed(0)}</Text>
+              <Text style={[styles.statValue, { color: themeColor }]}>{totalSpent.toFixed(0)}</Text>
               <Text style={styles.statLabel}>{trip.currency}</Text>
             </View>
           </View>
 
-          {/* Photos */}
-          {isFeatureAllowed('photos') ? (
-            <TouchableOpacity
-              style={styles.photosCard}
-              onPress={() => navigation.navigate('Photos', { tripId })}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.photosIcon}>📸</Text>
-              <View style={styles.photosInfo}>
-                <Text style={styles.photosTitle}>Fotos</Text>
-                <Text style={styles.photosSubtitle}>Reiseerinnerungen festhalten</Text>
-              </View>
-              <Text style={styles.photosArrow}>{'›'}</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ marginBottom: spacing.lg }}>
-              <UpgradePrompt
-                icon="📸"
-                title="Fotos"
-                message="Verfügbar mit Premium"
-                inline
-              />
-            </View>
-          )}
+          {/* Photos + Fable Grid */}
+          <View style={styles.gridRow}>
+            {isFeatureAllowed('photos') ? (
+              <TouchableOpacity
+                style={[styles.gridCard, { backgroundColor: rawThemeColor + '15' }]}
+                onPress={() => navigation.navigate('Photos', { tripId })}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.gridCardIcon}>📸</Text>
+                <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.gridCard, { backgroundColor: colors.primary + '08', opacity: 0.5 }]}
+                onPress={() => navigation.navigate('Subscription')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.gridCardIcon}>📸</Text>
+                <Text style={styles.gridCardTitle}>Fotos</Text>
+                <Text style={styles.gridCardInfo}>Premium</Text>
+              </TouchableOpacity>
+            )}
+
+            {isFeatureAllowed('ai') ? (
+              <TouchableOpacity
+                style={[styles.gridCard, { backgroundColor: rawThemeColor + '12' }]}
+                onPress={() => setShowAiModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.gridCardIcon}>✨</Text>
+                <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
+                <Text style={[styles.gridCardInfo, { color: colors.accent }]}>{aiCredits} Inspirationen</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.gridCard, { backgroundColor: colors.accent + '08', opacity: 0.5 }]}
+                onPress={() => navigation.navigate('Subscription')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.gridCardIcon}>✨</Text>
+                <Text style={styles.gridCardTitle}>Fable</Text>
+                <Text style={styles.gridCardInfo}>Inspirationen kaufen</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Map */}
           {Platform.OS === 'web' && (
@@ -497,37 +522,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
               <div ref={mapRef} style={{ width: '100%', height: 300, borderRadius: 12 }} />
             </Card>
-          )}
-
-          {/* Fable — Reisebegleiter (hidden in fullscreen map) */}
-          {!mapFullscreen && (
-            isFeatureAllowed('ai') ? (
-              <TouchableOpacity
-                style={styles.aiCard}
-                onPress={() => setShowAiModal(true)}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={[...gradients.ocean]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.aiCardGradient}
-                >
-                  <Text style={styles.aiCardText}>{'✨ Fable fragen'}</Text>
-                  <Text style={styles.aiCardSubtext}>{`Aktivitäten und Stops generieren · ${aiCredits} Inspirationen ›`}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ marginBottom: spacing.lg }}>
-                <UpgradePrompt
-                  icon="✨"
-                  title="Fable — Dein Reisebegleiter"
-                  message="Kaufe Inspirationen um Fable zu nutzen"
-                  inline
-                  buyInspirations
-                />
-              </View>
-            )
           )}
 
           {!mapFullscreen && trip.notes && (
@@ -680,14 +674,13 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, marginTop: -spacing.lg },
   statsRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, ...shadows.md, marginBottom: spacing.lg },
   stat: { flex: 1, alignItems: 'center' },
-  statValue: { ...typography.h2, color: colors.primary },
+  statValue: { ...typography.h2 },
   statLabel: { ...typography.caption, marginTop: 2 },
-  photosCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, marginBottom: spacing.lg, ...shadows.sm },
-  photosIcon: { fontSize: 28, marginRight: spacing.md },
-  photosInfo: { flex: 1 },
-  photosTitle: { ...typography.body, fontWeight: '600' },
-  photosSubtitle: { ...typography.caption, color: colors.textLight },
-  photosArrow: { fontSize: 24, color: colors.textLight },
+  gridRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
+  gridCard: { flex: 1, backgroundColor: colors.card, borderRadius: borderRadius.lg, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 48, ...shadows.sm },
+  gridCardIcon: { fontSize: 22 },
+  gridCardTitle: { ...typography.body, fontWeight: '600' },
+  gridCardInfo: { ...typography.caption, color: colors.textLight },
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
   mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   mapTitle: { ...typography.h3 },
@@ -700,10 +693,6 @@ const styles = StyleSheet.create({
   fullscreenSearchBar: { position: 'fixed' as any, left: 140, right: 100, zIndex: 10000 },
   fullscreenExportBtn: { position: 'fixed' as any, right: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
   fullscreenExportText: { ...typography.bodySmall, fontWeight: '600' as const, color: colors.primary },
-  aiCard: { marginBottom: spacing.lg, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.sm },
-  aiCardGradient: { padding: spacing.md, flexDirection: 'column' },
-  aiCardText: { ...typography.body, fontWeight: '600', color: '#FFFFFF' },
-  aiCardSubtext: { ...typography.caption, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   notesCard: { marginBottom: spacing.lg },
   notesTitle: { ...typography.h3, marginBottom: spacing.sm },
   notesText: { ...typography.body, color: colors.textSecondary },

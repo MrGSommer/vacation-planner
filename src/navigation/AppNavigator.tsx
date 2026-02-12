@@ -79,7 +79,7 @@ const linking = {
 };
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery } = useAuthContext();
+  const { session, loading, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   const [currentRoute, setCurrentRoute] = useState('');
@@ -115,6 +115,16 @@ export const AppNavigator: React.FC = () => {
       }, 100);
     }
   }, [session, passwordRecovery, clearPasswordRecovery]);
+
+  // Dashboard invite (type=invite) → user needs to set password
+  useEffect(() => {
+    if (session && pendingSetPassword) {
+      setTimeout(() => {
+        navigationRef.current?.navigate('ResetPassword');
+        clearPendingSetPassword();
+      }, 100);
+    }
+  }, [session, pendingSetPassword, clearPendingSetPassword]);
 
   if (loading) return <LoadingScreen />;
 
