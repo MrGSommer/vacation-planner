@@ -73,6 +73,7 @@ export const AiTripModal: React.FC<Props> = ({
     phase, messages, metadata, plan, structure, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
     restored, creditsBalance, estimatedSeconds, activeJobId,
+    contextReady,
     startConversation, sendMessage, generatePlan,
     generateStructure, generateAllViaServer, generateActivitiesClientSide,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
@@ -86,11 +87,11 @@ export const AiTripModal: React.FC<Props> = ({
 
   // Refresh profile (credits) when modal opens, then auto-start conversation
   useEffect(() => {
-    if (visible && phase === 'idle') {
+    if (visible && phase === 'idle' && contextReady) {
       refreshProfile().then(() => startConversation());
     }
     if (visible) { setCreditPurchased(false); setShowBuyModal(false); }
-  }, [visible, phase]);
+  }, [visible, phase, contextReady]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -222,7 +223,7 @@ export const AiTripModal: React.FC<Props> = ({
       return (
         <AiPlanPreview
           plan={plan}
-          currency={initialContext.currency || 'CHF'}
+          currency={plan.trip?.currency || initialContext?.currency || 'CHF'}
           onConfirm={confirmPlan}
           onReject={hidePreview}
         />

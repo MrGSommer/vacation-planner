@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
+import { getTrip } from '../api/trips';
 import { getActivitiesForTrip, getDays } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
@@ -154,6 +155,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [contextReady, setContextReady] = useState(false);
   const contextRef = useRef<AiContext>({
     destination: initialContext.destination,
     destinationLat: initialContext.destinationLat,
@@ -169,6 +171,33 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userMemoryRef = useRef<string | undefined>(undefined);
   const prevCreditsRef = useRef<number | null>(null);
+
+  // Load trip data when tripId is available (ensure context is always trip-derived)
+  useEffect(() => {
+    if (!tripId) {
+      setContextReady(true);
+      return;
+    }
+    let cancelled = false;
+    getTrip(tripId).then(trip => {
+      if (cancelled) return;
+      contextRef.current = {
+        ...contextRef.current,
+        destination: trip.destination,
+        destinationLat: trip.destination_lat,
+        destinationLng: trip.destination_lng,
+        startDate: trip.start_date,
+        endDate: trip.end_date,
+        currency: trip.currency,
+        travelersCount: trip.travelers_count,
+        groupType: trip.group_type,
+      };
+      setContextReady(true);
+    }).catch(() => {
+      if (!cancelled) setContextReady(true); // proceed with whatever we have
+    });
+    return () => { cancelled = true; };
+  }, [tripId]);
 
   // Sync creditsBalance when profile refreshes (e.g., modal open triggers refreshProfile)
   useEffect(() => {
@@ -195,19 +224,20 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      const ctx = contextRef.current;
       saveAiConversation(
         tripId,
         userId,
         currentPhase as any,
         { messages: currentMessages, metadata: currentMetadata, plan: currentPlan },
         {
-          destination: initialContext.destination,
-          startDate: initialContext.startDate,
-          endDate: initialContext.endDate,
+          destination: ctx.destination,
+          startDate: ctx.startDate,
+          endDate: ctx.endDate,
         },
       ).catch(e => console.error('Failed to save conversation:', e));
     }, SAVE_DEBOUNCE_MS);
-  }, [tripId, userId, initialContext.destination, initialContext.startDate, initialContext.endDate]);
+  }, [tripId, userId]);
 
   const loadExistingData = useCallback(async (profileOverride?: { ai_trip_context_enabled: boolean }): Promise<AiContext['existingData'] | undefined> => {
     if (mode !== 'enhance' || !tripId) return undefined;
@@ -276,6 +306,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   }, [mode, tripId, userId]);
 
   const startConversation = useCallback(async () => {
+    if (!contextReady) return; // Wait for trip data to load
     setPhase('conversing');
     setError(null);
     setSending(true);
@@ -304,10 +335,11 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       // Check for saved conversation (staleness check)
       if (savedConversation) {
         const snap = savedConversation.context_snapshot;
+        const ctx = contextRef.current;
         const isStale =
-          snap.destination !== initialContext.destination ||
-          snap.startDate !== initialContext.startDate ||
-          snap.endDate !== initialContext.endDate;
+          snap.destination !== ctx.destination ||
+          snap.startDate !== ctx.startDate ||
+          snap.endDate !== ctx.endDate;
 
         if (!isStale) {
           // Restore conversation
@@ -324,7 +356,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         deleteAiConversation(tripId!).catch(() => {});
       }
 
-      const destination = initialContext.destination || 'dein Reiseziel';
+      const destination = contextRef.current.destination || 'dein Reiseziel';
       const greeting: AiMessage = {
         role: 'user',
         content: mode === 'enhance'
@@ -381,7 +413,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [initialContext.destination, initialContext.startDate, initialContext.endDate, mode, tripId, loadExistingData, debouncedSave]);
+  }, [contextReady, mode, tripId, loadExistingData, debouncedSave]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || sending) return;
@@ -458,14 +490,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     const activities = p.days?.reduce((sum, d) => sum + (d.activities?.length || 0), 0) || 0;
     const stops = p.stops?.length || 0;
     const budget = p.budget_categories?.reduce((sum, c) => sum + (c.budget_limit || 0), 0) || 0;
-    const currency = initialContext.currency || 'CHF';
+    const currency = contextRef.current.currency || 'CHF';
 
     let summary = `Hier ist mein Vorschlag: **${days} Tage**, **${activities} Aktivitäten**`;
     if (stops > 0) summary += `, **${stops} Stops**`;
     if (budget > 0) summary += `, Budget ca. **${budget} ${currency}**`;
     summary += '.\n\nDu kannst dir die Details anschauen, den Plan direkt übernehmen, oder mir sagen was ich anpassen soll.';
     return summary;
-  }, [initialContext.currency]);
+  }, []);
 
   // Build structure summary for overview
   const buildStructureSummary = useCallback((s: AiTripPlan): string => {
@@ -694,7 +726,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         plan,
         tripId,
         userId,
-        initialContext.currency || 'CHF',
+        contextRef.current.currency || 'CHF',
         (step) => setProgressStep(step),
       );
 
@@ -710,7 +742,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setError(e.message || 'Plan konnte nicht ausgeführt werden');
       setPhase('previewing_plan');
     }
-  }, [plan, tripId, userId, initialContext.currency, mode]);
+  }, [plan, tripId, userId, mode]);
 
   const dismissConflicts = useCallback(() => {
     setConflicts([]);
@@ -773,7 +805,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setError('Anpassung fehlgeschlagen – bitte versuche es erneut');
       setPhase('plan_review');
     }
-  }, [messages, sending, initialContext.currency, metadata, debouncedSave]);
+  }, [messages, sending, metadata, debouncedSave]);
 
   const rejectPlan = useCallback(() => {
     setPlan(null);
@@ -809,18 +841,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   // Save conversation state (for AppState listener in AiTripModal)
   const saveConversationNow = useCallback(() => {
     if (!tripId || phase === 'idle' || phase === 'completed') return;
+    const ctx = contextRef.current;
     saveAiConversation(
       tripId,
       userId,
       phase as any,
       { messages, metadata, plan },
       {
-        destination: initialContext.destination,
-        startDate: initialContext.startDate,
-        endDate: initialContext.endDate,
+        destination: ctx.destination,
+        startDate: ctx.startDate,
+        endDate: ctx.endDate,
       },
     ).catch(() => {});
-  }, [tripId, userId, phase, messages, metadata, plan, initialContext.destination, initialContext.startDate, initialContext.endDate]);
+  }, [tripId, userId, phase, messages, metadata, plan]);
 
   // Agent: Generate packing list
   const generatePackingList = useCallback(async () => {
@@ -928,7 +961,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         location_lng: a.location_lng,
         location_address: a.location_address,
         cost: a.cost,
-        currency: initialContext.currency || 'CHF',
+        currency: contextRef.current.currency || 'CHF',
         sort_order: a.sort_order ?? i,
         check_in_date: a.check_in_date,
         check_out_date: a.check_out_date,
@@ -951,7 +984,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, messages, initialContext.currency, onCreditsUpdate]);
+  }, [tripId, sending, messages, onCreditsUpdate]);
 
   // Agent: Generate budget categories
   const generateBudgetCategories = useCallback(async () => {
@@ -986,7 +1019,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       }
 
       const totalBudget = parsed.categories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);
-      const currency = initialContext.currency || 'CHF';
+      const currency = contextRef.current.currency || 'CHF';
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
@@ -1001,7 +1034,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, initialContext.currency, onCreditsUpdate]);
+  }, [tripId, sending, onCreditsUpdate]);
 
   return {
     phase,
@@ -1019,6 +1052,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     creditsBalance,
     estimatedSeconds,
     activeJobId,
+    contextReady,
     startConversation,
     sendMessage,
     generatePlan,
