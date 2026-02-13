@@ -4,12 +4,15 @@ import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getTrips = async (userId: string): Promise<Trip[]> => {
   return cachedQuery(`trips:${userId}`, async () => {
+    // Inner join with trip_collaborators to only return trips the user participates in.
+    // Without this filter, admin users would see ALL trips due to RLS admin bypass.
     const { data, error } = await supabase
       .from('trips')
-      .select('*')
+      .select('*, trip_collaborators!inner(user_id)')
+      .eq('trip_collaborators.user_id', userId)
       .order('start_date', { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data ?? []).map(({ trip_collaborators, ...trip }: any) => trip) as Trip[];
   });
 };
 

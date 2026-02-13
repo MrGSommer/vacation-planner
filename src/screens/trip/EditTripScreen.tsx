@@ -500,7 +500,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
               <View style={styles.fableToggle}>
                 <View style={styles.fableToggleInfo}>
                   <Text style={styles.fableToggleLabel}>Fable aktiviert</Text>
-                  <Text style={styles.fableToggleDesc}>Fable fuer diese Reise ein-/ausschalten</Text>
+                  <Text style={styles.fableToggleDesc}>Fable für diese Reise ein-/ausschalten</Text>
                 </View>
                 <Switch value={fableEnabled} onValueChange={setFableEnabled} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" />
               </View>
