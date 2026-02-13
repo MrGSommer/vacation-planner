@@ -1175,8 +1175,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     tripMemoryRef.current = undefined;
     if (pollingRef.current) clearInterval(pollingRef.current);
 
-    // Delete saved conversation + trip messages + trip memory
+    // Release processing lock, then delete saved conversation + trip messages + trip memory
     if (tripId) {
+      releaseProcessingLock(tripId).catch(() => {});
       deleteAiConversation(tripId).catch(() => {});
     }
   }, [tripId]);

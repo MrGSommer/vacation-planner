@@ -57,10 +57,13 @@ export function useAiTypingBroadcast(
   const callbackRef = useRef(onTypingChange);
   callbackRef.current = onTypingChange;
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const subscribedRef = useRef(false);
   const typingMapRef = useRef<Map<string, { name: string; timeout: ReturnType<typeof setTimeout> }>>(new Map());
 
   useEffect(() => {
     if (!tripId || !enabled) return;
+
+    subscribedRef.current = false;
 
     const channel = supabase.channel(`typing:${tripId}`, {
       config: { broadcast: { self: false } },
@@ -90,10 +93,13 @@ export function useAiTypingBroadcast(
       callbackRef.current(Array.from(map.values()).map(v => v.name));
     });
 
-    channel.subscribe();
+    channel.subscribe((status) => {
+      subscribedRef.current = status === 'SUBSCRIBED';
+    });
     channelRef.current = channel;
 
     return () => {
+      subscribedRef.current = false;
       // Clear all typing timeouts
       for (const entry of typingMapRef.current.values()) {
         clearTimeout(entry.timeout);
@@ -105,7 +111,8 @@ export function useAiTypingBroadcast(
   }, [tripId, userId, enabled]);
 
   const broadcastTyping = (isTyping: boolean) => {
-    channelRef.current?.send({
+    if (!subscribedRef.current || !channelRef.current) return;
+    channelRef.current.send({
       type: 'broadcast',
       event: 'typing',
       payload: { userId, userName, isTyping },
