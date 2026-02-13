@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Switch, Alert, Image, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Calendar, DateData } from 'react-native-calendars';
 import * as ImagePicker from 'expo-image-picker';
@@ -65,6 +65,13 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
 
+  // Fable settings
+  const [fableEnabled, setFableEnabled] = useState(true);
+  const [fableBudgetVisible, setFableBudgetVisible] = useState(true);
+  const [fablePackingVisible, setFablePackingVisible] = useState(true);
+  const [fableWebSearch, setFableWebSearch] = useState(true);
+  const [fableMemoryEnabled, setFableMemoryEnabled] = useState(true);
+
   // Cache unsplash results so repeated toggles don't re-fetch
   const unsplashCache = useRef<UnsplashPhoto[]>([]);
   const unsplashIndex = useRef(0);
@@ -89,6 +96,11 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         if (trip.cover_image_url) {
           setCoverMode((trip as any).cover_image_attribution ? 'unsplash' : 'upload');
         }
+        setFableEnabled(trip.fable_enabled);
+        setFableBudgetVisible(trip.fable_budget_visible);
+        setFablePackingVisible(trip.fable_packing_visible);
+        setFableWebSearch(trip.fable_web_search);
+        setFableMemoryEnabled(trip.fable_memory_enabled);
       } catch (e) {
         console.error(e);
       } finally {
@@ -282,6 +294,11 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         end_date: endDate,
         currency,
         notes: notes.trim() || null,
+        fable_enabled: fableEnabled,
+        fable_budget_visible: fableBudgetVisible,
+        fable_packing_visible: fablePackingVisible,
+        fable_web_search: fableWebSearch,
+        fable_memory_enabled: fableMemoryEnabled,
       });
       navigation.goBack();
     } catch (e) {
@@ -353,12 +370,12 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
 
       <View style={styles.progress}>
         {steps.map((s, i) => (
-          <View key={i} style={styles.progressItem}>
+          <TouchableOpacity key={i} style={styles.progressItem} onPress={() => setStep(i)} activeOpacity={0.7}>
             <View style={[styles.progressDot, i <= step && styles.progressDotActive]}>
               <Text style={[styles.progressDotText, i <= step && styles.progressDotTextActive]}>{i + 1}</Text>
             </View>
             <Text style={[styles.progressLabel, i === step && styles.progressLabelActive]}>{s}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
@@ -478,6 +495,43 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                 ))}
               </View>
               <Input label="Notizen" placeholder="Optionale Notizen zur Reise..." value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
+
+              <Text style={[styles.fieldLabel, { marginTop: spacing.lg }]}>Fable-Einstellungen</Text>
+              <View style={styles.fableToggle}>
+                <View style={styles.fableToggleInfo}>
+                  <Text style={styles.fableToggleLabel}>Fable aktiviert</Text>
+                  <Text style={styles.fableToggleDesc}>Fable fuer diese Reise ein-/ausschalten</Text>
+                </View>
+                <Switch value={fableEnabled} onValueChange={setFableEnabled} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" />
+              </View>
+              <View style={[styles.fableToggle, !fableEnabled && { opacity: 0.5 }]}>
+                <View style={styles.fableToggleInfo}>
+                  <Text style={styles.fableToggleLabel}>Budget sichtbar</Text>
+                  <Text style={styles.fableToggleDesc}>Fable darf Budget-Daten sehen</Text>
+                </View>
+                <Switch value={fableBudgetVisible} onValueChange={setFableBudgetVisible} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" disabled={!fableEnabled} />
+              </View>
+              <View style={[styles.fableToggle, !fableEnabled && { opacity: 0.5 }]}>
+                <View style={styles.fableToggleInfo}>
+                  <Text style={styles.fableToggleLabel}>Packliste sichtbar</Text>
+                  <Text style={styles.fableToggleDesc}>Fable darf Packlisten-Daten sehen</Text>
+                </View>
+                <Switch value={fablePackingVisible} onValueChange={setFablePackingVisible} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" disabled={!fableEnabled} />
+              </View>
+              <View style={[styles.fableToggle, !fableEnabled && { opacity: 0.5 }]}>
+                <View style={styles.fableToggleInfo}>
+                  <Text style={styles.fableToggleLabel}>Web-Suche erlaubt</Text>
+                  <Text style={styles.fableToggleDesc}>Fable darf im Web suchen</Text>
+                </View>
+                <Switch value={fableWebSearch} onValueChange={setFableWebSearch} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" disabled={!fableEnabled} />
+              </View>
+              <View style={[styles.fableToggle, !fableEnabled && { opacity: 0.5 }]}>
+                <View style={styles.fableToggleInfo}>
+                  <Text style={styles.fableToggleLabel}>Trip-Erinnerungen</Text>
+                  <Text style={styles.fableToggleDesc}>Fable darf sich Gespraechsinhalte merken</Text>
+                </View>
+                <Switch value={fableMemoryEnabled} onValueChange={setFableMemoryEnabled} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" disabled={!fableEnabled} />
+              </View>
             </>
           )}
 
@@ -612,6 +666,10 @@ const styles = StyleSheet.create({
   memberRoleTappable: { ...typography.caption, color: colors.primary },
   removeMember: { fontSize: 16, color: colors.error, padding: spacing.xs },
   emptyMembers: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', marginTop: spacing.lg },
+  fableToggle: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  fableToggleInfo: { flex: 1, marginRight: spacing.md },
+  fableToggleLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: 2 },
+  fableToggleDesc: { ...typography.caption, color: colors.textSecondary },
   footer: { flexDirection: 'row', padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   footerButton: { flex: 1 },
   footerNext: { marginLeft: spacing.sm },
