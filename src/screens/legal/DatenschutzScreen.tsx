@@ -17,7 +17,8 @@ export const DatenschutzScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.h2}>1. Verantwortliche Person</Text>
         <Text style={styles.body}>
           Gabriel Sommer{'\n'}
-          Schweiz{'\n'}
+          Grabenstrasse 15{'\n'}
+          5032 Aarau-Rohr, Schweiz{'\n'}
           E-Mail: programmable.work@gmail.com
         </Text>
 
@@ -47,19 +48,20 @@ export const DatenschutzScreen: React.FC<Props> = ({ navigation }) => {
           Wir nutzen folgende Drittanbieter:{'\n\n'}
           <Text style={styles.bold}>Supabase</Text> (Cloud-Datenbank, Authentifizierung, Dateispeicher) — Daten werden auf EU-Servern gespeichert.{'\n\n'}
           <Text style={styles.bold}>Stripe</Text> (Zahlungsabwicklung) — Verarbeitet Zahlungsdaten gemäss PCI DSS.{'\n\n'}
-          <Text style={styles.bold}>Google Maps</Text> (Kartenanzeige, Routenberechnung) — IP-Adresse und Standortdaten werden übermittelt.{'\n\n'}
+          <Text style={styles.bold}>Google Maps</Text> (Kartenanzeige, Routenberechnung) — IP-Adresse und Standortdaten werden an Google übermittelt. Es gelten die Datenschutzbestimmungen von Google (policies.google.com/privacy).{'\n\n'}
           <Text style={styles.bold}>Unsplash</Text> (Coverbilder) — Keine personenbezogenen Daten werden übermittelt.{'\n\n'}
-          <Text style={styles.bold}>Anthropic</Text> (Reisebegleiter Fable) — Reisedaten werden für die Plangeneration übermittelt.
+          <Text style={styles.bold}>Anthropic</Text> (Reisebegleiter Fable) — Reisedaten (Ziel, Daten, Vorlieben, Gesprächsinhalte) werden zur Plangeneration an Anthropic (USA) übermittelt. Anthropic speichert diese Daten nicht dauerhaft und verwendet sie nicht zum Training von KI-Modellen gemäss deren Nutzungsbedingungen.
         </Text>
 
         <Text style={styles.h2}>5. Deine Rechte</Text>
         <Text style={styles.body}>
-          Du hast gemäss nDSG (Schweiz) und DSGVO (EU) folgende Rechte:{'\n\n'}
+          Du hast gemäss dem Schweizer Datenschutzgesetz (nDSG) folgende Rechte:{'\n\n'}
           - <Text style={styles.bold}>Auskunft:</Text> Du kannst jederzeit Auskunft über deine gespeicherten Daten verlangen.{'\n'}
           - <Text style={styles.bold}>Berichtigung:</Text> Du kannst deine Daten im Profil jederzeit bearbeiten.{'\n'}
           - <Text style={styles.bold}>Löschung:</Text> Du kannst deinen Account und alle Daten über die Profil-Einstellungen löschen.{'\n'}
           - <Text style={styles.bold}>Datenportabilität:</Text> Du kannst einen Export deiner Daten anfordern.{'\n'}
-          - <Text style={styles.bold}>Widerspruch:</Text> Du kannst der Verarbeitung widersprechen.
+          - <Text style={styles.bold}>Widerspruch:</Text> Du kannst der Verarbeitung widersprechen.{'\n\n'}
+          Wir beantworten Anfragen zu deinen Rechten innerhalb von 30 Tagen (Art. 25 nDSG). Kontaktiere uns unter programmable.work@gmail.com.
         </Text>
 
         <Text style={styles.h2}>6. Aufbewahrung</Text>

@@ -16,6 +16,8 @@ export const ImpressumScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.h2}>Angaben gemäss Schweizer Recht</Text>
         <Text style={styles.body}>
           Gabriel Sommer{'\n'}
+          Grabenstrasse 15{'\n'}
+          5032 Aarau-Rohr{'\n'}
           Schweiz
         </Text>
 

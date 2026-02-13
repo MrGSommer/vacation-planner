@@ -125,7 +125,13 @@ function parseWebSearchRequest(text: string): { cleanText: string; searchQuery: 
 
 function formatSearchResults(results: WebSearchResult[]): string {
   if (results.length === 0) return 'Keine Ergebnisse gefunden.';
-  return results.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`).join('\n\n');
+  return results.map((r, i) => {
+    let entry = `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`;
+    if (r.pageContent) {
+      entry += `\n   Seiteninhalt: ${r.pageContent}`;
+    }
+    return entry;
+  }).join('\n\n');
 }
 
 function estimateTokens(messages: AiMessage[]): number {

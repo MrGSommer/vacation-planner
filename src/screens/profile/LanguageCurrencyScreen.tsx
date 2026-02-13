@@ -11,10 +11,7 @@ import { RootStackParamList } from '../../types/navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'LanguageCurrency'>;
 
 const LANGUAGES = [
-  { code: 'de', label: 'Deutsch' },
-  { code: 'en', label: 'English' },
-  { code: 'fr', label: 'Français' },
-  { code: 'it', label: 'Italiano' },
+  { code: 'de', label: 'Deutsch (Schweiz)' },
 ];
 
 export const LanguageCurrencyScreen: React.FC<Props> = ({ navigation }) => {

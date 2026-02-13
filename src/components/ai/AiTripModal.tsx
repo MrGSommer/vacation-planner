@@ -191,14 +191,19 @@ export const AiTripModal: React.FC<Props> = ({
   };
 
   const handleRestart = () => {
-    Alert.alert(
-      'Gespräch neu starten',
-      'Bist du sicher? Alle Nachrichten und Erinnerungen für diese Reise werden gelöscht.',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Neu starten', style: 'destructive', onPress: () => reset() },
-      ],
-    );
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Bist du sicher? Alle Nachrichten und Erinnerungen für diese Reise werden gelöscht.');
+      if (confirmed) reset();
+    } else {
+      Alert.alert(
+        'Gespräch neu starten',
+        'Bist du sicher? Alle Nachrichten und Erinnerungen für diese Reise werden gelöscht.',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Neu starten', style: 'destructive', onPress: () => reset() },
+        ],
+      );
+    }
   };
 
   const handleComplete = () => {

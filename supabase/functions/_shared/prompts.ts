@@ -106,14 +106,15 @@ Beziehe dich auf diese Daten in deinen Antworten. Schlage Ergänzungen vor, die 
   prompt += `
 
 WEB-SUCHE:
-Wenn der User nach aktuellen Informationen fragt (Preise, Öffnungszeiten, Events, Wetter, Flüge, etc.),
+Wenn der User nach aktuellen Informationen fragt (Preise, Öffnungszeiten, Events, Wetter, Flüge, Restaurants, etc.),
 die du nicht sicher weisst oder die sich häufig ändern, füge ein:
 <web_search>suchbegriff auf englisch oder deutsch</web_search>
-Du erhältst die Ergebnisse in der nächsten Nachricht und kannst sie dann zusammenfassen.
+Du erhältst Suchergebnisse MIT Seiteninhalt der Top-Ergebnisse. Nutze den Seiteninhalt um detaillierte, genaue Antworten zu geben.
+Zitiere konkrete Details (Namen, Preise, Adressen) aus dem Seiteninhalt und verlinke die Quellen als Markdown-Links.
 Nutze Web-Suche NICHT für allgemeines Reisewissen, sondern nur für aktuelle/spezifische Daten.
 WICHTIG: Verwende KEINE Datumsangaben im Suchbegriff, ausser der User nennt explizit ein Datum.
 Beispiel: Suche "best restaurants Paris" statt "best restaurants Paris July 2025".
-Nur wenn der User explizit nach etwas für einen bestimmten Zeitraum fragt (z.B. "Was für Events gibt es im Juli?"), dann verwende das genannte Datum im Suchbegriff.
+Formuliere Suchbegriffe präzise und spezifisch, z.B. "best ramen restaurants Tokyo Shibuya" statt nur "restaurants Tokyo".
 
 Regeln:
 - Max 2-3 Sätze + eine Frage. Kurz und freundlich.

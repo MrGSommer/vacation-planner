@@ -16,7 +16,7 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
 
         <Text style={styles.h2}>1. Geltungsbereich</Text>
         <Text style={styles.body}>
-          Diese AGB gelten für die Nutzung der Web-Applikation "WayFable" (nachfolgend "Dienst"), betrieben von Gabriel Sommer, Schweiz.
+          Diese AGB gelten für die Nutzung der Web-Applikation "WayFable" (nachfolgend "Dienst"), betrieben von Gabriel Sommer, Grabenstrasse 15, 5032 Aarau-Rohr, Schweiz. Mit der Registrierung und Nutzung des Dienstes akzeptierst du diese AGB.
         </Text>
 
         <Text style={styles.h2}>2. Leistungsbeschreibung</Text>
@@ -40,12 +40,13 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
           - Premium monatlich: CHF 9.90/Monat{'\n'}
           - Premium jährlich: CHF 99/Jahr{'\n'}
           - Zusätzliche Inspirationen: CHF 5 pro 20 Inspirationen{'\n\n'}
-          Alle Preise verstehen sich inklusive allfälliger Steuern. Die Zahlung erfolgt über Stripe. Es gelten die Zahlungsbedingungen von Stripe.
+          Alle Preise verstehen sich in Schweizer Franken (CHF) inklusive allfälliger Steuern. Die Zahlung erfolgt über den Zahlungsdienstleister Stripe. Für die Zahlungsabwicklung gelten die Nutzungsbedingungen von Stripe (stripe.com/legal). WayFable übernimmt keine Haftung für die Zahlungsabwicklung durch Stripe.
         </Text>
 
         <Text style={styles.h2}>4. Kündigung</Text>
         <Text style={styles.body}>
-          Das Premium-Abonnement kann jederzeit gekündigt werden. Die Kündigung wird zum Ende der aktuellen Abrechnungsperiode wirksam. Nach der Kündigung wird der Account auf den Free-Tarif zurückgestuft.
+          Das Premium-Abonnement kann jederzeit gekündigt werden. Die Kündigung wird zum Ende der aktuellen Abrechnungsperiode wirksam. Nach der Kündigung wird der Account auf den Free-Tarif zurückgestuft. Deine Trip-Daten bleiben erhalten, unterliegen aber den Einschränkungen des Free-Tarifs.{'\n\n'}
+          Ein gesetzliches Widerrufsrecht bei digitalen Dienstleistungen besteht nach Schweizer Recht nicht. Bereits bezahlte Abo-Perioden werden nicht rückerstattet. Separat gekaufte Inspirationen sind nicht erstattungsfähig.
         </Text>
 
         <Text style={styles.h2}>5. Verfügbarkeit</Text>
@@ -56,10 +57,11 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.h2}>6. Haftung</Text>
         <Text style={styles.body}>
           Die Nutzung des Dienstes erfolgt auf eigene Verantwortung. WayFable haftet nicht für:{'\n\n'}
-          - Schäden durch fehlerhafte Empfehlungen des Reisebegleiters{'\n'}
+          - Schäden durch fehlerhafte Empfehlungen des Reisebegleiters Fable (KI-generierte Inhalte dienen nur als Vorschlag und stellen keine Beratung dar){'\n'}
           - Datenverlust bei technischen Störungen{'\n'}
-          - Aktualität und Richtigkeit von Reiseinformationen{'\n\n'}
-          Die Haftung wird im gesetzlich zulässigen Rahmen ausgeschlossen.
+          - Aktualität und Richtigkeit von Reiseinformationen{'\n'}
+          - Indirekte Schäden, Folgeschäden oder entgangenen Gewinn{'\n\n'}
+          Die Haftung von WayFable ist in jedem Fall auf den vom Nutzer in den letzten 12 Monaten bezahlten Betrag beschränkt. Weitergehende Haftungsansprüche sind im gesetzlich zulässigen Rahmen ausgeschlossen.
         </Text>
 
         <Text style={styles.h2}>7. Nutzerpflichten</Text>
@@ -80,9 +82,23 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
           Wir behalten uns vor, diese AGB zu ändern. Wesentliche Änderungen werden per E-Mail mitgeteilt. Die weitere Nutzung des Dienstes nach Änderung gilt als Zustimmung.
         </Text>
 
-        <Text style={styles.h2}>10. Anwendbares Recht</Text>
+        <Text style={styles.h2}>10. Vertragsschluss</Text>
         <Text style={styles.body}>
-          Es gilt Schweizer Recht. Gerichtsstand ist der Wohnsitz des Betreibers in der Schweiz.
+          Der Vertrag kommt in folgenden Schritten zustande:{'\n\n'}
+          1. Registrierung mit E-Mail-Adresse und Passwort{'\n'}
+          2. Akzeptierung dieser AGB und der Datenschutzerklärung{'\n'}
+          3. Bei Premium: Auswahl des Abonnements und Zahlung über Stripe{'\n\n'}
+          Der Vertrag für den Free-Tarif gilt ab Registrierung. Der Premium-Vertrag gilt ab erfolgreicher Zahlung.
+        </Text>
+
+        <Text style={styles.h2}>11. Anwendbares Recht</Text>
+        <Text style={styles.body}>
+          Es gilt ausschliesslich Schweizer Recht. Gerichtsstand ist Aarau, Schweiz.
+        </Text>
+
+        <Text style={styles.h2}>12. Salvatorische Klausel</Text>
+        <Text style={styles.body}>
+          Sollte eine Bestimmung dieser AGB unwirksam oder undurchführbar sein, bleiben die übrigen Bestimmungen davon unberührt. Die unwirksame Bestimmung wird durch eine wirksame ersetzt, die dem wirtschaftlichen Zweck am nächsten kommt.
         </Text>
       </ScrollView>
     </View>

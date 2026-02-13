@@ -1,8 +1,5 @@
 export const CURRENCIES = [
   { code: 'CHF', symbol: 'CHF', name: 'Schweizer Franken' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'USD', symbol: '$', name: 'US-Dollar' },
-  { code: 'GBP', symbol: '£', name: 'Britisches Pfund' },
 ] as const;
 
 export const DEFAULT_CURRENCY = 'CHF';

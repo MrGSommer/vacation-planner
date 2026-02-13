@@ -4,6 +4,7 @@ export interface WebSearchResult {
   title: string;
   url: string;
   snippet: string;
+  pageContent?: string;
 }
 
 export async function searchWeb(
