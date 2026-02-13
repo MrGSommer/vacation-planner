@@ -47,6 +47,15 @@ export interface AiContext {
   tripMemory?: string;
   senderName?: string;
   customInstruction?: string;
+  webSearchResults?: string;
+  collaboratorNames?: string[];
+  fableSettings?: {
+    budgetVisible: boolean;
+    packingVisible: boolean;
+    webSearch: boolean;
+    memoryEnabled: boolean;
+    tripInstruction: string | null;
+  };
 }
 
 export interface AiResponse {
@@ -58,7 +67,7 @@ export interface AiResponse {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export type AiTask = 'greeting' | 'conversation' | 'plan_generation' | 'plan_activities'
-  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan';
+  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search';
 
 export const sendAiMessage = async (
   task: AiTask,

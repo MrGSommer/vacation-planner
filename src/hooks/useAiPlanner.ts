@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
 import { getTrip } from '../api/trips';
+import { getCollaborators } from '../api/invitations';
 import { getActivitiesForTrip, getDays } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
@@ -12,6 +13,9 @@ import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
 import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
 import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
 import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
+import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
+import { searchWeb, WebSearchResult } from '../api/webSearch';
+import { useAiRealtime, useAiTypingBroadcast } from './useAiRealtime';
 import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
 
@@ -107,6 +111,23 @@ function parseTripMemoryUpdate(text: string): { cleanText: string; tripMemoryUpd
   return { cleanText, tripMemoryUpdate: match[1].trim() };
 }
 
+function parseWebSearchRequest(text: string): { cleanText: string; searchQuery: string | null } {
+  const searchRegex = /<web_search>([\s\S]*?)<\/web_search>/;
+  const match = text.match(searchRegex);
+
+  if (!match) {
+    return { cleanText: text, searchQuery: null };
+  }
+
+  const cleanText = text.replace(searchRegex, '').trim();
+  return { cleanText, searchQuery: match[1].trim() };
+}
+
+function formatSearchResults(results: WebSearchResult[]): string {
+  if (results.length === 0) return 'Keine Ergebnisse gefunden.';
+  return results.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`).join('\n\n');
+}
+
 function estimateTokens(messages: AiMessage[]): number {
   const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
   return Math.ceil(totalChars / CHARS_PER_TOKEN);
@@ -171,8 +192,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [creditsBalance, setCreditsBalance] = useState<number | null>(initialCredits ?? null);
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [webSearching, setWebSearching] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [lockUserName, setLockUserName] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const messagePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [contextReady, setContextReady] = useState(false);
   const contextRef = useRef<AiContext>({
     destination: initialContext.destination,
@@ -191,16 +214,76 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const tripMemoryRef = useRef<string | undefined>(undefined);
   const senderNameRef = useRef<string>('');
   const prevCreditsRef = useRef<number | null>(null);
+  const fableSettingsRef = useRef<{
+    enabled: boolean;
+    budgetVisible: boolean;
+    packingVisible: boolean;
+    webSearch: boolean;
+    memoryEnabled: boolean;
+    tripInstruction: string | null;
+  }>({ enabled: true, budgetVisible: true, packingVisible: true, webSearch: true, memoryEnabled: true, tripInstruction: null });
+  const personalMemoryEnabledRef = useRef(true);
+  const [fableDisabled, setFableDisabled] = useState(false);
 
-  // Load trip data when tripId is available (ensure context is always trip-derived)
+  // Realtime: instant message delivery from other users
+  const handleRealtimeMessage = useCallback((messageId: string, senderId: string) => {
+    // Skip own messages (already in state)
+    if (senderId === userId) return;
+
+    // Fetch all messages and merge
+    if (!tripId) return;
+    getAiTripMessages(tripId).then(serverMessages => {
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const newOnes = serverMessages.filter(m => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        const mapped: AiChatMessage[] = newOnes.map(m => ({
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: m.decrypted_content,
+          timestamp: new Date(m.created_at).getTime(),
+          creditsCost: m.credits_cost ?? undefined,
+          creditsAfter: m.credits_after ?? undefined,
+          senderId: m.sender_id,
+          senderName: m.sender_name || (m.role === 'assistant' ? 'Fable' : undefined),
+        }));
+        return [...prev, ...mapped].sort((a, b) => a.timestamp - b.timestamp);
+      });
+    }).catch(() => {});
+  }, [tripId, userId]);
+
+  useAiRealtime(tripId, phase === 'conversing' || phase === 'plan_review', handleRealtimeMessage);
+
+  // Typing indicators via Realtime Broadcast
+  const { broadcastTyping } = useAiTypingBroadcast(
+    tripId,
+    userId,
+    senderNameRef.current || 'User',
+    phase === 'conversing',
+    setTypingUsers,
+  );
+
+  // Load trip data + collaborators when tripId is available (ensure context is always trip-derived)
   useEffect(() => {
     if (!tripId) {
       setContextReady(true);
       return;
     }
     let cancelled = false;
-    getTrip(tripId).then(trip => {
+    Promise.all([getTrip(tripId), getCollaborators(tripId).catch(() => [])]).then(([trip, collabs]) => {
       if (cancelled) return;
+      const collabNames = collabs
+        .map(c => [c.profile?.first_name, c.profile?.last_name].filter(Boolean).join(' ') || c.profile?.email || '')
+        .filter(Boolean);
+      fableSettingsRef.current = {
+        enabled: trip.fable_enabled,
+        budgetVisible: trip.fable_budget_visible,
+        packingVisible: trip.fable_packing_visible,
+        webSearch: trip.fable_web_search,
+        memoryEnabled: trip.fable_memory_enabled,
+        tripInstruction: trip.fable_instruction,
+      };
+      setFableDisabled(!trip.fable_enabled);
       contextRef.current = {
         ...contextRef.current,
         destination: trip.destination,
@@ -211,6 +294,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         currency: trip.currency,
         travelersCount: trip.travelers_count,
         groupType: trip.group_type,
+        collaboratorNames: collabNames.length > 0 ? collabNames : undefined,
+        fableSettings: {
+          budgetVisible: trip.fable_budget_visible,
+          packingVisible: trip.fable_packing_visible,
+          webSearch: trip.fable_web_search,
+          memoryEnabled: trip.fable_memory_enabled,
+          tripInstruction: trip.fable_instruction,
+        },
       };
       setContextReady(true);
     }).catch(() => {
@@ -236,9 +327,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   // Debounced save conversation — only metadata/plan, no messages (those are individual rows now)
   const debouncedSave = useCallback((
     currentPhase: string,
-    currentMessages: AiChatMessage[],
     currentMetadata: AiMetadata | null,
     currentPlan: AiTripPlan | null,
+    dataSnapshot?: Record<string, any> | null,
   ) => {
     if (!tripId) return;
 
@@ -255,6 +346,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           startDate: ctx.startDate,
           endDate: ctx.endDate,
         },
+        dataSnapshot,
       ).catch(e => console.error('Failed to save conversation:', e));
     }, SAVE_DEBOUNCE_MS);
   }, [tripId, userId]);
@@ -282,8 +374,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const [activities, stops, budgetCategories, packingLists, days] = await Promise.all([
         getActivitiesForTrip(tripId),
         getStops(tripId),
-        getBudgetCategories(tripId),
-        getPackingLists(tripId),
+        fableSettingsRef.current.budgetVisible ? getBudgetCategories(tripId) : Promise.resolve([]),
+        fableSettingsRef.current.packingVisible ? getPackingLists(tripId) : Promise.resolve([]),
         getDays(tripId),
       ]);
 
@@ -340,19 +432,35 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
   const startConversation = useCallback(async (canSend = true) => {
     if (!contextReady) return;
+
+    // Master gate: if Fable is disabled for this trip, show info message
+    if (!fableSettingsRef.current.enabled) {
+      setPhase('conversing');
+      const disabledMsg: AiChatMessage = {
+        id: nextId(), role: 'assistant',
+        content: 'Fable ist fuer diese Reise deaktiviert. Ein Reise-Admin kann Fable in den Einstellungen aktivieren.',
+        timestamp: Date.now(), senderName: 'Fable',
+      };
+      setMessages([disabledMsg]);
+      return;
+    }
+
     setPhase('conversing');
     setError(null);
     setSending(true);
 
     try {
       const profile = await getProfile(userId);
-      const shortName = getShortName(profile);
+      personalMemoryEnabledRef.current = profile.fable_memory_enabled;
+      const shortName = profile.fable_name_visible
+        ? getShortName(profile)
+        : 'Reisender';
       senderNameRef.current = shortName;
 
       const [existingData, userMemory, tripMemory, savedMessages, savedConversation] = await Promise.all([
         loadExistingData(profile),
-        getAiUserMemory().catch(() => null),
-        tripId ? getAiTripMemory(tripId).catch(() => null) : null,
+        profile.fable_memory_enabled ? getAiUserMemory().catch(() => null) : null,
+        tripId && fableSettingsRef.current.memoryEnabled ? getAiTripMemory(tripId).catch(() => null) : null,
         tripId ? getAiTripMessages(tripId).catch(() => []) : [],
         tripId ? getAiConversation(tripId).catch(() => null) : null,
       ]);
@@ -421,11 +529,40 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         }
       }
 
+      // Acquire processing lock for greeting
+      if (tripId) {
+        const acquired = await acquireProcessingLock(tripId, userId, shortName);
+        if (!acquired) {
+          // Another user is already generating greeting — just wait for realtime
+          setSending(false);
+          return;
+        }
+      }
+
       // Greeting uses 'greeting' task — AI call happens but no credits are deducted
       // (system-initiated, not user action). Credits only spent on user messages.
       const destination = contextRef.current.destination || 'dein Reiseziel';
+
+      // Smart auto-analysis: detect manual trip changes since last Fable interaction
+      let changeNote = '';
+      if (mode === 'enhance' && existingData && savedConversation?.data_snapshot) {
+        const snap = savedConversation.data_snapshot as Record<string, any>;
+        const currentActivities = existingData.activities?.length || 0;
+        const currentStops = existingData.stops?.length || 0;
+        const snapActivities = snap.activitiesCount || 0;
+        const snapStops = snap.stopsCount || 0;
+        if (currentActivities !== snapActivities || currentStops !== snapStops) {
+          const diffs: string[] = [];
+          if (currentActivities > snapActivities) diffs.push(`${currentActivities - snapActivities} neue Aktivitäten`);
+          if (currentActivities < snapActivities) diffs.push(`${snapActivities - currentActivities} Aktivitäten entfernt`);
+          if (currentStops > snapStops) diffs.push(`${currentStops - snapStops} neue Stops`);
+          if (currentStops < snapStops) diffs.push(`${snapStops - currentStops} Stops entfernt`);
+          changeNote = ` Seit unserem letzten Gespräch hast du Änderungen vorgenommen: ${diffs.join(', ')}.`;
+        }
+      }
+
       const greetingContent = mode === 'enhance'
-        ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.`
+        ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.${changeNote}`
         : `Hallo! Ich plane eine Reise nach ${destination}. Hilf mir bei der Planung.`;
 
       const greeting: AiMessage = { role: 'user', content: `[${shortName}]: ${greetingContent}` };
@@ -437,15 +574,15 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
       const { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
 
-      // Save user memory update if present
-      if (memoryUpdate) {
+      // Save user memory update if present (gated by personal setting)
+      if (memoryUpdate && personalMemoryEnabledRef.current) {
         userMemoryRef.current = memoryUpdate;
         contextRef.current.userMemory = memoryUpdate;
         saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
       }
 
-      // Save trip memory update if present
-      if (tripMemoryUpdate && tripId) {
+      // Save trip memory update if present (gated by trip setting)
+      if (tripMemoryUpdate && tripId && fableSettingsRef.current.memoryEnabled) {
         tripMemoryRef.current = tripMemoryUpdate;
         contextRef.current.tripMemory = tripMemoryUpdate;
         saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
@@ -473,12 +610,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
       }
 
-      debouncedSave('conversing', newMessages, meta, null);
+      // Save data snapshot for future auto-analysis
+      if (tripId && existingData) {
+        const snapshot = {
+          activitiesCount: existingData.activities?.length || 0,
+          stopsCount: existingData.stops?.length || 0,
+          timestamp: new Date().toISOString(),
+        };
+        debouncedSave('conversing', meta, null, snapshot);
+      } else {
+        debouncedSave('conversing', meta, null);
+      }
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'startConversation' } });
       setError(e.message || 'Verbindung zum AI-Service fehlgeschlagen');
     } finally {
       setSending(false);
+      // Release processing lock
+      if (tripId) {
+        releaseProcessingLock(tripId).catch(() => {});
+      }
     }
   }, [contextReady, mode, tripId, userId, loadExistingData, debouncedSave, persistMessage]);
 
@@ -487,6 +638,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
     setError(null);
     setSending(true);
+    broadcastTyping(false);
 
     const shortName = senderNameRef.current || 'User';
     const userMsg: AiChatMessage = {
@@ -500,6 +652,16 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     persistMessage('user', text.trim(), shortName);
 
     try {
+      // Acquire processing lock
+      if (tripId) {
+        const acquired = await acquireProcessingLock(tripId, userId, shortName);
+        if (!acquired) {
+          setError('Fable bearbeitet gerade eine Anfrage eines anderen Mitreisenden...');
+          setSending(false);
+          return;
+        }
+      }
+
       // Prepare messages for API (trimmed, with sender prefix for user messages)
       const trimmed = trimMessages(updatedMessages);
       const apiMessages: AiMessage[] = trimmed.map(m => ({
@@ -529,32 +691,103 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       }
 
       // Parse trip memory, user memory, and metadata
-      const { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
-      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
-      const { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
+      let { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
+      let { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
+      let { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
 
-      // Save user memory update if present
-      if (memoryUpdate) {
+      // Save user memory update if present (gated by personal setting)
+      if (memoryUpdate && personalMemoryEnabledRef.current) {
         userMemoryRef.current = memoryUpdate;
         contextRef.current.userMemory = memoryUpdate;
         saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
       }
 
-      // Save trip memory update if present
-      if (tripMemoryUpdate && tripId) {
+      // Save trip memory update if present (gated by trip setting)
+      if (tripMemoryUpdate && tripId && fableSettingsRef.current.memoryEnabled) {
         tripMemoryRef.current = tripMemoryUpdate;
         contextRef.current.tripMemory = tripMemoryUpdate;
         saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
       }
 
+      // Check for web search request (gated by trip setting)
+      const { cleanText: textWithoutSearch, searchQuery } = parseWebSearchRequest(cleanText);
+
+      // If web search disabled, strip the tag and use text as-is
+      if (searchQuery && !fableSettingsRef.current.webSearch) {
+        cleanText = textWithoutSearch || cleanText;
+      } else if (searchQuery && fableSettingsRef.current.webSearch) {
+        // Show intermediate message + search indicator
+        const searchingMsg: AiChatMessage = {
+          id: nextId(), role: 'assistant', content: textWithoutSearch || 'Ich suche im Web...', timestamp: Date.now(),
+          senderName: 'Fable',
+        };
+        setMessages([...updatedMessages, searchingMsg]);
+        setWebSearching(true);
+
+        try {
+          const searchResults = await searchWeb(searchQuery);
+          setWebSearching(false);
+
+          // Format results and send follow-up AI call
+          const formattedResults = formatSearchResults(searchResults);
+          const followUpContext: AiContext = {
+            ...contextRef.current,
+            webSearchResults: formattedResults,
+          };
+
+          // Add the search results as a system-like message in the conversation
+          const followUpMessages: AiMessage[] = [
+            ...apiMessages,
+            { role: 'assistant', content: textWithoutSearch || 'Ich habe im Web gesucht.' },
+            { role: 'user', content: `[System]: Web-Suchergebnisse für "${searchQuery}":\n${formattedResults}` },
+          ];
+
+          const followUpResponse = await sendAiMessage('conversation', followUpMessages, followUpContext);
+
+          // Parse the follow-up response
+          const { cleanText: fuTextAfterTripMemory, tripMemoryUpdate: fuTripMemory } = parseTripMemoryUpdate(followUpResponse.content);
+          const { cleanText: fuTextAfterMemory, memoryUpdate: fuMemory } = parseMemoryUpdate(fuTextAfterTripMemory);
+          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuTextAfterMemory);
+
+          if (fuMemory && personalMemoryEnabledRef.current) {
+            userMemoryRef.current = fuMemory;
+            contextRef.current.userMemory = fuMemory;
+            saveAiUserMemory(fuMemory).catch(e => console.error('Failed to save memory:', e));
+          }
+          if (fuTripMemory && tripId && fableSettingsRef.current.memoryEnabled) {
+            tripMemoryRef.current = fuTripMemory;
+            contextRef.current.tripMemory = fuTripMemory;
+            saveAiTripMemory(tripId, fuTripMemory).catch(e => console.error('Failed to save trip memory:', e));
+          }
+
+          // Update credits from follow-up
+          if (followUpResponse.credits_remaining !== undefined) {
+            const totalCost = creditsCost !== undefined
+              ? (prevCreditsRef.current !== null ? prevCreditsRef.current - followUpResponse.credits_remaining + creditsCost : undefined)
+              : undefined;
+            prevCreditsRef.current = followUpResponse.credits_remaining;
+            setCreditsBalance(followUpResponse.credits_remaining);
+            onCreditsUpdate?.(followUpResponse.credits_remaining);
+            creditsCost = totalCost;
+          }
+
+          cleanText = fuCleanText;
+          meta = fuMeta || meta;
+        } catch (searchErr) {
+          setWebSearching(false);
+          // Web search failed — use the original text without search tag
+          cleanText = textWithoutSearch || cleanText;
+        }
+      }
+
       const aiMsg: AiChatMessage = {
         id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now(),
-        creditsCost, creditsAfter: response.credits_remaining,
+        creditsCost, creditsAfter: prevCreditsRef.current ?? undefined,
         senderName: 'Fable',
       };
 
       // Persist AI message
-      persistMessage('assistant', cleanText, 'Fable', creditsCost, response.credits_remaining);
+      persistMessage('assistant', cleanText, 'Fable', creditsCost, prevCreditsRef.current ?? undefined);
 
       const allMessages = [...updatedMessages, aiMsg];
       setMessages(allMessages);
@@ -564,53 +797,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
       }
 
-      debouncedSave('conversing', allMessages, meta, null);
+      debouncedSave('conversing', meta, null);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage' } });
       setError(e.message || 'Nachricht konnte nicht gesendet werden');
     } finally {
       setSending(false);
-    }
-  }, [messages, sending, userId, tripId, debouncedSave, persistMessage]);
-
-  // Poll for new messages from other users (every 10s when conversing)
-  const pollTripMessages = useCallback(async () => {
-    if (!tripId) return;
-    try {
-      const serverMessages = await getAiTripMessages(tripId);
-      setMessages(prev => {
-        const existingIds = new Set(prev.map(m => m.id));
-        const newOnes = serverMessages.filter(m => !existingIds.has(m.id));
-        if (newOnes.length === 0) return prev;
-        const mapped: AiChatMessage[] = newOnes.map(m => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          content: m.decrypted_content,
-          timestamp: new Date(m.created_at).getTime(),
-          creditsCost: m.credits_cost ?? undefined,
-          creditsAfter: m.credits_after ?? undefined,
-          senderId: m.sender_id,
-          senderName: m.sender_name || (m.role === 'assistant' ? 'Fable' : undefined),
-        }));
-        return [...prev, ...mapped].sort((a, b) => a.timestamp - b.timestamp);
-      });
-    } catch {
-      // Ignore polling errors
-    }
-  }, [tripId]);
-
-  // Start/stop message polling based on phase
-  useEffect(() => {
-    if (phase === 'conversing' && tripId) {
-      messagePollRef.current = setInterval(pollTripMessages, 10000);
-    }
-    return () => {
-      if (messagePollRef.current) {
-        clearInterval(messagePollRef.current);
-        messagePollRef.current = null;
+      setWebSearching(false);
+      // Release processing lock
+      if (tripId) {
+        releaseProcessingLock(tripId).catch(() => {});
       }
-    };
-  }, [phase, tripId, pollTripMessages]);
+    }
+  }, [messages, sending, userId, tripId, debouncedSave, persistMessage, broadcastTyping]);
 
   const buildPlanSummary = useCallback((p: AiTripPlan): string => {
     const days = p.days?.length || 0;
@@ -659,7 +858,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           };
           setMessages(prev => {
             const updated = [...prev, summaryMsg];
-            debouncedSave('plan_review', updated, metadata, job.plan_json);
+            debouncedSave('plan_review', metadata, job.plan_json);
             return updated;
           });
           setPhase('plan_review');
@@ -806,7 +1005,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => {
         const updated = [...prev, summaryMsg];
-        debouncedSave('plan_review', updated, metadata, mergedPlan);
+        debouncedSave('plan_review', metadata, mergedPlan);
         return updated;
       });
       setPhase('plan_review');
@@ -929,7 +1128,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => {
         const updated = [...prev, summaryMsg];
-        debouncedSave('plan_review', updated, metadata, parsed);
+        debouncedSave('plan_review', metadata, parsed);
         return updated;
       });
       setPhase('plan_review');
@@ -963,10 +1162,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setCreditsBalance(null);
     setEstimatedSeconds(null);
     setActiveJobId(null);
+    setWebSearching(false);
+    setTypingUsers([]);
+    setLockUserName(null);
     prevCreditsRef.current = null;
     tripMemoryRef.current = undefined;
     if (pollingRef.current) clearInterval(pollingRef.current);
-    if (messagePollRef.current) clearInterval(messagePollRef.current);
 
     // Delete saved conversation + trip messages + trip memory
     if (tripId) {
@@ -1195,6 +1396,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     estimatedSeconds,
     activeJobId,
     contextReady,
+    webSearching,
+    typingUsers,
+    lockUserName,
+    fableDisabled,
     startConversation,
     sendMessage,
     generatePlan,
@@ -1213,5 +1418,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     generatePackingList,
     generateBudgetCategories,
     generateDayPlan,
+    broadcastTyping,
   };
 };

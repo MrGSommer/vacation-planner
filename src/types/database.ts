@@ -16,6 +16,8 @@ export interface Profile {
   ai_credits_balance: number;
   ai_credits_monthly_quota: number;
   ai_custom_instruction: string | null;
+  fable_name_visible: boolean;
+  fable_memory_enabled: boolean;
   payment_error_message: string | null;
   is_admin: boolean;
   created_at: string;
@@ -89,6 +91,12 @@ export interface Trip {
   group_type: 'solo' | 'couple' | 'family' | 'friends' | 'group';
   notes: string | null;
   theme_color: string | null;
+  fable_enabled: boolean;
+  fable_budget_visible: boolean;
+  fable_packing_visible: boolean;
+  fable_web_search: boolean;
+  fable_memory_enabled: boolean;
+  fable_instruction: string | null;
   created_at: string;
   updated_at: string;
 }

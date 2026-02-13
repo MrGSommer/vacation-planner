@@ -21,6 +21,7 @@ import { NotificationsScreen } from '../screens/profile/NotificationsScreen';
 import { LanguageCurrencyScreen } from '../screens/profile/LanguageCurrencyScreen';
 import { FeedbackScreen } from '../screens/profile/FeedbackScreen';
 import { FableSettingsScreen } from '../screens/profile/FableSettingsScreen';
+import { FableTripSettingsScreen } from '../screens/trip/FableTripSettingsScreen';
 import { AcceptInviteScreen } from '../screens/invite/AcceptInviteScreen';
 import { TripShareScreen } from '../screens/share/TripShareScreen';
 import { SubscriptionScreen } from '../screens/subscription/SubscriptionScreen';
@@ -59,6 +60,7 @@ const linking = {
       Notifications: 'notifications',
       LanguageCurrency: 'settings/language',
       FableSettings: 'settings/fable',
+      FableTripSettings: 'trip/:tripId/fable-settings',
       Subscription: 'subscription',
       Datenschutz: 'datenschutz',
       AGB: 'agb',
@@ -156,6 +158,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="Notifications" component={NotificationsScreen} />
               <Stack.Screen name="LanguageCurrency" component={LanguageCurrencyScreen} />
               <Stack.Screen name="FableSettings" component={FableSettingsScreen} />
+              <Stack.Screen name="FableTripSettings" component={FableTripSettingsScreen} />
               <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
               <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />

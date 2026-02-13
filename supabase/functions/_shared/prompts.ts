@@ -29,10 +29,15 @@ Kontext:
 - Reisende: ${travelersCount || 'nicht festgelegt'} Person(en)
 - Reisegruppe: ${groupType || 'nicht festgelegt'}
 - Reiseart: ${tripType === 'roundtrip' ? 'Rundreise' : tripType === 'pointtopoint' ? 'Streckenreise' : 'nicht festgelegt'}
-- Transportmittel: ${transportMode || 'nicht festgelegt'}`;
+- Transportmittel: ${transportMode || 'nicht festgelegt'}
+- Teilnehmer: ${context.collaboratorNames?.length ? context.collaboratorNames.join(', ') : 'nicht bekannt'}`;
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (userMemory) {
@@ -41,6 +46,10 @@ Kontext:
 
   if (context.tripMemory) {
     prompt += `\n\nWas du über diese Reise weisst (aus bisherigen Gesprächen):\n${context.tripMemory}\nNutze diese Infos für konsistente Vorschläge. Frage nicht erneut nach bereits geklärten Punkten.`;
+  }
+
+  if (context.webSearchResults) {
+    prompt += `\n\nWEB-SUCHERGEBNISSE (aktuell):\n${context.webSearchResults}\nFasse die relevanten Ergebnisse zusammen. Zitiere Quellen als Markdown-Links: [Titel](URL).\nGib mindestens 1-2 Quellen an.`;
   }
 
   if (existingData) {
@@ -95,6 +104,13 @@ Beziehe dich auf diese Daten in deinen Antworten. Schlage Ergänzungen vor, die 
   }
 
   prompt += `
+
+WEB-SUCHE:
+Wenn der User nach aktuellen Informationen fragt (Preise, Öffnungszeiten, Events, Wetter, Flüge, etc.),
+die du nicht sicher weisst oder die sich häufig ändern, füge ein:
+<web_search>suchbegriff auf englisch oder deutsch</web_search>
+Du erhältst die Ergebnisse in der nächsten Nachricht und kannst sie dann zusammenfassen.
+Nutze Web-Suche NICHT für allgemeines Reisewissen, sondern nur für aktuelle/spezifische Daten.
 
 Regeln:
 - Max 2-3 Sätze + eine Frage. Kurz und freundlich.
@@ -160,6 +176,10 @@ ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (userMemory) {
@@ -237,6 +257,10 @@ ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (userMemory) {
@@ -349,6 +373,10 @@ ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (userMemory) {
@@ -479,6 +507,10 @@ REISE-DETAILS:
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
   }
 
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+  }
+
   if (existingData?.packingItems?.length > 0) {
     prompt += `\n\nBEREITS VORHANDENE ITEMS (NICHT duplizieren!):
 ${existingData.packingItems.map((i: any) => `- ${i.name} (${i.category}, ${i.quantity}x)`).join('\n')}`;
@@ -514,6 +546,10 @@ REISE-DETAILS:
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (existingData?.budgetCategories?.length > 0) {
@@ -555,6 +591,10 @@ REISE-DETAILS:
 
   if (context.customInstruction) {
     prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+  }
+
+  if (context.fableSettings?.tripInstruction) {
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
   if (userMemory) {

@@ -17,6 +17,8 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const [customInstruction, setCustomInstruction] = useState(profile?.ai_custom_instruction || '');
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
+  const [nameVisible, setNameVisible] = useState(profile?.fable_name_visible ?? true);
+  const [personalMemoryEnabled, setPersonalMemoryEnabled] = useState(profile?.fable_memory_enabled ?? true);
   const [memoryText, setMemoryText] = useState<string | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(true);
   const [memoryDeleting, setMemoryDeleting] = useState(false);
@@ -54,6 +56,17 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
       await refreshProfile();
     } catch {
       setAiContextEnabled(!value);
+    }
+  };
+
+  const handleToggle = async (field: string, value: boolean, setter: (v: boolean) => void) => {
+    if (!user) return;
+    setter(value);
+    try {
+      await updateProfile(user.id, { [field]: value });
+      await refreshProfile();
+    } catch {
+      setter(!value);
     }
   };
 
@@ -142,6 +155,38 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
             <Switch
               value={aiContextEnabled}
               onValueChange={handleContextToggle}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </Card>
+
+        {/* Name Visibility */}
+        <Card style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleLabel}>Name sichtbar fuer Fable</Text>
+              <Text style={styles.toggleDesc}>Wenn deaktiviert, sieht Fable dich als "Reisender" statt deinem Namen</Text>
+            </View>
+            <Switch
+              value={nameVisible}
+              onValueChange={(v) => handleToggle('fable_name_visible', v, setNameVisible)}
+              trackColor={{ false: colors.border, true: colors.secondary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </Card>
+
+        {/* Personal Memory */}
+        <Card style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleLabel}>Fable darf sich Vorlieben merken</Text>
+              <Text style={styles.toggleDesc}>Betrifft nur deine persoenlichen Vorlieben ueber alle Reisen hinweg</Text>
+            </View>
+            <Switch
+              value={personalMemoryEnabled}
+              onValueChange={(v) => handleToggle('fable_memory_enabled', v, setPersonalMemoryEnabled)}
               trackColor={{ false: colors.border, true: colors.secondary }}
               thumbColor="#FFFFFF"
             />

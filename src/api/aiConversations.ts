@@ -2,9 +2,10 @@ import { supabase } from './supabase';
 
 export interface SavedConversation {
   phase: string;
-  data: any; // { messages, metadata, plan }
+  data: any; // { metadata, plan }
   context_snapshot: { destination?: string; startDate?: string; endDate?: string };
   updated_at: string;
+  data_snapshot?: Record<string, any> | null;
 }
 
 export const getAiConversation = async (tripId: string): Promise<SavedConversation | null> => {
@@ -19,6 +20,7 @@ export const getAiConversation = async (tripId: string): Promise<SavedConversati
     data: JSON.parse(row.data),
     context_snapshot: row.context_snapshot,
     updated_at: row.updated_at,
+    data_snapshot: row.data_snapshot || null,
   };
 };
 
@@ -26,8 +28,9 @@ export const saveAiConversation = async (
   tripId: string,
   userId: string,
   phase: string,
-  conversationData: { messages: any[]; metadata: any; plan: any },
+  conversationData: { metadata: any; plan: any },
   contextSnapshot: { destination?: string; startDate?: string; endDate?: string },
+  dataSnapshot?: Record<string, any> | null,
 ): Promise<void> => {
   const { error } = await supabase.rpc('save_ai_conversation', {
     p_trip_id: tripId,
@@ -35,6 +38,7 @@ export const saveAiConversation = async (
     p_phase: phase,
     p_data: JSON.stringify(conversationData),
     p_context: contextSnapshot,
+    p_data_snapshot: dataSnapshot ?? null,
   });
 
   if (error) throw error;

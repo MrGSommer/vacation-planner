@@ -22,6 +22,7 @@ export type RootStackParamList = {
   AGB: undefined;
   Impressum: undefined;
   FableSettings: undefined;
+  FableTripSettings: { tripId: string };
   FeedbackModal: undefined;
   AdminDashboard: undefined;
   AdminUserList: undefined;

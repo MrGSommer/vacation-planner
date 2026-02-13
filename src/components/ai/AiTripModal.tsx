@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState, Alert, Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,12 +17,63 @@ import { colors, spacing, borderRadius, typography, shadows, gradients } from '.
 import { linkifyText } from '../../utils/linkify';
 import { ProgressStep } from '../../services/ai/planExecutor';
 
+const openUrl = (url: string) => {
+  if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
+  else Linking.openURL(url);
+};
+
+function renderMarkdownLinks(text: string, keyPrefix: string): React.ReactNode[] {
+  // Handle markdown links [text](url)
+  const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  let idx = 0;
+
+  while ((match = mdLinkRegex.exec(text)) !== null) {
+    // Add text before link
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Add clickable link
+    const linkText = match[1];
+    const linkUrl = match[2];
+    parts.push(
+      <Text
+        key={`${keyPrefix}_link_${idx++}`}
+        style={{ color: colors.primary, textDecorationLine: 'underline' }}
+        onPress={() => openUrl(linkUrl)}
+        accessibilityRole="link"
+      >
+        {linkText}
+      </Text>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
 function renderMarkdown(text: string): React.ReactNode {
   // Split on bold markers first
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <Text key={i} style={{ fontWeight: '700' }}>{linkifyText(part.slice(2, -2))}</Text>;
+      const inner = part.slice(2, -2);
+      // Check for markdown links within bold text
+      if (inner.includes('](')) {
+        return <Text key={i} style={{ fontWeight: '700' }}>{renderMarkdownLinks(inner, `b${i}`)}</Text>;
+      }
+      return <Text key={i} style={{ fontWeight: '700' }}>{linkifyText(inner)}</Text>;
+    }
+    // Handle markdown links in regular text
+    if (part.includes('](')) {
+      return <React.Fragment key={i}>{renderMarkdownLinks(part, `p${i}`)}</React.Fragment>;
     }
     // Linkify plain text segments
     return <React.Fragment key={i}>{linkifyText(part)}</React.Fragment>;
@@ -75,12 +126,13 @@ export const AiTripModal: React.FC<Props> = ({
     phase, messages, metadata, plan, structure, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
     restored, creditsBalance, estimatedSeconds, activeJobId,
-    contextReady,
+    contextReady, webSearching, typingUsers, lockUserName, fableDisabled,
     startConversation, sendMessage, generatePlan,
     generateStructure, generateAllViaServer, generateActivitiesClientSide,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
     dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
     generatePackingList, generateBudgetCategories, generateDayPlan,
+    broadcastTyping,
   } = useAiPlanner({ mode, tripId, userId, initialContext, initialCredits: profile?.ai_credits_balance, onCreditsUpdate: updateCreditsBalance });
   const [adjustMode, setAdjustMode] = useState(false);
   const [pendingAction, setPendingAction] = useState<'packing_list' | 'budget_categories' | 'day_plan' | null>(null);
@@ -117,9 +169,16 @@ export const AiTripModal: React.FC<Props> = ({
 
   const handleSend = () => {
     if (!inputText.trim()) return;
+    broadcastTyping(false);
     sendMessage(inputText);
     setInputText('');
   };
+
+  const handleInputChange = useCallback((text: string) => {
+    setInputText(text);
+    if (text.trim().length > 0) broadcastTyping(true);
+    else broadcastTyping(false);
+  }, [broadcastTyping]);
 
   const handleChipPress = (text: string) => {
     sendMessage(text);
@@ -301,6 +360,18 @@ export const AiTripModal: React.FC<Props> = ({
         style={styles.chatContainer}
         keyboardVerticalOffset={0}
       >
+        {/* Fable disabled banner */}
+        {fableDisabled && (
+          <View style={styles.fableDisabledBanner}>
+            <Text style={styles.fableDisabledText}>Fable ist fuer diese Reise deaktiviert.</Text>
+            {tripId && (
+              <TouchableOpacity onPress={() => { onClose(); navigation.navigate('FableTripSettings', { tripId }); }}>
+                <Text style={styles.fableDisabledAction}>Zu den Einstellungen</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Context-disabled warning */}
         {mode === 'enhance' && !profile?.ai_trip_context_enabled && (
           <View style={styles.contextWarningBanner}>
@@ -314,6 +385,16 @@ export const AiTripModal: React.FC<Props> = ({
         {restored && (
           <View style={styles.restoredBanner}>
             <Text style={styles.restoredText}>Gespräch fortgesetzt</Text>
+          </View>
+        )}
+
+        {/* Processing lock banner */}
+        {lockUserName && (
+          <View style={styles.lockBanner}>
+            <ActivityIndicator size="small" color={colors.secondary} />
+            <Text style={styles.lockText}>
+              Fable bearbeitet eine Anfrage von {lockUserName}...
+            </Text>
           </View>
         )}
 
@@ -392,9 +473,26 @@ export const AiTripModal: React.FC<Props> = ({
             );
           })}
 
-          {sending && (
+          {sending && !webSearching && (
             <View style={[styles.messageBubble, styles.aiBubble]}>
               <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+
+          {webSearching && (
+            <View style={[styles.messageBubble, styles.aiBubble, styles.searchBubble]}>
+              <ActivityIndicator size="small" color={colors.secondary} />
+              <Text style={[styles.messageText, styles.aiText, { marginLeft: spacing.sm }]}>
+                Suche im Web...
+              </Text>
+            </View>
+          )}
+
+          {typingUsers.length > 0 && (
+            <View style={styles.typingIndicator}>
+              <Text style={styles.typingText}>
+                {typingUsers.join(', ')} tippt...
+              </Text>
             </View>
           )}
 
@@ -601,12 +699,12 @@ export const AiTripModal: React.FC<Props> = ({
         )}
 
         {/* Input (conversing or adjust mode) */}
-        {(!isPlanReview || adjustMode) && (
+        {(!isPlanReview || adjustMode) && !fableDisabled && (
           <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
             <TextInput
               style={styles.input}
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleInputChange}
               placeholder={!canSendMessages ? 'Kaufe Inspirationen um mitzuschreiben' : adjustMode ? 'Was soll angepasst werden...' : 'Nachricht eingeben...'}
               placeholderTextColor={colors.textLight}
               multiline
@@ -659,13 +757,20 @@ export const AiTripModal: React.FC<Props> = ({
                 <Text style={styles.creditsLabel}>{creditsBalance} Inspirationen</Text>
               )}
             </View>
-            {showRestartButton ? (
-              <TouchableOpacity onPress={handleRestart} style={styles.closeButton}>
-                <Text style={styles.restartText}>{'↺'}</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.closeButton} />
-            )}
+            <View style={styles.headerRight}>
+              {tripId && (
+                <TouchableOpacity onPress={() => { onClose(); navigation.navigate('FableTripSettings', { tripId }); }} style={styles.closeButton}>
+                  <Text style={styles.settingsText}>{'⚙'}</Text>
+                </TouchableOpacity>
+              )}
+              {showRestartButton ? (
+                <TouchableOpacity onPress={handleRestart} style={styles.closeButton}>
+                  <Text style={styles.restartText}>{'↺'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.closeButton} />
+              )}
+            </View>
           </View>
         )}
 
@@ -698,6 +803,8 @@ const styles = StyleSheet.create({
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   closeText: { fontSize: 20, color: colors.textSecondary },
   restartText: { fontSize: 22, color: colors.textSecondary },
+  settingsText: { fontSize: 20, color: colors.textSecondary },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { ...typography.h3, textAlign: 'center' },
   creditsLabel: { ...typography.caption, color: colors.secondary, marginTop: 2, fontWeight: '600' },
@@ -813,6 +920,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   restoredText: { ...typography.caption, color: colors.secondary },
+
+  // Lock banner
+  lockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.secondary + '12',
+    gap: spacing.sm,
+  },
+  lockText: { ...typography.bodySmall, color: colors.secondary, flex: 1 },
+
+  // Web search bubble
+  searchBubble: { flexDirection: 'row', alignItems: 'center' },
+
+  // Typing indicator
+  typingIndicator: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  typingText: { ...typography.caption, color: colors.textLight, fontStyle: 'italic' },
 
   // Chips
   chipsContainer: { maxHeight: 48, borderTopWidth: 1, borderTopColor: colors.border },
@@ -1045,6 +1174,19 @@ const styles = StyleSheet.create({
   completedButtonText: { ...typography.button, color: colors.secondary },
 
   // Context warning
+  fableDisabledBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.border + '30',
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  fableDisabledText: { ...typography.bodySmall, color: colors.textSecondary, flex: 1 },
+  fableDisabledAction: { ...typography.bodySmall, fontWeight: '700', color: colors.primary, marginLeft: spacing.sm },
+
   contextWarningBanner: {
     backgroundColor: '#FFFBF0',
     padding: spacing.md,
