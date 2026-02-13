@@ -32,7 +32,7 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
         return (
           <TouchableOpacity
             key={tab.key}
-            style={styles.tab}
+            style={[styles.tab, active && styles.tabActive]}
             onPress={() => {
               if (!active) {
                 navigation.replace(tab.key, { tripId });
@@ -40,7 +40,7 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
             }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.icon, active && styles.iconActive]}>{tab.icon}</Text>
+            <Text style={styles.icon}>{tab.icon}</Text>
             <Text style={[styles.label, active && styles.labelActive]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -62,9 +62,14 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: spacing.xs,
   },
-  icon: { fontSize: 20, opacity: 0.5 },
-  iconActive: { opacity: 1 },
-  label: { ...typography.caption, fontSize: 10, marginTop: 2, color: colors.textLight },
+  tabActive: {
+    backgroundColor: colors.primary + '12',
+    borderTopWidth: 2,
+    borderTopColor: colors.primary,
+  },
+  icon: { fontSize: 20 },
+  label: { ...typography.caption, fontSize: 10, marginTop: 2, color: colors.textSecondary },
   labelActive: { color: colors.primary, fontWeight: '600' },
 });

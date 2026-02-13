@@ -434,18 +434,18 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.content}>
           {/* Stats */}
           <View style={[styles.statsRow, { backgroundColor: themeTint }]}>
-            <View style={styles.stat}>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Itinerary', { tripId })} activeOpacity={0.7}>
               <Text style={[styles.statValue, { color: themeColor }]}>{days}</Text>
               <Text style={styles.statLabel}>Tage</Text>
-            </View>
-            <View style={styles.stat}>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Itinerary', { tripId })} activeOpacity={0.7}>
               <Text style={[styles.statValue, { color: themeColor }]}>{activityCount}</Text>
               <Text style={styles.statLabel}>Aktivitäten</Text>
-            </View>
-            <View style={styles.stat}>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Budget', { tripId })} activeOpacity={0.7}>
               <Text style={[styles.statValue, { color: themeColor }]}>{totalSpent.toFixed(0)}</Text>
               <Text style={styles.statLabel}>{trip.currency}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* Photos + Fable Grid */}
