@@ -5,12 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdminGuard } from '../../components/admin/AdminGuard';
 import { Card, Avatar } from '../../components/common';
 import {
-  adminGetUser, adminUpdateUser, adminGetUserTrips, adminGetUserAiUsage,
+  adminGetUser, adminUpdateUser, adminGetUserAiUsage,
   adminGetUserBilling, adminGetUserInvoices, adminGetUserSubscription, adminGrantTrial,
 } from '../../api/admin';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
-import { Profile, Trip, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail } from '../../types/database';
+import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminUserDetail'>;
@@ -43,7 +43,6 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
   const { userId } = route.params;
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [trips, setTrips] = useState<Trip[]>([]);
   const [aiLogs, setAiLogs] = useState<AiUsageLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,13 +67,11 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
   useEffect(() => {
     const load = async () => {
       try {
-        const [p, t, a] = await Promise.all([
+        const [p, a] = await Promise.all([
           adminGetUser(userId),
-          adminGetUserTrips(userId),
           adminGetUserAiUsage(userId),
         ]);
         setProfile(p);
-        setTrips(t);
         setAiLogs(a);
         setEditTier(p.subscription_tier);
         setEditStatus(p.subscription_status);
@@ -452,27 +449,6 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
           </Card>
         )}
 
-        {/* Trips */}
-        <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Reisen ({trips.length})</Text>
-          {trips.length === 0 ? (
-            <Text style={styles.emptyText}>Keine Reisen</Text>
-          ) : (
-            trips.map((trip) => (
-              <View key={trip.id} style={styles.tripRow}>
-                <View style={styles.tripInfo}>
-                  <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
-                  <Text style={styles.tripDest} numberOfLines={1}>{trip.destination}</Text>
-                </View>
-                <View style={[styles.statusBadge, trip.status === 'completed' && { backgroundColor: colors.success + '20' }]}>
-                  <Text style={[styles.statusText, trip.status === 'completed' && { color: colors.success }]}>{trip.status}</Text>
-                </View>
-                <Text style={styles.tripDate}>{formatDate(trip.start_date)}</Text>
-              </View>
-            ))
-          )}
-        </Card>
-
         {/* AI Usage */}
         <Card style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>AI-Nutzung</Text>
@@ -580,13 +556,8 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { ...typography.button, color: '#FFFFFF' },
   emptyText: { ...typography.bodySmall, color: colors.textLight },
-  tripRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm },
-  tripInfo: { flex: 1, minWidth: 0 },
-  tripName: { ...typography.body, fontWeight: '500' },
-  tripDest: { ...typography.caption, color: colors.textSecondary },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm, backgroundColor: colors.border },
   statusText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
-  tripDate: { ...typography.caption, color: colors.textLight },
   aiSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   aiSummaryLabel: { ...typography.bodySmall, color: colors.textSecondary },
   aiSummaryValue: { ...typography.bodySmall, fontWeight: '600', color: colors.accent },

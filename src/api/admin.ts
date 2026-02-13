@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Profile, Trip, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail, RevenueStats } from '../types/database';
+import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail, RevenueStats } from '../types/database';
 
 interface AdminListUsersParams {
   search?: string;
@@ -61,17 +61,6 @@ export const adminUpdateUser = async (
   return data;
 };
 
-export const adminGetUserTrips = async (userId: string): Promise<Trip[]> => {
-  const { data, error } = await supabase
-    .from('trips')
-    .select('*')
-    .eq('owner_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return data || [];
-};
-
 export const adminGetUserAiUsage = async (userId: string): Promise<AiUsageLog[]> => {
   const { data, error } = await supabase
     .from('ai_usage_logs')
@@ -92,19 +81,9 @@ interface AdminStats {
 }
 
 export const adminGetStats = async (): Promise<AdminStats> => {
-  const [users, premium, trips, aiUsage] = await Promise.all([
-    supabase.from('profiles').select('*', { count: 'exact', head: true }),
-    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('subscription_tier', 'premium'),
-    supabase.from('trips').select('*', { count: 'exact', head: true }),
-    supabase.from('ai_usage_logs').select('*', { count: 'exact', head: true }),
-  ]);
-
-  return {
-    totalUsers: users.count || 0,
-    premiumUsers: premium.count || 0,
-    totalTrips: trips.count || 0,
-    totalAiUsage: aiUsage.count || 0,
-  };
+  const { data, error } = await supabase.rpc('admin_get_stats');
+  if (error) throw error;
+  return data as AdminStats;
 };
 
 export const adminGetRecentSignups = async (limit = 10): Promise<Profile[]> => {

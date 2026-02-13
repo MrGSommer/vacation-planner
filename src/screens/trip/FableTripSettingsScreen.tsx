@@ -128,7 +128,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Fable aktiviert</Text>
-              <Text style={styles.toggleDesc}>Master-Schalter: Fable fuer diese Reise ein-/ausschalten</Text>
+              <Text style={styles.toggleDesc}>Master-Schalter: Fable für diese Reise ein-/ausschalten</Text>
             </View>
             <Switch
               value={fableEnabled}
@@ -207,7 +207,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
         <Card style={[styles.card, !fableEnabled && styles.cardDisabled]}>
           <Text style={styles.cardTitle}>Trip-Anweisung</Text>
           <Text style={styles.cardDesc}>
-            Eine Anweisung fuer Fable, die fuer alle Teilnehmer dieser Reise gilt.
+            Eine Anweisung für Fable, die für alle Teilnehmer dieser Reise gilt.
           </Text>
           <TextInput
             style={[styles.textArea, (!canEdit || !fableEnabled) && styles.textAreaDisabled]}
@@ -241,7 +241,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
         <Card style={styles.card}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
-              <Text style={styles.toggleLabel}>Name sichtbar fuer Fable</Text>
+              <Text style={styles.toggleLabel}>Name sichtbar für Fable</Text>
               <Text style={styles.toggleDesc}>Wenn deaktiviert, sieht Fable dich als "Reisender"</Text>
             </View>
             <Switch

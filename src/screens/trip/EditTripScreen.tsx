@@ -528,7 +528,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
               <View style={[styles.fableToggle, !fableEnabled && { opacity: 0.5 }]}>
                 <View style={styles.fableToggleInfo}>
                   <Text style={styles.fableToggleLabel}>Trip-Erinnerungen</Text>
-                  <Text style={styles.fableToggleDesc}>Fable darf sich Gespraechsinhalte merken</Text>
+                  <Text style={styles.fableToggleDesc}>Fable darf sich Gesprächsinhalte merken</Text>
                 </View>
                 <Switch value={fableMemoryEnabled} onValueChange={setFableMemoryEnabled} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" disabled={!fableEnabled} />
               </View>

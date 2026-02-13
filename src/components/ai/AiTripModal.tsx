@@ -428,7 +428,7 @@ export const AiTripModal: React.FC<Props> = ({
           keyboardShouldPersistTaps="handled"
         >
           {messages.map((msg) => {
-            const isOwnMessage = msg.senderId === userId;
+            const isOwnMessage = msg.role === 'user' && msg.senderId === userId;
             const isOtherUser = msg.role === 'user' && !isOwnMessage;
             return (
               <View key={msg.id}>
@@ -827,16 +827,16 @@ const styles = StyleSheet.create({
   },
   aiBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.card,
+    backgroundColor: colors.secondary + '12',
     borderBottomLeftRadius: spacing.xs,
-    ...shadows.sm,
   },
   messageText: { ...typography.body, lineHeight: 22 },
   userText: { color: '#FFFFFF' },
   otherUserBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.secondary + '15',
+    backgroundColor: colors.card,
     borderBottomLeftRadius: spacing.xs,
+    ...shadows.sm,
   },
   otherUserText: { color: colors.text },
   aiText: { color: colors.text },
