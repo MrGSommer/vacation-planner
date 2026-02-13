@@ -9,7 +9,10 @@ import { getPackingLists, getPackingItems } from '../api/packing';
 import { getProfile } from '../api/auth';
 import { getAiConversation, saveAiConversation, deleteAiConversation } from '../api/aiConversations';
 import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
+import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
+import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
 import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
+import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
 
 export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
@@ -21,6 +24,8 @@ export interface AiChatMessage {
   timestamp: number;
   creditsCost?: number;
   creditsAfter?: number;
+  senderId?: string;
+  senderName?: string;
 }
 
 export interface AiMetadata {
@@ -53,7 +58,7 @@ export interface UseAiPlannerOptions {
   onCreditsUpdate?: (newBalance: number) => void;
 }
 
-const MAX_MESSAGES = 12;
+const MAX_MESSAGES = 20;
 const MAX_INPUT_TOKENS_ESTIMATE = 15000;
 const CHARS_PER_TOKEN = 3.8;
 const SAVE_DEBOUNCE_MS = 500;
@@ -88,6 +93,18 @@ function parseMemoryUpdate(text: string): { cleanText: string; memoryUpdate: str
 
   const cleanText = text.replace(memoryRegex, '').trim();
   return { cleanText, memoryUpdate: match[1].trim() };
+}
+
+function parseTripMemoryUpdate(text: string): { cleanText: string; tripMemoryUpdate: string | null } {
+  const tripMemoryRegex = /<trip_memory_update>([\s\S]*?)<\/trip_memory_update>/;
+  const match = text.match(tripMemoryRegex);
+
+  if (!match) {
+    return { cleanText: text, tripMemoryUpdate: null };
+  }
+
+  const cleanText = text.replace(tripMemoryRegex, '').trim();
+  return { cleanText, tripMemoryUpdate: match[1].trim() };
 }
 
 function estimateTokens(messages: AiMessage[]): number {
@@ -155,6 +172,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messagePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [contextReady, setContextReady] = useState(false);
   const contextRef = useRef<AiContext>({
     destination: initialContext.destination,
@@ -170,6 +188,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userMemoryRef = useRef<string | undefined>(undefined);
+  const tripMemoryRef = useRef<string | undefined>(undefined);
+  const senderNameRef = useRef<string>('');
   const prevCreditsRef = useRef<number | null>(null);
 
   // Load trip data when tripId is available (ensure context is always trip-derived)
@@ -213,14 +233,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     return 8 + batches * 12;
   }, []);
 
-  // Debounced save conversation (fire-and-forget)
+  // Debounced save conversation — only metadata/plan, no messages (those are individual rows now)
   const debouncedSave = useCallback((
     currentPhase: string,
     currentMessages: AiChatMessage[],
     currentMetadata: AiMetadata | null,
     currentPlan: AiTripPlan | null,
   ) => {
-    if (!tripId) return; // Can't save without tripId (create mode before plan execution)
+    if (!tripId) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
@@ -229,7 +249,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         tripId,
         userId,
         currentPhase as any,
-        { messages: currentMessages, metadata: currentMetadata, plan: currentPlan },
+        { metadata: currentMetadata, plan: currentPlan },
         {
           destination: ctx.destination,
           startDate: ctx.startDate,
@@ -237,6 +257,19 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         },
       ).catch(e => console.error('Failed to save conversation:', e));
     }, SAVE_DEBOUNCE_MS);
+  }, [tripId, userId]);
+
+  // Helper: persist a message row (fire-and-forget)
+  const persistMessage = useCallback((
+    role: 'user' | 'assistant',
+    content: string,
+    senderName: string,
+    creditsCost?: number,
+    creditsAfter?: number,
+  ) => {
+    if (!tripId) return;
+    insertAiTripMessage(tripId, userId, senderName, role, content, creditsCost, creditsAfter)
+      .catch(e => console.error('Failed to persist message:', e));
   }, [tripId, userId]);
 
   const loadExistingData = useCallback(async (profileOverride?: { ai_trip_context_enabled: boolean }): Promise<AiContext['existingData'] | undefined> => {
@@ -305,19 +338,22 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     }
   }, [mode, tripId, userId]);
 
-  const startConversation = useCallback(async () => {
-    if (!contextReady) return; // Wait for trip data to load
+  const startConversation = useCallback(async (canSend = true) => {
+    if (!contextReady) return;
     setPhase('conversing');
     setError(null);
     setSending(true);
 
     try {
-      // Load profile once, then use for context check + custom instruction
       const profile = await getProfile(userId);
+      const shortName = getShortName(profile);
+      senderNameRef.current = shortName;
 
-      const [existingData, userMemory, savedConversation] = await Promise.all([
+      const [existingData, userMemory, tripMemory, savedMessages, savedConversation] = await Promise.all([
         loadExistingData(profile),
         getAiUserMemory().catch(() => null),
+        tripId ? getAiTripMemory(tripId).catch(() => null) : null,
+        tripId ? getAiTripMessages(tripId).catch(() => []) : [],
         tripId ? getAiConversation(tripId).catch(() => null) : null,
       ]);
 
@@ -328,11 +364,40 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         contextRef.current.userMemory = userMemory;
         userMemoryRef.current = userMemory;
       }
+      if (tripMemory) {
+        contextRef.current.tripMemory = tripMemory;
+        tripMemoryRef.current = tripMemory;
+      }
       if (profile.ai_custom_instruction) {
         contextRef.current.customInstruction = profile.ai_custom_instruction;
       }
 
-      // Check for saved conversation (staleness check)
+      // Restore from individual message rows if they exist
+      if (savedMessages && savedMessages.length > 0) {
+        const restoredMessages: AiChatMessage[] = savedMessages.map(m => ({
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: m.decrypted_content,
+          timestamp: new Date(m.created_at).getTime(),
+          creditsCost: m.credits_cost ?? undefined,
+          creditsAfter: m.credits_after ?? undefined,
+          senderId: m.sender_id,
+          senderName: m.sender_name || (m.role === 'assistant' ? 'Fable' : undefined),
+        }));
+        setMessages(restoredMessages);
+        // Restore metadata/plan from conversation state if available
+        if (savedConversation) {
+          const { metadata: savedMeta, plan: savedPlan } = savedConversation.data || {};
+          if (savedMeta) setMetadata(savedMeta);
+          if (savedPlan) setPlan(savedPlan);
+          setPhase(savedConversation.phase as AiPhase);
+        }
+        setRestored(true);
+        setSending(false);
+        return;
+      }
+
+      // Check for legacy saved conversation (blob-based, pre-migration)
       if (savedConversation) {
         const snap = savedConversation.context_snapshot;
         const ctx = contextRef.current;
@@ -341,10 +406,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           snap.startDate !== ctx.startDate ||
           snap.endDate !== ctx.endDate;
 
-        if (!isStale) {
-          // Restore conversation
-          const { messages: savedMessages, metadata: savedMeta, plan: savedPlan } = savedConversation.data;
-          setMessages(savedMessages || []);
+        if (!isStale && savedConversation.data?.messages?.length > 0) {
+          const { messages: legacyMessages, metadata: savedMeta, plan: savedPlan } = savedConversation.data;
+          setMessages(legacyMessages || []);
           setMetadata(savedMeta || null);
           if (savedPlan) setPlan(savedPlan);
           setPhase(savedConversation.phase as AiPhase);
@@ -352,60 +416,63 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           setSending(false);
           return;
         }
-        // Stale — delete old conversation, start fresh
-        deleteAiConversation(tripId!).catch(() => {});
-      }
-
-      const destination = contextRef.current.destination || 'dein Reiseziel';
-      const greeting: AiMessage = {
-        role: 'user',
-        content: mode === 'enhance'
-          ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.`
-          : `Hallo! Ich plane eine Reise nach ${destination}. Hilf mir bei der Planung.`,
-      };
-
-      const response = await sendAiMessage('conversation', [greeting], contextRef.current);
-
-      // Update credits balance from response
-      let creditsCost: number | undefined;
-      if (response.credits_remaining !== undefined) {
-        if (prevCreditsRef.current !== null) {
-          creditsCost = prevCreditsRef.current - response.credits_remaining;
+        if (isStale) {
+          deleteAiConversation(tripId!).catch(() => {});
         }
-        prevCreditsRef.current = response.credits_remaining;
-        setCreditsBalance(response.credits_remaining);
-        onCreditsUpdate?.(response.credits_remaining);
       }
 
-      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(response.content);
+      // Greeting uses 'greeting' task — AI call happens but no credits are deducted
+      // (system-initiated, not user action). Credits only spent on user messages.
+      const destination = contextRef.current.destination || 'dein Reiseziel';
+      const greetingContent = mode === 'enhance'
+        ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.`
+        : `Hallo! Ich plane eine Reise nach ${destination}. Hilf mir bei der Planung.`;
+
+      const greeting: AiMessage = { role: 'user', content: `[${shortName}]: ${greetingContent}` };
+
+      const response = await sendAiMessage('greeting', [greeting], contextRef.current);
+
+      // Parse trip memory, user memory, and metadata from response
+      const { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
+      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
       const { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
 
-      // Save memory update if present
+      // Save user memory update if present
       if (memoryUpdate) {
         userMemoryRef.current = memoryUpdate;
         contextRef.current.userMemory = memoryUpdate;
         saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
       }
 
-      const greetingMsg: AiChatMessage = { id: nextId(), role: 'user', content: greeting.content, timestamp: Date.now() };
+      // Save trip memory update if present
+      if (tripMemoryUpdate && tripId) {
+        tripMemoryRef.current = tripMemoryUpdate;
+        contextRef.current.tripMemory = tripMemoryUpdate;
+        saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
+      }
+
+      const greetingMsg: AiChatMessage = {
+        id: nextId(), role: 'user', content: greetingContent, timestamp: Date.now(),
+        senderId: userId, senderName: shortName,
+      };
       const aiMsg: AiChatMessage = {
         id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now(),
-        creditsCost, creditsAfter: response.credits_remaining,
+        senderName: 'Fable',
       };
 
       const newMessages = [greetingMsg, aiMsg];
       setMessages(newMessages);
+
+      // Persist messages individually
+      persistMessage('user', greetingContent, shortName);
+      persistMessage('assistant', cleanText, 'Fable');
+
       if (meta) {
         setMetadata(meta);
-        if (meta.trip_type) {
-          contextRef.current.tripType = meta.trip_type;
-        }
-        if (meta.transport_mode) {
-          contextRef.current.transportMode = meta.transport_mode;
-        }
+        if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
+        if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
       }
 
-      // Save conversation (debounced)
       debouncedSave('conversing', newMessages, meta, null);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'startConversation' } });
@@ -413,7 +480,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [contextReady, mode, tripId, loadExistingData, debouncedSave]);
+  }, [contextReady, mode, tripId, userId, loadExistingData, debouncedSave, persistMessage]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || sending) return;
@@ -421,14 +488,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setError(null);
     setSending(true);
 
-    const userMsg: AiChatMessage = { id: nextId(), role: 'user', content: text.trim(), timestamp: Date.now() };
+    const shortName = senderNameRef.current || 'User';
+    const userMsg: AiChatMessage = {
+      id: nextId(), role: 'user', content: text.trim(), timestamp: Date.now(),
+      senderId: userId, senderName: shortName,
+    };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
 
+    // Persist user message immediately
+    persistMessage('user', text.trim(), shortName);
+
     try {
-      // Prepare messages for API (trimmed)
+      // Prepare messages for API (trimmed, with sender prefix for user messages)
       const trimmed = trimMessages(updatedMessages);
-      const apiMessages: AiMessage[] = trimmed.map(m => ({ role: m.role, content: m.content }));
+      const apiMessages: AiMessage[] = trimmed.map(m => ({
+        role: m.role,
+        content: m.role === 'user' && m.senderName
+          ? `[${m.senderName}]: ${m.content}`
+          : m.content,
+      }));
 
       // Check token budget
       const estimatedTokens = estimateTokens(apiMessages);
@@ -449,33 +528,42 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         onCreditsUpdate?.(response.credits_remaining);
       }
 
-      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(response.content);
+      // Parse trip memory, user memory, and metadata
+      const { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
+      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
       const { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
 
-      // Save memory update if present
+      // Save user memory update if present
       if (memoryUpdate) {
         userMemoryRef.current = memoryUpdate;
         contextRef.current.userMemory = memoryUpdate;
         saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
       }
 
+      // Save trip memory update if present
+      if (tripMemoryUpdate && tripId) {
+        tripMemoryRef.current = tripMemoryUpdate;
+        contextRef.current.tripMemory = tripMemoryUpdate;
+        saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
+      }
+
       const aiMsg: AiChatMessage = {
         id: nextId(), role: 'assistant', content: cleanText, timestamp: Date.now(),
         creditsCost, creditsAfter: response.credits_remaining,
+        senderName: 'Fable',
       };
+
+      // Persist AI message
+      persistMessage('assistant', cleanText, 'Fable', creditsCost, response.credits_remaining);
+
       const allMessages = [...updatedMessages, aiMsg];
       setMessages(allMessages);
       if (meta) {
         setMetadata(meta);
-        if (meta.trip_type) {
-          contextRef.current.tripType = meta.trip_type;
-        }
-        if (meta.transport_mode) {
-          contextRef.current.transportMode = meta.transport_mode;
-        }
+        if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
+        if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
       }
 
-      // Save conversation (debounced)
       debouncedSave('conversing', allMessages, meta, null);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage' } });
@@ -483,7 +571,46 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [messages, sending, debouncedSave]);
+  }, [messages, sending, userId, tripId, debouncedSave, persistMessage]);
+
+  // Poll for new messages from other users (every 10s when conversing)
+  const pollTripMessages = useCallback(async () => {
+    if (!tripId) return;
+    try {
+      const serverMessages = await getAiTripMessages(tripId);
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const newOnes = serverMessages.filter(m => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        const mapped: AiChatMessage[] = newOnes.map(m => ({
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: m.decrypted_content,
+          timestamp: new Date(m.created_at).getTime(),
+          creditsCost: m.credits_cost ?? undefined,
+          creditsAfter: m.credits_after ?? undefined,
+          senderId: m.sender_id,
+          senderName: m.sender_name || (m.role === 'assistant' ? 'Fable' : undefined),
+        }));
+        return [...prev, ...mapped].sort((a, b) => a.timestamp - b.timestamp);
+      });
+    } catch {
+      // Ignore polling errors
+    }
+  }, [tripId]);
+
+  // Start/stop message polling based on phase
+  useEffect(() => {
+    if (phase === 'conversing' && tripId) {
+      messagePollRef.current = setInterval(pollTripMessages, 10000);
+    }
+    return () => {
+      if (messagePollRef.current) {
+        clearInterval(messagePollRef.current);
+        messagePollRef.current = null;
+      }
+    };
+  }, [phase, tripId, pollTripMessages]);
 
   const buildPlanSummary = useCallback((p: AiTripPlan): string => {
     const days = p.days?.length || 0;
@@ -528,6 +655,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
               ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
               : buildPlanSummary(job.plan_json),
             timestamp: Date.now(),
+            senderName: 'Fable',
           };
           setMessages(prev => {
             const updated = [...prev, summaryMsg];
@@ -590,6 +718,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         role: 'assistant',
         content: buildStructureSummary(parsed),
         timestamp: Date.now(),
+        senderName: 'Fable',
       };
       setMessages(prev => [...prev, overviewMsg]);
       setPhase('structure_overview');
@@ -673,6 +802,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         role: 'assistant',
         content: buildPlanSummary(mergedPlan),
         timestamp: Date.now(),
+        senderName: 'Fable',
       };
       setMessages(prev => {
         const updated = [...prev, summaryMsg];
@@ -765,7 +895,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setPhase('generating_plan');
     setError(null);
 
-    const userMsg: AiChatMessage = { id: nextId(), role: 'user', content: feedback.trim(), timestamp: Date.now() };
+    const userMsg: AiChatMessage = {
+      id: nextId(), role: 'user', content: feedback.trim(), timestamp: Date.now(),
+      senderId: userId, senderName: senderNameRef.current,
+    };
     setMessages(prev => [...prev, userMsg]);
 
     try {
@@ -792,6 +925,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         role: 'assistant',
         content: buildPlanSummary(parsed),
         timestamp: Date.now(),
+        senderName: 'Fable',
       };
       setMessages(prev => {
         const updated = [...prev, summaryMsg];
@@ -805,7 +939,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setError('Anpassung fehlgeschlagen – bitte versuche es erneut');
       setPhase('plan_review');
     }
-  }, [messages, sending, metadata, debouncedSave]);
+  }, [messages, sending, userId, metadata, debouncedSave]);
 
   const rejectPlan = useCallback(() => {
     setPlan(null);
@@ -830,9 +964,11 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setEstimatedSeconds(null);
     setActiveJobId(null);
     prevCreditsRef.current = null;
+    tripMemoryRef.current = undefined;
     if (pollingRef.current) clearInterval(pollingRef.current);
+    if (messagePollRef.current) clearInterval(messagePollRef.current);
 
-    // Delete saved conversation
+    // Delete saved conversation + trip messages + trip memory
     if (tripId) {
       deleteAiConversation(tripId).catch(() => {});
     }
@@ -846,14 +982,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       tripId,
       userId,
       phase as any,
-      { messages, metadata, plan },
+      { metadata, plan },
       {
         destination: ctx.destination,
         startDate: ctx.startDate,
         endDate: ctx.endDate,
       },
     ).catch(() => {});
-  }, [tripId, userId, phase, messages, metadata, plan]);
+  }, [tripId, userId, phase, metadata, plan]);
 
   // Agent: Generate packing list
   const generatePackingList = useCallback(async () => {
@@ -892,6 +1028,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         content: `Packliste erstellt mit **${parsed.items.length} Items** in ${[...new Set(parsed.items.map(i => i.category))].length} Kategorien. Schau im Packlisten-Tab nach!`,
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
+        senderName: 'Fable',
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {
@@ -911,7 +1048,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     try {
       // Include conversation history so AI knows what was discussed
       const conversationHistory: AiMessage[] = trimMessages(messages).map(m => ({
-        role: m.role, content: m.content,
+        role: m.role,
+        content: m.role === 'user' && m.senderName
+          ? `[${m.senderName}]: ${m.content}`
+          : m.content,
       }));
       conversationHistory.push({
         role: 'user',
@@ -976,6 +1116,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         content: `Tagesplan für **${targetDate}** erstellt mit **${parsed.activities.length} Aktivitäten**. Schau im Tagesplan nach!`,
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
+        senderName: 'Fable',
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {
@@ -1026,6 +1167,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         content: `**${parsed.categories.length} Budget-Kategorien** erstellt (Total: ${totalBudget} ${currency}). Schau im Budget-Tab nach!`,
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
+        senderName: 'Fable',
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {

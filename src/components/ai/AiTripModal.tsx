@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
@@ -66,6 +67,7 @@ export const AiTripModal: React.FC<Props> = ({
   const navigation = useNavigation<any>();
   const { user: authUser, profile } = useAuth();
   const { updateCreditsBalance, refreshProfile } = useAuthContext();
+  const { isPremium } = useSubscription();
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -85,10 +87,13 @@ export const AiTripModal: React.FC<Props> = ({
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
 
+  // Can the user send messages? Premium or has credits
+  const canSendMessages = isPremium || (creditsBalance !== null && creditsBalance > 0);
+
   // Refresh profile (credits) when modal opens, then auto-start conversation
   useEffect(() => {
     if (visible && phase === 'idle' && contextReady) {
-      refreshProfile().then(() => startConversation());
+      refreshProfile().then(() => startConversation(canSendMessages));
     }
     if (visible) { setCreditPurchased(false); setShowBuyModal(false); }
   }, [visible, phase, contextReady]);
@@ -127,8 +132,14 @@ export const AiTripModal: React.FC<Props> = ({
   };
 
   const handleRestart = () => {
-    reset();
-    // Will auto-start via the useEffect
+    Alert.alert(
+      'Gespräch neu starten',
+      'Bist du sicher? Alle Nachrichten und Erinnerungen für diese Reise werden gelöscht.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Neu starten', style: 'destructive', onPress: () => reset() },
+      ],
+    );
   };
 
   const handleComplete = () => {
@@ -335,33 +346,51 @@ export const AiTripModal: React.FC<Props> = ({
           contentContainerStyle={styles.messageListContent}
           keyboardShouldPersistTaps="handled"
         >
-          {messages.map((msg) => (
-            <View key={msg.id}>
-              <View
-                style={[
-                  styles.messageBubble,
-                  msg.role === 'user' ? styles.userBubble : styles.aiBubble,
-                ]}
-              >
-                <Text style={[
-                  styles.messageText,
-                  msg.role === 'user' ? styles.userText : styles.aiText,
-                ]}>
-                  {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
-                </Text>
-              </View>
-              {msg.role === 'assistant' && msg.creditsAfter !== undefined && (
-                <View style={styles.creditIndicator}>
-                  <Text style={styles.creditIndicatorText}>
-                    {msg.creditsCost !== undefined && msg.creditsCost > 0
-                      ? `-${msg.creditsCost} · `
-                      : ''}
-                    {msg.creditsAfter} Inspirationen
+          {messages.map((msg) => {
+            const isOwnMessage = msg.senderId === userId;
+            const isOtherUser = msg.role === 'user' && !isOwnMessage;
+            return (
+              <View key={msg.id}>
+                {msg.senderName && (
+                  <Text style={[
+                    styles.senderName,
+                    msg.role === 'user'
+                      ? (isOwnMessage ? styles.senderNameRight : styles.senderNameLeft)
+                      : styles.senderNameLeft,
+                  ]}>
+                    {msg.senderName}
+                  </Text>
+                )}
+                <View
+                  style={[
+                    styles.messageBubble,
+                    isOwnMessage ? styles.userBubble
+                      : isOtherUser ? styles.otherUserBubble
+                      : styles.aiBubble,
+                  ]}
+                >
+                  <Text style={[
+                    styles.messageText,
+                    isOwnMessage ? styles.userText
+                      : isOtherUser ? styles.otherUserText
+                      : styles.aiText,
+                  ]}>
+                    {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                   </Text>
                 </View>
-              )}
-            </View>
-          ))}
+                {msg.role === 'assistant' && msg.creditsAfter !== undefined && (
+                  <View style={styles.creditIndicator}>
+                    <Text style={styles.creditIndicatorText}>
+                      {msg.creditsCost !== undefined && msg.creditsCost > 0
+                        ? `-${msg.creditsCost} · `
+                        : ''}
+                      {msg.creditsAfter} Inspirationen
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
 
           {sending && (
             <View style={[styles.messageBubble, styles.aiBubble]}>
@@ -549,9 +578,26 @@ export const AiTripModal: React.FC<Props> = ({
               end={{ x: 1, y: 0 }}
               style={styles.generateButtonGradient}
             >
-              <Text style={styles.generateButtonText}>{'✨ Plan erstellen'}</Text>
+              <Text style={styles.generateButtonText}>{mode === 'enhance' ? '✨ Reise planen' : '✨ Plan erstellen'}</Text>
             </LinearGradient>
           </TouchableOpacity>
+        )}
+
+        {/* Free user upsell banner */}
+        {!canSendMessages && !isPlanReview && (
+          <View style={styles.freeUserBanner}>
+            <Text style={styles.freeUserText}>Kaufe Inspirationen um mitzuschreiben</Text>
+            <TouchableOpacity onPress={() => {
+              if (Platform.OS === 'web') {
+                setShowBuyModal(true);
+              } else {
+                onClose();
+                navigation.navigate('Subscription');
+              }
+            }}>
+              <Text style={styles.freeUserAction}>Inspirationen kaufen</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Input (conversing or adjust mode) */}
@@ -561,11 +607,11 @@ export const AiTripModal: React.FC<Props> = ({
               style={styles.input}
               value={inputText}
               onChangeText={setInputText}
-              placeholder={adjustMode ? 'Was soll angepasst werden...' : 'Nachricht eingeben...'}
+              placeholder={!canSendMessages ? 'Kaufe Inspirationen um mitzuschreiben' : adjustMode ? 'Was soll angepasst werden...' : 'Nachricht eingeben...'}
               placeholderTextColor={colors.textLight}
               multiline
               maxLength={1000}
-              editable={!sending}
+              editable={!sending && canSendMessages}
               onSubmitEditing={adjustMode ? handleAdjustSend : handleSend}
               blurOnSubmit={false}
               onKeyPress={(e: any) => {
@@ -576,9 +622,9 @@ export const AiTripModal: React.FC<Props> = ({
               }}
             />
             <TouchableOpacity
-              style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendButtonDisabled]}
+              style={[styles.sendButton, (!inputText.trim() || sending || !canSendMessages) && styles.sendButtonDisabled]}
               onPress={adjustMode ? handleAdjustSend : handleSend}
-              disabled={!inputText.trim() || sending}
+              disabled={!inputText.trim() || sending || !canSendMessages}
             >
               <Text style={styles.sendButtonText}>{'➤'}</Text>
             </TouchableOpacity>
@@ -680,7 +726,35 @@ const styles = StyleSheet.create({
   },
   messageText: { ...typography.body, lineHeight: 22 },
   userText: { color: '#FFFFFF' },
+  otherUserBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.secondary + '15',
+    borderBottomLeftRadius: spacing.xs,
+  },
+  otherUserText: { color: colors.text },
   aiText: { color: colors.text },
+  senderName: {
+    ...typography.caption,
+    fontWeight: '600',
+    marginBottom: 2,
+    marginHorizontal: spacing.xs,
+  },
+  senderNameRight: { alignSelf: 'flex-end', color: colors.textLight },
+  senderNameLeft: { alignSelf: 'flex-start', color: colors.textSecondary },
+
+  // Free user upsell
+  freeUserBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary + '10',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  freeUserText: { ...typography.bodySmall, color: colors.textSecondary, flex: 1 },
+  freeUserAction: { ...typography.bodySmall, fontWeight: '700', color: colors.primary },
 
   // Credit indicator per message
   creditIndicator: {

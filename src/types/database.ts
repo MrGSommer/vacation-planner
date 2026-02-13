@@ -54,6 +54,24 @@ export interface AiUserMemory {
   updated_at: string;
 }
 
+export interface AiTripMessage {
+  id: string;
+  trip_id: string;
+  sender_id: string;
+  sender_name: string;
+  role: 'user' | 'assistant';
+  encrypted_content: never; // bytea — never accessed directly
+  credits_cost: number | null;
+  credits_after: number | null;
+  created_at: string;
+}
+
+export interface AiTripMemory {
+  trip_id: string;
+  encrypted_memory: never; // bytea — never accessed directly
+  updated_at: string;
+}
+
 export interface Trip {
   id: string;
   owner_id: string;

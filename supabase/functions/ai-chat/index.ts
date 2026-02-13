@@ -35,21 +35,28 @@ Deno.serve(async (req) => {
       return json({ error: 'Zu viele Anfragen. Bitte warte kurz.' }, origin, 429);
     }
 
-    // Credit deduction: plan_generation/plan_generation_full=3, all others=1
-    const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1;
-    // Agent tasks: log as their own task_type (already in CHECK constraint)
-    const newBalance = await deductCreditsAtomic(user.id, creditsRequired);
+    // Greeting task: no credit deduction (system-initiated, not user action)
+    const isGreeting = task === 'greeting';
 
-    if (newBalance === -1) {
-      return json({
-        error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
-      }, origin, 403);
+    let newBalance: number | undefined;
+    if (!isGreeting) {
+      // Credit deduction: plan_generation/plan_generation_full=3, all others=1
+      const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1;
+      newBalance = await deductCreditsAtomic(user.id, creditsRequired);
+
+      if (newBalance === -1) {
+        return json({
+          error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
+        }, origin, 403);
+      }
     }
 
     // Build prompt + call Claude
-    const model = MODELS[task as keyof typeof MODELS] || MODELS.conversation;
-    const systemPrompt = buildSystemPrompt(task, context);
-    const maxTokens = getMaxTokens(task);
+    // greeting uses conversation prompt + model
+    const effectiveTask = isGreeting ? 'conversation' : task;
+    const model = MODELS[effectiveTask as keyof typeof MODELS] || MODELS.conversation;
+    const systemPrompt = buildSystemPrompt(effectiveTask, context);
+    const maxTokens = getMaxTokens(effectiveTask);
 
     if (!getAnthropicKey()) return json({ error: 'AI-Service nicht konfiguriert' }, origin, 500);
 
@@ -68,11 +75,12 @@ Deno.serve(async (req) => {
     const result = await response.json();
     const content = result.content?.[0]?.text || '';
 
-    // Log as valid task_type (plan_generation_full → plan_generation for DB constraint)
-    const logTask = task === 'plan_generation_full' ? 'plan_generation' : task;
-    logUsage(user.id, context.tripId || null, logTask, creditsRequired, model, result.usage, durationMs);
+    // Log usage (greeting logged as conversation, no credits charged)
+    const creditsCharged = isGreeting ? 0 : ((task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1);
+    const logTask = task === 'plan_generation_full' ? 'plan_generation' : (isGreeting ? 'conversation' : task);
+    logUsage(user.id, context.tripId || null, logTask, creditsCharged, model, result.usage, durationMs);
 
-    return json({ content, usage: result.usage, credits_remaining: newBalance }, origin);
+    return json({ content, usage: result.usage, credits_remaining: newBalance ?? null }, origin);
   } catch (e) {
     console.error('ai-chat error:', e);
     return json({ error: (e as Error).message }, origin, 500);

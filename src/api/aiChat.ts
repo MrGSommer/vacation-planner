@@ -44,6 +44,8 @@ export interface AiContext {
   };
   dayDates?: string[];
   userMemory?: string;
+  tripMemory?: string;
+  senderName?: string;
   customInstruction?: string;
 }
 
@@ -55,7 +57,7 @@ export interface AiResponse {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export type AiTask = 'conversation' | 'plan_generation' | 'plan_activities'
+export type AiTask = 'greeting' | 'conversation' | 'plan_generation' | 'plan_activities'
   | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan';
 
 export const sendAiMessage = async (
