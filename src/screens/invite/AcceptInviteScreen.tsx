@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button } from '../../components/common';
-import { getInviteByToken, acceptInvite } from '../../api/invitations';
+import { getInviteByToken, acceptInvite, getCollaborators } from '../../api/invitations';
+import { getTrip, updateTrip } from '../../api/trips';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { TripInvitation } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -13,6 +15,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AcceptInvite'>;
 export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   const { token } = route.params;
   const { session } = useAuthContext();
+  const { showToast } = useToast();
   const [invitation, setInvitation] = useState<TripInvitation | null>(null);
   const [trip, setTrip] = useState<{ id: string; name: string; destination: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +42,22 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
     setAccepting(true);
     try {
       await acceptInvite(token);
+      // Auto-adjust group_type if solo
+      try {
+        const tripData = await getTrip(invitation.trip_id);
+        if (tripData.group_type === 'solo') {
+          const collabs = await getCollaborators(invitation.trip_id);
+          if (collabs.length >= 2) {
+            await updateTrip(invitation.trip_id, {
+              group_type: 'friends',
+              travelers_count: collabs.length,
+            });
+            showToast('Reisegruppe wurde auf "Freunde" angepasst', 'info', 5000);
+          }
+        }
+      } catch (e) {
+        console.error('Auto-adjust group_type failed:', e);
+      }
       setDone(true);
     } catch (e: any) {
       setError(e.message || 'Fehler beim Annehmen der Einladung');

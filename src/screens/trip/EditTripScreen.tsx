@@ -54,6 +54,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState('');
   const [notes, setNotes] = useState('');
+  const [groupType, setGroupType] = useState<'solo' | 'couple' | 'family' | 'friends' | 'group'>('solo');
+  const [travelersCount, setTravelersCount] = useState(1);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverMode, setCoverMode] = useState<CoverMode>('none');
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -77,6 +79,20 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const unsplashIndex = useRef(0);
   const lastQuery = useRef('');
 
+  const GROUP_TYPES: Array<{ id: typeof groupType; label: string }> = [
+    { id: 'solo', label: 'Solo' },
+    { id: 'couple', label: 'Paar' },
+    { id: 'family', label: 'Familie' },
+    { id: 'friends', label: 'Freunde' },
+    { id: 'group', label: 'Gruppe' },
+  ];
+
+  const handleGroupTypeChange = (type: typeof groupType) => {
+    setGroupType(type);
+    if (type === 'solo') setTravelersCount(1);
+    else if (type === 'couple') setTravelersCount(2);
+  };
+
   const steps = ['Details', 'Daten', 'Optionen', 'Teilnehmer'];
 
   useEffect(() => {
@@ -92,6 +108,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         setEndDate(trip.end_date);
         setCurrency(trip.currency);
         setNotes(trip.notes || '');
+        setGroupType(trip.group_type || 'solo');
+        setTravelersCount(trip.travelers_count || 1);
         setCoverImageUrl(trip.cover_image_url);
         if (trip.cover_image_url) {
           setCoverMode((trip as any).cover_image_attribution ? 'unsplash' : 'upload');
@@ -294,6 +312,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         end_date: endDate,
         currency,
         notes: notes.trim() || null,
+        group_type: groupType,
+        travelers_count: travelersCount,
         fable_enabled: fableEnabled,
         fable_budget_visible: fableBudgetVisible,
         fable_packing_visible: fablePackingVisible,
@@ -482,6 +502,39 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
           {step === 2 && (
             <>
               <Text style={styles.stepTitle}>Weitere Details</Text>
+
+              <Text style={styles.fieldLabel}>Reisegruppe</Text>
+              <View style={styles.currencyRow}>
+                {GROUP_TYPES.map(g => (
+                  <TouchableOpacity
+                    key={g.id}
+                    style={[styles.currencyChip, groupType === g.id && styles.currencyChipActive]}
+                    onPress={() => handleGroupTypeChange(g.id)}
+                  >
+                    <Text style={[styles.currencyText, groupType === g.id && styles.currencyTextActive]}>{g.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Anzahl Reisende</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, travelersCount <= 1 && styles.stepperBtnDisabled]}
+                  onPress={() => setTravelersCount(c => Math.max(1, c - 1))}
+                  disabled={travelersCount <= 1}
+                >
+                  <Text style={[styles.stepperBtnText, travelersCount <= 1 && styles.stepperBtnTextDisabled]}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{travelersCount}</Text>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, travelersCount >= 20 && styles.stepperBtnDisabled]}
+                  onPress={() => setTravelersCount(c => Math.min(20, c + 1))}
+                  disabled={travelersCount >= 20}
+                >
+                  <Text style={[styles.stepperBtnText, travelersCount >= 20 && styles.stepperBtnTextDisabled]}>+</Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={styles.fieldLabel}>Währung</Text>
               <View style={styles.currencyRow}>
                 {CURRENCIES.map(c => (
@@ -633,7 +686,13 @@ const styles = StyleSheet.create({
   stepTitle: { ...typography.h2, marginBottom: spacing.lg },
   dateDisplay: { ...typography.body, color: colors.primary, fontWeight: '600', marginBottom: spacing.md, textAlign: 'center' },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
-  currencyRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  currencyRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  stepperBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  stepperBtnDisabled: { borderColor: colors.border },
+  stepperBtnText: { fontSize: 20, color: colors.primary, fontWeight: '600', lineHeight: 22 },
+  stepperBtnTextDisabled: { color: colors.border },
+  stepperValue: { ...typography.h2, minWidth: 32, textAlign: 'center' },
   currencyChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, borderWidth: 1.5, borderColor: colors.border },
   currencyChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   currencyText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },

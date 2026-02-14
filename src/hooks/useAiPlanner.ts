@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
-import { getTrip } from '../api/trips';
+import { getTrip, updateTrip } from '../api/trips';
+import { Trip } from '../types/database';
 import { getCollaborators } from '../api/invitations';
 import { getActivitiesForTrip, getDays } from '../api/itineraries';
 import { getStops } from '../api/stops';
@@ -38,6 +39,7 @@ export interface AiMetadata {
   suggested_questions: string[];
   trip_type?: 'roundtrip' | 'pointtopoint' | null;
   transport_mode?: 'driving' | 'transit' | 'walking' | 'bicycling' | null;
+  group_type?: 'solo' | 'couple' | 'family' | 'friends' | 'group' | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
   form_options?: Array<{ label: string; value: string }> | null;
 }
@@ -614,6 +616,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         setMetadata(meta);
         if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
+        if (meta.group_type && tripId) {
+          contextRef.current.groupType = meta.group_type;
+          const updates: Partial<Trip> = { group_type: meta.group_type };
+          if (meta.group_type === 'solo') updates.travelers_count = 1;
+          else if (meta.group_type === 'couple') updates.travelers_count = 2;
+          updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
+        }
       }
 
       // Save data snapshot for future auto-analysis
@@ -801,6 +810,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         setMetadata(meta);
         if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
+        if (meta.group_type && tripId) {
+          contextRef.current.groupType = meta.group_type;
+          const updates: Partial<Trip> = { group_type: meta.group_type };
+          if (meta.group_type === 'solo') updates.travelers_count = 1;
+          else if (meta.group_type === 'couple') updates.travelers_count = 2;
+          updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
+        }
       }
 
       debouncedSave('conversing', meta, null);
