@@ -377,7 +377,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Programm"
-        onBack={() => navigation.replace('TripDetail', { tripId })}
+        onBack={() => navigation.navigate('Dashboard' as any)}
         rightAction={
           isFeatureAllowed('ai') ? (
             <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
