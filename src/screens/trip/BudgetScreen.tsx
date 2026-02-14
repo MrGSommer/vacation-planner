@@ -47,6 +47,17 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const currency = trip?.currency || 'CHF';
 
+  // Reopen Fable modal when returning from FableTripSettings
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if ((route.params as any)?.openFable) {
+        setShowAiModal(true);
+        navigation.setParams({ openFable: undefined } as any);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, route.params]);
+
   // Fetch trip + collaborators
   useEffect(() => {
     (async () => {

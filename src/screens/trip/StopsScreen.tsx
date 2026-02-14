@@ -169,6 +169,17 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Reopen Fable modal when returning from FableTripSettings
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if ((route.params as any)?.openFable) {
+        setShowAiModal(true);
+        navigation.setParams({ openFable: undefined } as any);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, route.params]);
+
   const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
   const getTravelIcon = (mode: TravelMode) => TRAVEL_MODES.find(m => m.id === mode)?.icon || '🚗';
 

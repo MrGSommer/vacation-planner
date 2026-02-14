@@ -111,6 +111,17 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [scrollToActiveTab]);
 
   useEffect(() => { loadTripData(); }, [loadTripData]);
+
+  // Reopen Fable modal when returning from FableTripSettings
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if ((route.params as any)?.openFable) {
+        setShowAiModal(true);
+        navigation.setParams({ openFable: undefined } as any);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, route.params]);
   useRealtime('activities', `trip_id=eq.${tripId}`, () => {
     // Reload hotel activities + current day
     getActivitiesForTrip(tripId).then(all => {

@@ -76,6 +76,17 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Reopen Fable modal when returning from FableTripSettings
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if ((route.params as any)?.openFable) {
+        setShowAiModal(true);
+        navigation.setParams({ openFable: undefined } as any);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, route.params]);
+
   const handleToggle = async (item: PackingItem) => {
     if (selectionMode) {
       // In selection mode, tap toggles selection
