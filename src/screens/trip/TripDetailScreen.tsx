@@ -173,12 +173,19 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     URL.revokeObjectURL(url);
   };
 
+  // Reopen Fable modal when returning from FableTripSettings
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if ((route.params as any)?.openFable) {
         setShowAiModal(true);
         navigation.setParams({ openFable: undefined } as any);
       }
+    });
+    return unsubscribe;
+  }, [navigation, route.params]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
       setLoading(true);
       mapInitializedRef.current = false;
       mapInstanceRef.current = null;
