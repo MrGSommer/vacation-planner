@@ -764,7 +764,7 @@ export const AiTripModal: React.FC<Props> = ({
             </View>
             <View style={styles.headerRight}>
               {tripId && (
-                <TouchableOpacity onPress={() => navigation.navigate('FableTripSettings' as any, { tripId })} style={styles.closeButton}>
+                <TouchableOpacity onPress={() => { navigation.setParams({ openFable: true } as any); onClose(); navigation.navigate('FableTripSettings' as any, { tripId }); }} style={styles.closeButton}>
                   <Text style={styles.settingsText}>{'⚙'}</Text>
                 </TouchableOpacity>
               )}

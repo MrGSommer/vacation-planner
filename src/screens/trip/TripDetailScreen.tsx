@@ -175,6 +175,10 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      if ((route.params as any)?.openFable) {
+        setShowAiModal(true);
+        navigation.setParams({ openFable: undefined } as any);
+      }
       setLoading(true);
       mapInitializedRef.current = false;
       mapInstanceRef.current = null;
