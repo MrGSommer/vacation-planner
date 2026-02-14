@@ -245,7 +245,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Packliste"
-        onBack={() => navigation.goBack()}
+        onBack={() => navigation.replace('TripDetail', { tripId })}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (
