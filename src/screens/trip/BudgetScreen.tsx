@@ -19,6 +19,7 @@ import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations
 import { Trip, Expense, BudgetCategory } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { SettlementCard } from '../../components/budget/SettlementCard';
 import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Budget'>;
@@ -142,7 +143,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Budget & Ausgaben"
-        onBack={() => navigation.navigate('Dashboard' as any)}
+        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           isFeatureAllowed('ai') ? (
             <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -185,6 +186,15 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 totalSpent={total}
                 currency={currency}
               />
+
+              {scope === 'group' && expenses.length > 0 && (
+                <SettlementCard
+                  expenses={expenses}
+                  collaborators={collaborators}
+                  currency={currency}
+                  currentUserId={user?.id || ''}
+                />
+              )}
 
               {byCategory.map(cat => (
                 <BudgetCategoryCard

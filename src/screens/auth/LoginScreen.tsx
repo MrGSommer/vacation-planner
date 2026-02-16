@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
+import { PasswordInput } from '../../components/common/PasswordInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -47,12 +48,11 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             keyboardType="email-address"
             autoCapitalize="none"
           />
-          <Input
+          <PasswordInput
             label="Passwort"
             placeholder="Dein Passwort"
             value={password}
             onChangeText={(t) => { setPassword(t); clearError(); }}
-            secureTextEntry
           />
 
           <Button title="Anmelden" onPress={handleLogin} loading={loading} disabled={!email || !password} style={styles.loginButton} />

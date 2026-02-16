@@ -2,12 +2,25 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
+import { PasswordInput } from '../../components/common/PasswordInput';
 import { supabase } from '../../api/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ResetPassword'> };
+
+// Detect if this was reached via invite flow (user was invited, needs to set password)
+const isInviteFlow = (() => {
+  if (Platform.OS === 'web') {
+    try {
+      const fullUrl = window.location.href;
+      const hash = window.location.hash;
+      return hash.includes('type=invite') || fullUrl.includes('type=invite');
+    } catch { return false; }
+  }
+  return false;
+})();
 
 export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [password, setPassword] = useState('');
@@ -30,7 +43,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
-      showToast('Passwort erfolgreich geändert', 'success');
+      showToast(isInviteFlow ? 'Willkommen bei WayFable!' : 'Passwort erfolgreich geändert', 'success');
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (e: any) {
       setError(e.message || 'Passwort konnte nicht geändert werden');
@@ -41,31 +54,35 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Neues Passwort" />
+      <Header title={isInviteFlow ? 'Willkommen!' : 'Neues Passwort'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>Neues Passwort setzen</Text>
-          <Text style={styles.subtitle}>Gib dein neues Passwort ein.</Text>
+          <Text style={styles.title}>
+            {isInviteFlow ? 'Willkommen bei WayFable!' : 'Neues Passwort setzen'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {isInviteFlow
+              ? 'Setze dein Passwort, um dein Konto zu aktivieren.'
+              : 'Gib dein neues Passwort ein.'}
+          </Text>
 
           {error && <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
 
-          <Input
+          <PasswordInput
             label="Neues Passwort"
             placeholder="Mindestens 6 Zeichen"
             value={password}
             onChangeText={(t) => { setPassword(t); setError(null); }}
-            secureTextEntry
           />
-          <Input
+          <PasswordInput
             label="Passwort bestätigen"
             placeholder="Passwort wiederholen"
             value={confirmPassword}
             onChangeText={(t) => { setConfirmPassword(t); setError(null); }}
-            secureTextEntry
           />
 
           <Button
-            title="Passwort ändern"
+            title={isInviteFlow ? 'Konto aktivieren' : 'Passwort ändern'}
             onPress={handleUpdate}
             loading={loading}
             disabled={!password || !confirmPassword}

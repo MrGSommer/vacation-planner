@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Tou
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button } from '../../components/common';
+import { PasswordInput } from '../../components/common/PasswordInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -143,8 +144,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
           </View>
           <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); clearError(); }} keyboardType="email-address" autoCapitalize="none" />
-          <Input label="Passwort" placeholder="Mindestens 6 Zeichen" value={password} onChangeText={(t) => { setPassword(t); setLocalError(null); }} secureTextEntry />
-          <Input label="Passwort bestätigen" placeholder="Passwort wiederholen" value={confirmPassword} onChangeText={(t) => { setConfirmPassword(t); setLocalError(null); }} secureTextEntry />
+          <PasswordInput label="Passwort" placeholder="Mindestens 6 Zeichen" value={password} onChangeText={(t) => { setPassword(t); setLocalError(null); }} />
+          <PasswordInput label="Passwort bestätigen" placeholder="Passwort wiederholen" value={confirmPassword} onChangeText={(t) => { setConfirmPassword(t); setLocalError(null); }} />
 
           <Pressable style={styles.agbRow} onPress={() => setAgbAccepted(!agbAccepted)}>
             <View style={[styles.checkbox, agbAccepted && styles.checkboxChecked]}>

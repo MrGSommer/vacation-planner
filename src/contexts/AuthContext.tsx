@@ -45,9 +45,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   // Detect invite hash synchronously before Supabase clears it
+  // Check both hash and full URL for type=invite (Supabase v2 uses fragments)
   const [pendingSetPassword, setPendingSetPassword] = useState(() => {
     if (Platform.OS === 'web') {
-      try { return window.location.hash.includes('type=invite'); } catch { return false; }
+      try {
+        const fullUrl = window.location.href;
+        const hash = window.location.hash;
+        return hash.includes('type=invite') || fullUrl.includes('type=invite');
+      } catch { return false; }
     }
     return false;
   });

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-type TableName = 'activities' | 'expenses' | 'packing_items' | 'photos' | 'budget_categories';
+type TableName = 'activities' | 'expenses' | 'packing_items' | 'photos' | 'budget_categories' | 'trip_collaborators' | 'itinerary_days';
 
 export interface RealtimePayload {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -17,7 +17,7 @@ export const useRealtime = (
 ) => {
   useEffect(() => {
     const channel: RealtimeChannel = supabase
-      .channel(`${table}_changes`)
+      .channel(`${table}_${filter}_changes`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table, filter },

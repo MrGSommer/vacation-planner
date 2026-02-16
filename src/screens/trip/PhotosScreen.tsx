@@ -27,7 +27,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   if (!isFeatureAllowed('photos')) {
     return (
       <View style={styles.container}>
-        <Header title="Fotos" onBack={() => navigation.goBack()} />
+        <Header title="Fotos" onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })} />
         <UpgradePrompt
           icon="📸"
           title="Foto-Galerie"
@@ -91,7 +91,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Fotos" onBack={() => navigation.goBack()} rightAction={
+      <Header title="Fotos" onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })} rightAction={
         <Text style={styles.count}>{photos.length}</Text>
       } />
 

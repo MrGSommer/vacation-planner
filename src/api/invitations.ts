@@ -55,7 +55,8 @@ export const updateCollaboratorRole = async (
   if (error) throw error;
 };
 
-export const createInviteLink = async (
+// Internal: creates a new invitation row
+const createInviteLinkInternal = async (
   tripId: string,
   invitedBy: string,
   type: 'info' | 'collaborate',
@@ -69,6 +70,7 @@ export const createInviteLink = async (
       type,
       role,
       status: 'pending',
+      is_active: true,
     })
     .select()
     .single();
@@ -76,6 +78,51 @@ export const createInviteLink = async (
   const prefix = type === 'info' ? 'share' : 'invite';
   return { token: data.token, url: `${BASE_URL}/${prefix}/${data.token}` };
 };
+
+// Get existing active link or create a new one
+export const getOrCreateInviteLink = async (
+  tripId: string,
+  invitedBy: string,
+  type: 'info' | 'collaborate',
+  role: 'editor' | 'viewer' = 'viewer',
+): Promise<{ token: string; url: string }> => {
+  // Look for existing active link for this trip+type
+  const { data: existing } = await supabase
+    .from('trip_invitations')
+    .select('token, type')
+    .eq('trip_id', tripId)
+    .eq('type', type)
+    .eq('is_active', true)
+    .single();
+
+  if (existing) {
+    const prefix = type === 'info' ? 'share' : 'invite';
+    return { token: existing.token, url: `${BASE_URL}/${prefix}/${existing.token}` };
+  }
+
+  return createInviteLinkInternal(tripId, invitedBy, type, role);
+};
+
+// Reset an invite link: deactivate old, create new
+export const resetInviteLink = async (
+  tripId: string,
+  invitedBy: string,
+  type: 'info' | 'collaborate',
+  role: 'editor' | 'viewer' = 'viewer',
+): Promise<{ token: string; url: string }> => {
+  // Deactivate all existing active links for this trip+type
+  await supabase
+    .from('trip_invitations')
+    .update({ is_active: false })
+    .eq('trip_id', tripId)
+    .eq('type', type)
+    .eq('is_active', true);
+
+  return createInviteLinkInternal(tripId, invitedBy, type, role);
+};
+
+// Keep backward compatible export
+export const createInviteLink = getOrCreateInviteLink;
 
 export interface InviteResponse {
   invitation: TripInvitation;
@@ -94,6 +141,33 @@ export const acceptInvite = async (token: string): Promise<{ success: boolean; t
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
   return data;
+};
+
+// Leave a trip (non-owner: removes self; owner: returns requires_transfer/requires_delete)
+export const leaveTrip = async (tripId: string): Promise<{
+  success?: boolean;
+  requires_transfer?: boolean;
+  requires_delete_or_keep?: boolean;
+  collaborator_count?: number;
+  error?: string;
+}> => {
+  const { data, error } = await supabase.rpc('leave_trip', { p_trip_id: tripId });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  invalidateCache('collabs:');
+  return data;
+};
+
+// Transfer ownership of a trip
+export const transferOwnership = async (tripId: string, newOwnerId: string): Promise<void> => {
+  const { data, error } = await supabase.rpc('transfer_ownership', {
+    p_trip_id: tripId,
+    p_new_owner_id: newOwnerId,
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  invalidateCache('collabs:');
+  invalidateCache('trips:');
 };
 
 export interface ShareTripData {

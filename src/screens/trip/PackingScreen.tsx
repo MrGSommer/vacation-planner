@@ -76,6 +76,17 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Realtime updates for packing items
+  const handlePackingRealtime = useCallback(() => {
+    loadData();
+  }, [loadData]);
+
+  useRealtime(
+    'packing_items',
+    listId ? `list_id=eq.${listId}` : 'list_id=eq.00000000-0000-0000-0000-000000000000',
+    handlePackingRealtime,
+  );
+
   // Reopen Fable modal when returning from FableTripSettings
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -256,7 +267,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Packliste"
-        onBack={() => navigation.navigate('Dashboard' as any)}
+        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (
@@ -442,23 +453,28 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
             </TouchableOpacity>
 
-            {collaborators.map(collab => (
-              <TouchableOpacity
-                key={collab.profile.id}
-                style={styles.assignOption}
-                onPress={() => handleAssign(collab.profile.id)}
-              >
-                <View style={styles.assignOptionAvatar}>
-                  <Text style={styles.assignOptionAvatarText}>
-                    {(getDisplayName(collab.profile) || '?').charAt(0).toUpperCase()}
+            {collaborators.map(collab => {
+              const isSelf = collab.user_id === user?.id;
+              return (
+                <TouchableOpacity
+                  key={collab.profile.id}
+                  style={styles.assignOption}
+                  onPress={() => handleAssign(collab.profile.id)}
+                >
+                  <View style={styles.assignOptionAvatar}>
+                    <Text style={styles.assignOptionAvatarText}>
+                      {(getDisplayName(collab.profile) || '?').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.assignOptionName}>
+                    {getDisplayName(collab.profile)}{isSelf ? ' (Du)' : ''}
                   </Text>
-                </View>
-                <Text style={styles.assignOptionName}>{getDisplayName(collab.profile)}</Text>
-                {assignItemId && items.find(i => i.id === assignItemId)?.assigned_to === collab.profile.id && (
-                  <Text style={styles.assignCheck}>✓</Text>
-                )}
-              </TouchableOpacity>
-            ))}
+                  {assignItemId && items.find(i => i.id === assignItemId)?.assigned_to === collab.profile.id && (
+                    <Text style={styles.assignCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </TouchableOpacity>
       </Modal>

@@ -12,12 +12,16 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
-  createInviteLink,
+  getOrCreateInviteLink,
+  resetInviteLink,
   getCollaborators,
   removeCollaborator,
   updateCollaboratorRole,
+  leaveTrip,
+  transferOwnership,
   CollaboratorWithProfile,
 } from '../../api/invitations';
+import { deleteTrip } from '../../api/trips';
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -58,11 +62,25 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [members, setMembers] = useState<CollaboratorWithProfile[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
 
+  // Transfer ownership modal
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+
   useEffect(() => {
     if (visible) {
       loadMembers();
+      loadExistingLink();
     }
   }, [visible]);
+
+  // Auto-load existing link when type changes
+  useEffect(() => {
+    if (visible) {
+      setGeneratedUrl(null);
+      loadExistingLink();
+    }
+  }, [type]);
 
   const loadMembers = async () => {
     setMembersLoading(true);
@@ -76,19 +94,46 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
   };
 
-  const handleCreate = async () => {
-    if (type === 'collaborate' && !canAddCollaborator(nonOwnerMembers.length)) {
-      showToast('Kollaborateur-Limit erreicht. Upgrade auf Premium für unbegrenzte Teilnehmer.', 'error');
-      return;
-    }
+  const loadExistingLink = async () => {
     setLoading(true);
     try {
-      const { url } = await createInviteLink(tripId, userId, type, role);
+      const { url } = await getOrCreateInviteLink(tripId, userId, type, role);
       setGeneratedUrl(url);
     } catch {
-      showToast('Fehler beim Erstellen des Links', 'error');
+      // No existing link yet, that's fine
+      setGeneratedUrl(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetLink = async () => {
+    const doReset = async () => {
+      setLoading(true);
+      try {
+        const { url } = await resetInviteLink(tripId, userId, type, role);
+        setGeneratedUrl(url);
+        showToast('Link zurückgesetzt', 'success');
+      } catch {
+        showToast('Fehler beim Zurücksetzen', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Link zurücksetzen? Der alte Link funktioniert dann nicht mehr.')) {
+        doReset();
+      }
+    } else {
+      Alert.alert(
+        'Link zurücksetzen',
+        'Der alte Link funktioniert dann nicht mehr. Fortfahren?',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Zurücksetzen', style: 'destructive', onPress: doReset },
+        ],
+      );
     }
   };
 
@@ -109,10 +154,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     setType('collaborate');
     setRole('viewer');
     setTab('share');
+    setShowTransferModal(false);
+    setTransferTargetId(null);
     onClose();
   };
 
+  const isOwner = members.find(m => m.role === 'owner')?.user_id === userId;
+
   const handleRemoveMember = (member: CollaboratorWithProfile) => {
+    // Prevent removing the owner
+    if (member.role === 'owner') return;
     const name = getDisplayName(member.profile);
     const doRemove = async () => {
       try {
@@ -141,6 +192,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const handleToggleRole = async (member: CollaboratorWithProfile) => {
+    // Can't change owner's role
+    if (member.role === 'owner') return;
     const newRole = member.role === 'editor' ? 'viewer' : 'editor';
     try {
       await updateCollaboratorRole(member.id, newRole);
@@ -149,6 +202,80 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       );
     } catch {
       showToast('Fehler beim Ändern der Rolle', 'error');
+    }
+  };
+
+  const handleLeaveTrip = async () => {
+    const doLeave = async () => {
+      try {
+        const result = await leaveTrip(tripId);
+        if (result.success) {
+          showToast('Du hast die Reise verlassen', 'success');
+          handleClose();
+        } else if (result.requires_transfer) {
+          setShowTransferModal(true);
+        } else if (result.requires_delete_or_keep) {
+          handleOwnerLeaveNoCollabs();
+        }
+      } catch (e: any) {
+        showToast(e.message || 'Fehler beim Verlassen', 'error');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Reise wirklich verlassen?')) {
+        doLeave();
+      }
+    } else {
+      Alert.alert(
+        'Reise verlassen',
+        'Möchtest du diese Reise wirklich verlassen?',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Verlassen', style: 'destructive', onPress: doLeave },
+        ],
+      );
+    }
+  };
+
+  const handleOwnerLeaveNoCollabs = () => {
+    const doDelete = async () => {
+      try {
+        await deleteTrip(tripId);
+        showToast('Reise gelöscht', 'success');
+        handleClose();
+      } catch {
+        showToast('Fehler beim Löschen', 'error');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Du bist der einzige Teilnehmer. Möchtest du die Reise löschen?')) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Reise löschen?',
+        'Du bist der einzige Teilnehmer. Möchtest du die Reise löschen?',
+        [
+          { text: 'Behalten', style: 'cancel' },
+          { text: 'Löschen', style: 'destructive', onPress: doDelete },
+        ],
+      );
+    }
+  };
+
+  const handleTransferOwnership = async () => {
+    if (!transferTargetId) return;
+    setTransferLoading(true);
+    try {
+      await transferOwnership(tripId, transferTargetId);
+      showToast('Ownership übertragen. Du hast die Reise verlassen.', 'success');
+      handleClose();
+    } catch (e: any) {
+      showToast(e.message || 'Fehler bei der Übertragung', 'error');
+    } finally {
+      setTransferLoading(false);
     }
   };
 
@@ -187,67 +314,63 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           {tab === 'share' && (
             <>
-              {!generatedUrl ? (
+              <Text style={styles.label}>Art des Links</Text>
+              <View style={styles.toggleRow}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, type === 'info' && styles.toggleActive]}
+                  onPress={() => setType('info')}
+                >
+                  <Text style={[styles.toggleText, type === 'info' && styles.toggleTextActive]}>
+                    Info teilen
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, type === 'collaborate' && styles.toggleActive]}
+                  onPress={() => setType('collaborate')}
+                >
+                  <Text style={[styles.toggleText, type === 'collaborate' && styles.toggleTextActive]}>
+                    Zusammenarbeit
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {type === 'collaborate' && (
                 <>
-                  <Text style={styles.label}>Art des Links</Text>
+                  <Text style={styles.label}>Rolle</Text>
                   <View style={styles.toggleRow}>
                     <TouchableOpacity
-                      style={[styles.toggleBtn, type === 'info' && styles.toggleActive]}
-                      onPress={() => setType('info')}
+                      style={[styles.toggleBtn, role === 'viewer' && styles.toggleActive]}
+                      onPress={() => setRole('viewer')}
                     >
-                      <Text style={[styles.toggleText, type === 'info' && styles.toggleTextActive]}>
-                        Info teilen
+                      <Text style={[styles.toggleText, role === 'viewer' && styles.toggleTextActive]}>
+                        Betrachter
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.toggleBtn, type === 'collaborate' && styles.toggleActive]}
-                      onPress={() => setType('collaborate')}
+                      style={[styles.toggleBtn, role === 'editor' && styles.toggleActive]}
+                      onPress={() => setRole('editor')}
                     >
-                      <Text style={[styles.toggleText, type === 'collaborate' && styles.toggleTextActive]}>
-                        Zusammenarbeit
+                      <Text style={[styles.toggleText, role === 'editor' && styles.toggleTextActive]}>
+                        Bearbeiter
                       </Text>
                     </TouchableOpacity>
                   </View>
-
-                  {type === 'collaborate' && (
-                    <>
-                      <Text style={styles.label}>Rolle</Text>
-                      <View style={styles.toggleRow}>
-                        <TouchableOpacity
-                          style={[styles.toggleBtn, role === 'viewer' && styles.toggleActive]}
-                          onPress={() => setRole('viewer')}
-                        >
-                          <Text style={[styles.toggleText, role === 'viewer' && styles.toggleTextActive]}>
-                            Betrachter
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.toggleBtn, role === 'editor' && styles.toggleActive]}
-                          onPress={() => setRole('editor')}
-                        >
-                          <Text style={[styles.toggleText, role === 'editor' && styles.toggleTextActive]}>
-                            Bearbeiter
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-
-                  <Button
-                    title="Link erstellen"
-                    onPress={handleCreate}
-                    loading={loading}
-                    style={styles.actionBtn}
-                  />
                 </>
-              ) : (
+              )}
+
+              {loading ? (
+                <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
+              ) : generatedUrl ? (
                 <>
                   <View style={styles.urlBox}>
                     <Text style={styles.urlText} numberOfLines={2}>{generatedUrl}</Text>
                   </View>
                   <Button title="Link kopieren" onPress={handleCopy} style={styles.actionBtn} />
+                  <TouchableOpacity onPress={handleResetLink} style={styles.resetLink}>
+                    <Text style={styles.resetLinkText}>Link zurücksetzen</Text>
+                  </TouchableOpacity>
                 </>
-              )}
+              ) : null}
             </>
           )}
 
@@ -268,6 +391,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                       <View style={styles.memberInfo}>
                         <Text style={styles.memberName} numberOfLines={1}>
                           {getDisplayName(owner.profile)}
+                          {owner.user_id === userId ? ' (Du)' : ''}
                         </Text>
                         <Text style={styles.memberRole}>{roleLabels.owner}</Text>
                       </View>
@@ -275,36 +399,62 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   )}
 
                   {/* Other members */}
-                  {nonOwnerMembers.map(member => (
-                    <View key={member.id} style={styles.memberRow}>
-                      <Avatar
-                        uri={member.profile.avatar_url}
-                        name={getDisplayName(member.profile)}
-                        size={36}
-                      />
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName} numberOfLines={1}>
-                          {getDisplayName(member.profile)}
-                        </Text>
-                        <TouchableOpacity onPress={() => handleToggleRole(member)}>
-                          <Text style={styles.memberRoleTappable}>
-                            {roleLabels[member.role] || member.role}  ↻
+                  {nonOwnerMembers.map(member => {
+                    const isSelf = member.user_id === userId;
+                    return (
+                      <View key={member.id} style={styles.memberRow}>
+                        <Avatar
+                          uri={member.profile.avatar_url}
+                          name={getDisplayName(member.profile)}
+                          size={36}
+                        />
+                        <View style={styles.memberInfo}>
+                          <Text style={styles.memberName} numberOfLines={1}>
+                            {getDisplayName(member.profile)}
+                            {isSelf ? ' (Du)' : ''}
                           </Text>
-                        </TouchableOpacity>
+                          {isOwner ? (
+                            <TouchableOpacity onPress={() => handleToggleRole(member)}>
+                              <Text style={styles.memberRoleTappable}>
+                                {roleLabels[member.role] || member.role}  ↻
+                              </Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <Text style={styles.memberRole}>
+                              {roleLabels[member.role] || member.role}
+                            </Text>
+                          )}
+                        </View>
+                        {isOwner && !isSelf && (
+                          <TouchableOpacity
+                            onPress={() => handleRemoveMember(member)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.removeMember}>✕</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleRemoveMember(member)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Text style={styles.removeMember}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    );
+                  })}
 
                   {nonOwnerMembers.length === 0 && (
                     <Text style={styles.emptyMembers}>
                       Noch keine Teilnehmer. Erstelle einen Einladungslink im Tab "Teilen".
                     </Text>
+                  )}
+
+                  {/* Leave trip button for non-owners */}
+                  {!isOwner && (
+                    <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveTrip}>
+                      <Text style={styles.leaveBtnText}>Reise verlassen</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Leave trip button for owners (transfers ownership) */}
+                  {isOwner && nonOwnerMembers.length > 0 && (
+                    <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveTrip}>
+                      <Text style={styles.leaveBtnText}>Reise verlassen & Besitz übertragen</Text>
+                    </TouchableOpacity>
                   )}
                 </>
               )}
@@ -320,6 +470,65 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
+
+      {/* Transfer Ownership Modal */}
+      {showTransferModal && (
+        <Modal visible={showTransferModal} transparent animationType="fade">
+          <TouchableOpacity
+            style={styles.overlay}
+            activeOpacity={1}
+            onPress={() => setShowTransferModal(false)}
+          >
+            <TouchableOpacity style={styles.transferModal} activeOpacity={1}>
+              <Text style={styles.transferTitle}>Neuen Besitzer wählen</Text>
+              <Text style={styles.transferSubtitle}>
+                Wer soll die Reise übernehmen?
+              </Text>
+
+              <ScrollView style={{ maxHeight: 200 }}>
+                {nonOwnerMembers.map(member => (
+                  <TouchableOpacity
+                    key={member.id}
+                    style={[
+                      styles.transferOption,
+                      transferTargetId === member.user_id && styles.transferOptionActive,
+                    ]}
+                    onPress={() => setTransferTargetId(member.user_id)}
+                  >
+                    <Avatar
+                      uri={member.profile.avatar_url}
+                      name={getDisplayName(member.profile)}
+                      size={32}
+                    />
+                    <Text style={styles.transferOptionName}>
+                      {getDisplayName(member.profile)}
+                    </Text>
+                    {transferTargetId === member.user_id && (
+                      <Text style={styles.transferCheck}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.transferButtons}>
+                <Button
+                  title="Abbrechen"
+                  onPress={() => setShowTransferModal(false)}
+                  variant="ghost"
+                  style={styles.transferBtn}
+                />
+                <Button
+                  title="Übertragen & Verlassen"
+                  onPress={handleTransferOwnership}
+                  loading={transferLoading}
+                  disabled={!transferTargetId}
+                  style={styles.transferBtn}
+                />
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </Modal>
   );
 };
@@ -376,6 +585,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   urlText: { ...typography.bodySmall, color: colors.textSecondary },
+  resetLink: { alignItems: 'center', marginTop: spacing.sm },
+  resetLinkText: { ...typography.caption, color: colors.error },
   membersList: { maxHeight: 300 },
   memberRow: {
     flexDirection: 'row',
@@ -390,6 +601,45 @@ const styles = StyleSheet.create({
   memberRoleTappable: { ...typography.caption, color: colors.primary },
   removeMember: { fontSize: 16, color: colors.error, padding: spacing.xs },
   emptyMembers: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', marginTop: spacing.lg },
+  leaveBtn: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  leaveBtnText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },
   closeBtn: { marginTop: spacing.md, alignItems: 'center' },
   closeText: { ...typography.body, color: colors.textSecondary },
+  // Transfer modal
+  transferModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    width: '85%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  transferTitle: { ...typography.h3, marginBottom: spacing.xs },
+  transferSubtitle: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.md },
+  transferOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  transferOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  transferOptionName: { ...typography.body, flex: 1 },
+  transferCheck: { fontSize: 16, color: colors.primary, fontWeight: '700' },
+  transferButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  transferBtn: { flex: 1 },
 });

@@ -112,17 +112,8 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
         <Text style={styles.roleText}>
           Rolle: {invitation?.role === 'editor' ? 'Bearbeiter' : 'Betrachter'}
         </Text>
-        {invitation?.status !== 'pending' ? (
-          <>
-            <Text style={styles.usedText}>Diese Einladung wurde bereits verwendet.</Text>
-            <Button title="Zur Startseite" onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })} style={styles.btn} />
-          </>
-        ) : (
-          <>
-            {error && <Text style={styles.errorSmall}>{error}</Text>}
-            <Button title="Einladung annehmen" onPress={handleAccept} loading={accepting} style={styles.btn} />
-          </>
-        )}
+        {error && <Text style={styles.errorSmall}>{error}</Text>}
+        <Button title="Einladung annehmen" onPress={handleAccept} loading={accepting} style={styles.btn} />
       </View>
     </View>
   );
@@ -149,6 +140,5 @@ const styles = StyleSheet.create({
   errorIcon: { fontSize: 48, marginBottom: spacing.md },
   errorText: { ...typography.body, color: colors.error, textAlign: 'center', marginBottom: spacing.lg },
   successIcon: { fontSize: 48, marginBottom: spacing.md },
-  usedText: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', marginBottom: spacing.md },
   errorSmall: { ...typography.bodySmall, color: colors.error, textAlign: 'center', marginBottom: spacing.sm },
 });

@@ -238,6 +238,8 @@ export interface TripInvitation {
   status: 'pending' | 'accepted' | 'declined';
   token: string;
   type: 'info' | 'collaborate';
+  is_active: boolean;
+  accepted_count: number;
   created_at: string;
 }
 

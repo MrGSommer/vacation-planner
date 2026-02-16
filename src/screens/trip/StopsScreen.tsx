@@ -352,7 +352,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   if (!isFeatureAllowed('stops')) {
     return (
       <View style={styles.container}>
-        <Header title="Route & Stops" onBack={() => navigation.replace('TripDetail', { tripId })} />
+        <Header title="Route & Stops" onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })} />
         <UpgradePrompt
           icon="🗺️"
           title="Routen & Stops"
@@ -367,7 +367,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Route & Stops"
-        onBack={() => navigation.navigate('Dashboard' as any)}
+        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (

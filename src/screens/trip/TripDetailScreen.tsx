@@ -358,7 +358,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const headerContent = (
     <>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Dashboard' as any)} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate('Main' as any, { screen: 'Home' })} style={styles.backBtn}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerRight}>
