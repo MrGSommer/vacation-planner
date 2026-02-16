@@ -29,7 +29,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { showToast } = useToast();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
   const [showAiModal, setShowAiModal] = useState(false);
   const [listId, setListId] = useState<string | null>(null);
@@ -58,6 +58,17 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         getPackingLists(tripId),
         getCollaborators(tripId),
       ]);
+      // Safety net: ensure current user always appears in collaborator list
+      if (user && !collabs.find(c => c.user_id === user.id)) {
+        collabs.unshift({
+          id: 'self',
+          trip_id: tripId,
+          user_id: user.id,
+          role: 'owner',
+          created_at: new Date().toISOString(),
+          profile: { id: user.id, email: user.email || '', first_name: profile?.first_name, last_name: profile?.last_name, avatar_url: profile?.avatar_url },
+        } as CollaboratorWithProfile);
+      }
       setCollaborators(collabs);
 
       let activeList = lists[0];
@@ -267,7 +278,6 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Packliste"
-        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (

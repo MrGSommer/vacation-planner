@@ -10,7 +10,7 @@ import { getDirections, formatDuration, formatDistance, TRAVEL_MODES, TravelMode
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { getToday } from '../../utils/dateHelpers';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { openInGoogleMaps, openGoogleMapsDirections } from '../../utils/openInMaps';
@@ -180,7 +180,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     return unsubscribe;
   }, [navigation, route.params]);
 
-  const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+  const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
   const getTravelIcon = (mode: TravelMode) => TRAVEL_MODES.find(m => m.id === mode)?.icon || '🚗';
 
   const handleChangeTravelMode = async (activityId: string, newMode: TravelMode) => {
@@ -367,7 +367,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Route & Stops"
-        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (
@@ -500,7 +499,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity activeOpacity={0.7} onPress={() => setViewActivity(activity)}>
                 <Card style={[styles.stopCard, isActivityToday(activity) && styles.stopCardToday]}>
                   <View style={styles.stopHeader}>
-                    <Text style={styles.stopIcon}>{getCategoryIcon(activity.category)}</Text>
+                    <Text style={styles.stopIcon}>{getCategoryIcon(activity.category, activity.category_data)}</Text>
                     <View style={styles.stopInfo}>
                       <Text style={styles.stopName}>{activity.title}</Text>
                       {(activity.location_name || activity.location_address) && (

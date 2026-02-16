@@ -31,6 +31,7 @@ import { DatenschutzScreen } from '../screens/legal/DatenschutzScreen';
 import { AGBScreen } from '../screens/legal/AGBScreen';
 import { ImpressumScreen } from '../screens/legal/ImpressumScreen';
 import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
+import { BetaDashboardScreen } from '../screens/admin/BetaDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
@@ -67,6 +68,7 @@ const linking = {
       Impressum: 'impressum',
       FeedbackModal: 'feedback',
       AdminDashboard: 'admin',
+      BetaDashboard: 'admin/beta',
       AdminUserList: 'admin/users',
       AdminUserDetail: 'admin/users/:userId',
       ResetPassword: 'reset-password',
@@ -168,6 +170,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="Impressum" component={ImpressumScreen} />
               <Stack.Screen name="FeedbackModal" component={FeedbackScreen} />
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+              <Stack.Screen name="BetaDashboard" component={BetaDashboardScreen} />
               <Stack.Screen name="AdminUserList" component={AdminUserListScreen} />
               <Stack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />

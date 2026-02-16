@@ -11,7 +11,7 @@ import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations
 import { Trip, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateHelpers';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
@@ -34,12 +34,12 @@ import { ensureContrast, tintWithWhite } from '../../utils/colorExtraction';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
-const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
 interface DayInfo { date: string; dayNumber: number; }
 
 function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
-  const icon = getCategoryIcon(act.category);
+  const icon = getCategoryIcon(act.category, act.category_data);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
   let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;

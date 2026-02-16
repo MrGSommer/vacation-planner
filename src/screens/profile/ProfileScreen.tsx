@@ -173,13 +173,22 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       )}
 
       {isAdmin && (
-        <Card style={styles.settingsCard} onPress={() => navigation.navigate('AdminDashboard')}>
-          <View style={styles.settingsRow}>
-            <Text style={styles.settingsIcon}>&#x2699;&#xFE0F;</Text>
-            <Text style={styles.settingsText}>Admin Dashboard</Text>
-            <Text style={styles.arrow}>{'>'}</Text>
-          </View>
-        </Card>
+        <>
+          <Card style={styles.settingsCard} onPress={() => navigation.navigate('AdminDashboard')}>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsIcon}>&#x2699;&#xFE0F;</Text>
+              <Text style={styles.settingsText}>Admin Dashboard</Text>
+              <Text style={styles.arrow}>{'>'}</Text>
+            </View>
+          </Card>
+          <Card style={styles.settingsCard} onPress={() => navigation.navigate('BetaDashboard')}>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsIcon}>{'🧪'}</Text>
+              <Text style={styles.settingsText}>Beta-Dashboard</Text>
+              <Text style={styles.arrow}>{'›'}</Text>
+            </View>
+          </Card>
+        </>
       )}
 
       {/* Legal */}

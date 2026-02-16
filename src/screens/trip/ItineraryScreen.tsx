@@ -9,7 +9,7 @@ import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { getDayDates, formatDateShort, formatTime, getToday } from '../../utils/dateHelpers';
 import { getTrip } from '../../api/trips';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { openInGoogleMaps } from '../../utils/openInMaps';
@@ -236,7 +236,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     setShowModal(true);
   };
 
-  const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+  const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
   // Find accommodation for the selected day based on hotel activities
   const selectedDay = days.find(d => d.id === selectedDayId);
@@ -388,7 +388,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     <View style={styles.container}>
       <Header
         title="Programm"
-        onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })}
         rightAction={
           isFeatureAllowed('ai') ? (
             <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -442,7 +441,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
                 <Card style={styles.activityContent}>
                   <View style={styles.activityHeader}>
-                    <Text style={styles.activityIcon}>{getCategoryIcon(activity.category)}</Text>
+                    <Text style={styles.activityIcon}>{getCategoryIcon(activity.category, activity.category_data)}</Text>
                     <View style={styles.activityInfo}>
                       <Text style={styles.activityTitle}>{activity.title}</Text>
                       {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}

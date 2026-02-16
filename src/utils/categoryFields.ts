@@ -8,7 +8,7 @@ export interface CategoryField {
 
 export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
   transport: [
-    { key: 'transport_type', label: 'Transportmittel', type: 'select', options: ['Flug', 'Zug', 'Bus', 'Fähre', 'Auto', 'Taxi'] },
+    { key: 'transport_type', label: 'Transportmittel', type: 'select', options: ['Auto', 'Zug', 'Bus', 'Flug', 'Fähre', 'Taxi'] },
     { key: 'carrier', label: 'Gesellschaft', type: 'text', placeholder: 'z.B. Swiss, SBB' },
     { key: 'reference_number', label: 'Buchungsnr / Flugnr', type: 'text', placeholder: 'z.B. LX1234' },
     { key: 'departure_station', label: 'Abfahrt', type: 'place', placeholder: 'Abfahrtsort' },

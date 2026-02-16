@@ -9,7 +9,7 @@ import { getStops } from '../../api/stops';
 import { getTrip } from '../../api/trips';
 import { Activity, TripStop, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -96,7 +96,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+  const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
   // Transport routes
   const transportRoutes = activities
@@ -231,7 +231,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
           <View style={styles.sheetContent}>
-            <Text style={styles.sheetIcon}>{getCategoryIcon(selected.category)}</Text>
+            <Text style={styles.sheetIcon}>{getCategoryIcon(selected.category, selected.category_data)}</Text>
             <View style={styles.sheetInfo}>
               <Text style={styles.sheetTitle}>{selected.title}</Text>
               {(() => {

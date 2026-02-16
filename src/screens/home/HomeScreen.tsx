@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground, ScrollView, Platform, Alert, Modal, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getCollaboratorsForTrips, CollaboratorWithProfile } from '../../api/invitations';
+import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTrip, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount, isTripActive } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
@@ -134,6 +134,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [collabMap, setCollabMap] = useState<Record<string, CollaboratorWithProfile[]>>({});
   const [initialLoad, setInitialLoad] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
+  const [deleteTrip, setDeleteTrip] = useState<Trip | null>(null);
+  const [deleteCollabs, setDeleteCollabs] = useState<CollaboratorWithProfile[]>([]);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { activeTrips, pastTrips } = useMemo(() => {
     const now = new Date();
@@ -179,25 +182,67 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     loadCollaborators();
   }, [loadCollaborators]);
 
-  const handleDeleteTrip = useCallback((trip: Trip) => {
-    const doDelete = async () => {
-      try {
-        await remove(trip.id);
-        showToast('Reise gelöscht', 'success');
-      } catch {
-        showToast('Fehler beim Löschen', 'error');
+  const handleDeleteTrip = useCallback(async (trip: Trip) => {
+    try {
+      const collabs = await getCollaborators(trip.id);
+      const others = collabs.filter(c => c.user_id !== user?.id);
+      if (others.length === 0) {
+        // No collaborators — simple confirm & delete
+        const doDelete = async () => {
+          try {
+            await remove(trip.id);
+            showToast('Reise gelöscht', 'success');
+          } catch {
+            showToast('Fehler beim Löschen', 'error');
+          }
+        };
+        if (Platform.OS === 'web') {
+          if (window.confirm(`"${trip.name}" wirklich löschen?`)) doDelete();
+        } else {
+          Alert.alert('Reise löschen', `"${trip.name}" wirklich löschen?`, [
+            { text: 'Abbrechen', style: 'cancel' },
+            { text: 'Löschen', style: 'destructive', onPress: doDelete },
+          ]);
+        }
+      } else {
+        // Has collaborators — show transfer modal
+        setDeleteCollabs(others);
+        setDeleteTrip(trip);
       }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`"${trip.name}" wirklich löschen?`)) doDelete();
-    } else {
-      Alert.alert('Reise löschen', `"${trip.name}" wirklich löschen?`, [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Löschen', style: 'destructive', onPress: doDelete },
-      ]);
+    } catch {
+      showToast('Fehler beim Laden der Teilnehmer', 'error');
     }
-  }, [remove, showToast]);
+  }, [user?.id, remove, showToast]);
+
+  const handleForceDelete = useCallback(async () => {
+    if (!deleteTrip) return;
+    setDeleteLoading(true);
+    try {
+      await remove(deleteTrip.id);
+      showToast('Reise gelöscht', 'success');
+      setDeleteTrip(null);
+    } catch {
+      showToast('Fehler beim Löschen', 'error');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [deleteTrip, remove, showToast]);
+
+  const handleTransferOwnership = useCallback(async (newOwner: CollaboratorWithProfile) => {
+    if (!deleteTrip) return;
+    setDeleteLoading(true);
+    try {
+      await transferOwnership(deleteTrip.id, newOwner.user_id);
+      await leaveTrip(deleteTrip.id);
+      await fetchTrips();
+      showToast(`Besitz übertragen an ${getDisplayName(newOwner.profile)}`, 'success');
+      setDeleteTrip(null);
+    } catch {
+      showToast('Fehler bei der Übertragung', 'error');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [deleteTrip, fetchTrips, showToast]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -288,6 +333,52 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         />
       )}
 
+      {/* Delete / Transfer Modal */}
+      <Modal visible={!!deleteTrip} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.deleteOverlay}
+          activeOpacity={1}
+          onPress={() => !deleteLoading && setDeleteTrip(null)}
+        >
+          <View style={styles.deleteModal} onStartShouldSetResponder={() => true}>
+            <Text style={styles.deleteModalTitle}>Reise löschen</Text>
+            <Text style={styles.deleteModalInfo}>
+              Diese Reise hat {deleteCollabs.length} {deleteCollabs.length === 1 ? 'Teilnehmer' : 'Teilnehmer'}.
+            </Text>
+
+            {deleteLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : (
+              <>
+                <Text style={styles.deleteModalSectionTitle}>Besitz übertragen an:</Text>
+                {deleteCollabs.map(collab => (
+                  <TouchableOpacity
+                    key={collab.user_id}
+                    style={styles.transferOption}
+                    onPress={() => handleTransferOwnership(collab)}
+                  >
+                    <Avatar uri={collab.profile.avatar_url} name={getDisplayName(collab.profile)} size={36} />
+                    <Text style={styles.transferName}>{getDisplayName(collab.profile)}</Text>
+                    <Text style={styles.transferArrow}>{'›'}</Text>
+                  </TouchableOpacity>
+                ))}
+
+                <View style={styles.deleteModalDivider} />
+
+                <TouchableOpacity style={styles.forceDeleteBtn} onPress={handleForceDelete}>
+                  <Text style={styles.forceDeleteText}>Endgültig löschen</Text>
+                  <Text style={styles.forceDeleteHint}>Alle Teilnehmer verlieren Zugriff</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeleteTrip(null)}>
+                  <Text style={styles.cancelBtnText}>Abbrechen</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + spacing.lg }]}
         onPress={() => navigation.navigate('CreateTrip')}
@@ -348,4 +439,18 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: spacing.xl, width: 60, height: 60 },
   fabGradient: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 32, color: '#FFFFFF', fontWeight: '300', marginTop: -2 },
+  deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  deleteModal: { backgroundColor: '#FFFFFF', borderRadius: borderRadius.lg, padding: spacing.xl, width: '100%', maxWidth: 400, ...shadows.lg },
+  deleteModalTitle: { ...typography.h2, marginBottom: spacing.sm },
+  deleteModalInfo: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.lg },
+  deleteModalSectionTitle: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm },
+  transferOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md },
+  transferName: { ...typography.body, flex: 1, fontWeight: '500' },
+  transferArrow: { fontSize: 20, color: colors.textLight },
+  deleteModalDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
+  forceDeleteBtn: { paddingVertical: spacing.md },
+  forceDeleteText: { ...typography.body, color: colors.error, fontWeight: '600' },
+  forceDeleteHint: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
+  cancelBtnText: { ...typography.body, color: colors.primary, fontWeight: '500' },
 });

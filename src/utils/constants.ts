@@ -16,6 +16,27 @@ export const ACTIVITY_CATEGORIES = [
   { id: 'other', label: 'Sonstiges', icon: '📌' },
 ] as const;
 
+// Maps transport_type sub-selection to specific icons
+export const TRANSPORT_TYPE_ICONS: Record<string, string> = {
+  'Auto': '🚗',
+  'Zug': '🚆',
+  'Bus': '🚌',
+  'Flug': '✈️',
+  'Fähre': '⛴️',
+  'Taxi': '🚕',
+};
+
+/**
+ * Returns the icon for an activity, considering transport_type sub-selection.
+ * Use this instead of looking up ACTIVITY_CATEGORIES directly.
+ */
+export const getActivityIcon = (category: string, categoryData?: Record<string, any> | null): string => {
+  if (category === 'transport' && categoryData?.transport_type) {
+    return TRANSPORT_TYPE_ICONS[categoryData.transport_type] || '✈️';
+  }
+  return ACTIVITY_CATEGORIES.find(c => c.id === category)?.icon || '📌';
+};
+
 export const BUDGET_CATEGORIES = [
   { id: 'transport', label: 'Transport', color: '#FF6B6B' },
   { id: 'accommodation', label: 'Unterkunft', color: '#4ECDC4' },

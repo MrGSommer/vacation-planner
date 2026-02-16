@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
 import { AiTripPlan } from '../../services/ai/planExecutor';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Button, Card } from '../common';
 import { formatDate } from '../../utils/dateHelpers';
@@ -14,7 +14,7 @@ interface Props {
   loading?: boolean;
 }
 
-const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
 const openUrl = (url: string) => {
   if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
@@ -102,7 +102,7 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
 
             {expandedDay === dayIndex && day.activities?.map((act, actIndex) => (
               <View key={actIndex} style={styles.activityRow}>
-                <Text style={styles.activityIcon}>{getCategoryIcon(act.category)}</Text>
+                <Text style={styles.activityIcon}>{getCategoryIcon(act.category, act.category_data)}</Text>
                 <View style={styles.activityInfo}>
                   <Text style={styles.activityTitle}>{act.title}</Text>
                   <View style={styles.activityMeta}>

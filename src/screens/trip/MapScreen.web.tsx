@@ -9,7 +9,7 @@ import { getActivitiesForTrip, getDays, createActivity } from '../../api/itinera
 import { getTrip } from '../../api/trips';
 import { TripStop, Activity, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -20,7 +20,7 @@ const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 
-const getCategoryIcon = (cat: string) => ACTIVITY_CATEGORIES.find(c => c.id === cat)?.icon || '📌';
+const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
 interface DayInfo { date: string; dayNumber: number; }
 
@@ -33,7 +33,7 @@ interface PreviewPlace {
 }
 
 function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
-  const icon = getCategoryIcon(act.category);
+  const icon = getCategoryIcon(act.category, act.category_data);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
   let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
@@ -168,7 +168,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         bounds.extend(pos);
         const catColor = CATEGORY_COLORS[act.category] || colors.accent;
         const glyphEl = document.createElement('span');
-        glyphEl.textContent = getCategoryIcon(act.category);
+        glyphEl.textContent = getCategoryIcon(act.category, act.category_data);
         glyphEl.style.fontSize = '14px';
         const pin = new PinElement({
           background: catColor,

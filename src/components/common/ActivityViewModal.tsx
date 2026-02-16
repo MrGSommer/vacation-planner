@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Platform, Linking } from 'react-native';
 import { Activity } from '../../types/database';
-import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_FIELDS, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { openInGoogleMaps } from '../../utils/openInMaps';
@@ -57,7 +57,7 @@ export const ActivityViewModal: React.FC<Props> = ({
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Category badge */}
             <View style={[styles.categoryBadge, { backgroundColor: catColor + '15' }]}>
-              <Text style={styles.categoryIcon}>{cat?.icon || ''}</Text>
+              <Text style={styles.categoryIcon}>{getActivityIcon(activity.category, catData)}</Text>
               <Text style={[styles.categoryLabel, { color: catColor }]}>{cat?.label || activity.category}</Text>
             </View>
 
