@@ -6,14 +6,16 @@ import { PasswordInput } from '../../components/common/PasswordInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { colors, spacing, typography } from '../../utils/theme';
+import { colors, spacing, typography, borderRadius } from '../../utils/theme';
+
+const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn, loading, error, clearError } = useAuth();
+  const { signIn, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
   const { showToast } = useToast();
 
@@ -21,6 +23,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await signIn(email.trim(), password);
       showToast('Willkommen zurück!', 'success');
+    } catch {}
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogle();
     } catch {}
   };
 
@@ -57,6 +65,21 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
           <Button title="Anmelden" onPress={handleLogin} loading={loading} disabled={!email || !password} style={styles.loginButton} />
 
+          {!WAITLIST_MODE && (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>oder</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.7}>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleButtonText}>Mit Google anmelden</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
           <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} style={styles.link}>
             <Text style={styles.linkText}>Passwort vergessen?</Text>
           </TouchableOpacity>
@@ -81,6 +104,23 @@ const styles = StyleSheet.create({
   errorBox: { backgroundColor: '#FFEAEA', padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
   loginButton: { marginTop: spacing.md },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { ...typography.bodySmall, color: colors.textLight, marginHorizontal: spacing.md },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  googleIcon: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
+  googleButtonText: { ...typography.body, fontWeight: '600', color: colors.text },
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: '600' },

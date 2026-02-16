@@ -1,9 +1,9 @@
 const APP_VERSION = '1.4.0';
 const CACHE_NAME = `wayfable-cache-${APP_VERSION}`;
 
-// Install: no pre-caching, let runtime caching handle it
+// Install: skip waiting immediately so the new SW activates on detection
 self.addEventListener('install', () => {
-  // Don't auto-activate — wait for client to send SKIP_WAITING
+  self.skipWaiting();
 });
 
 // Activate: clean up old caches
@@ -16,7 +16,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Listen for SKIP_WAITING from client
+// Legacy: listen for SKIP_WAITING from client (fallback if skipWaiting in install fails)
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

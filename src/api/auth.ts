@@ -19,6 +19,16 @@ export const signInWithEmail = async (email: string, password: string) => {
   return data;
 };
 
+export const signInWithGoogle = async () => {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: 'https://wayfable.ch',
+    },
+  });
+  if (error) throw error;
+};
+
 export const signOut = async () => {
   const { clearCache } = await import('../utils/queryCache');
   clearCache();

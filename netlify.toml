@@ -1,16 +1,33 @@
-# Service worker must never be cached by the browser
+# Build: inject unique SW version hash after Expo export
+[build]
+  command = "npx expo export -p web && node scripts/inject-sw-version.js"
+  publish = "dist"
+
+# SPA routing: all routes serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Service worker must NEVER be cached — forces browser to check for new version
 [[headers]]
   for = "/sw.js"
   [headers.values]
-    Cache-Control = "public, max-age=0, no-cache"
+    Cache-Control = "public, max-age=0, no-cache, no-store, must-revalidate"
 
 # HTML should always be revalidated
 [[headers]]
   for = "/index.html"
   [headers.values]
-    Cache-Control = "public, no-cache"
+    Cache-Control = "public, no-cache, must-revalidate"
 
 # Hashed JS bundles are immutable (Expo adds content hash to filenames)
+[[headers]]
+  for = "/_expo/static/js/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Also match legacy /static/ path
 [[headers]]
   for = "/static/js/*.js"
   [headers.values]
@@ -26,4 +43,12 @@
 [[headers]]
   for = "/manifest.json"
   [headers.values]
-    Cache-Control = "public, no-cache"
+    Cache-Control = "public, no-cache, must-revalidate"
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signUpWithEmail, signInWithEmail, signOut } from '../api/auth';
+import { signUpWithEmail, signInWithEmail, signInWithGoogle, signOut } from '../api/auth';
 import { useAuthContext } from '../contexts/AuthContext';
 
 export const useAuth = () => {
@@ -33,6 +33,19 @@ export const useAuth = () => {
     }
   };
 
+  const handleSignInWithGoogle = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (e: any) {
+      setError(e.message || 'Google-Anmeldung fehlgeschlagen');
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSignOut = async () => {
     setLoading(true);
     try {
@@ -50,6 +63,7 @@ export const useAuth = () => {
     error,
     signUp: handleSignUp,
     signIn: handleSignIn,
+    signInWithGoogle: handleSignInWithGoogle,
     signOut: handleSignOut,
     clearError: () => setError(null),
   };

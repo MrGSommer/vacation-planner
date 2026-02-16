@@ -4,6 +4,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { PasswordInput } from '../../components/common/PasswordInput';
 import { supabase } from '../../api/supabase';
+import { updateProfile } from '../../api/auth';
+import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
@@ -23,13 +25,20 @@ const isInviteFlow = (() => {
 })();
 
 export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user, refreshProfile } = useAuthContext();
   const { showToast } = useToast();
 
   const handleUpdate = async () => {
+    if (isInviteFlow && !firstName.trim()) {
+      setError('Bitte gib deinen Vornamen ein');
+      return;
+    }
     if (password.length < 6) {
       setError('Passwort muss mindestens 6 Zeichen haben');
       return;
@@ -43,6 +52,16 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
+
+      // Save name for invite flow
+      if (isInviteFlow && user) {
+        await updateProfile(user.id, {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        });
+        await refreshProfile();
+      }
+
       showToast(isInviteFlow ? 'Willkommen bei WayFable!' : 'Passwort erfolgreich geändert', 'success');
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (e: any) {
@@ -62,11 +81,30 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
           <Text style={styles.subtitle}>
             {isInviteFlow
-              ? 'Setze dein Passwort, um dein Konto zu aktivieren.'
+              ? 'Vervollständige dein Profil und setze dein Passwort.'
               : 'Gib dein neues Passwort ein.'}
           </Text>
 
           {error && <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
+
+          {isInviteFlow && (
+            <View style={styles.nameRow}>
+              <Input
+                label="Vorname"
+                placeholder="Vorname"
+                value={firstName}
+                onChangeText={(t) => { setFirstName(t); setError(null); }}
+                style={styles.nameInput}
+              />
+              <Input
+                label="Nachname"
+                placeholder="Nachname"
+                value={lastName}
+                onChangeText={(t) => { setLastName(t); setError(null); }}
+                style={styles.nameInput}
+              />
+            </View>
+          )}
 
           <PasswordInput
             label="Neues Passwort"
@@ -85,7 +123,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
             title={isInviteFlow ? 'Konto aktivieren' : 'Passwort ändern'}
             onPress={handleUpdate}
             loading={loading}
-            disabled={!password || !confirmPassword}
+            disabled={isInviteFlow ? (!firstName.trim() || !password || !confirmPassword) : (!password || !confirmPassword)}
             style={styles.button}
           />
         </ScrollView>
@@ -100,6 +138,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: spacing.xxl },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xl },
+  nameRow: { flexDirection: 'row', gap: spacing.sm },
+  nameInput: { flex: 1 },
   errorBox: { backgroundColor: '#FFEAEA', padding: spacing.md, borderRadius: 8, marginBottom: spacing.md },
   errorText: { ...typography.bodySmall, color: colors.error },
   button: { marginTop: spacing.md },

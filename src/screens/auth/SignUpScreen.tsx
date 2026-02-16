@@ -24,7 +24,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [agbAccepted, setAgbAccepted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
-  const { signUp, loading, error, clearError } = useAuth();
+  const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
 
   const handleSignUp = async () => {
@@ -44,6 +44,10 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleWaitlist = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setLocalError('Bitte gib deinen Vor- und Nachnamen ein');
+      return;
+    }
     if (!email.trim()) {
       setLocalError('Bitte gib deine E-Mail-Adresse ein');
       return;
@@ -107,12 +111,12 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Input label="Vorname (optional)" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
-              <Input label="Nachname (optional)" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
+              <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
+              <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
             </View>
             <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
 
-            <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!email.trim()} style={styles.signUpButton} />
+            <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!firstName.trim() || !lastName.trim() || !email.trim()} style={styles.signUpButton} />
 
             <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
               <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>
@@ -161,6 +165,17 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
           <Button title="Registrieren" onPress={handleSignUp} loading={loading} disabled={!firstName || !email || !password || !confirmPassword || !agbAccepted} style={styles.signUpButton} />
 
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>oder</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity style={styles.googleButton} onPress={() => signInWithGoogle().catch(() => {})} activeOpacity={0.7}>
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.googleButtonText}>Mit Google registrieren</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
             <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>
           </TouchableOpacity>
@@ -187,6 +202,23 @@ const styles = StyleSheet.create({
   agbText: { ...typography.bodySmall, flex: 1, lineHeight: 20 },
   agbLink: { color: colors.primary, fontWeight: '600' },
   signUpButton: { marginTop: spacing.md },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { ...typography.bodySmall, color: colors.textLight, marginHorizontal: spacing.md },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  googleIcon: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
+  googleButtonText: { ...typography.body, fontWeight: '600', color: colors.text },
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: '600' },
