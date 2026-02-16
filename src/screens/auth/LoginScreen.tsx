@@ -8,8 +8,6 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography, borderRadius } from '../../utils/theme';
 
-const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
-
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
@@ -65,20 +63,16 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
           <Button title="Anmelden" onPress={handleLogin} loading={loading} disabled={!email || !password} style={styles.loginButton} />
 
-          {!WAITLIST_MODE && (
-            <>
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>oder</Text>
-                <View style={styles.dividerLine} />
-              </View>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>oder</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.7}>
-                <Text style={styles.googleIcon}>G</Text>
-                <Text style={styles.googleButtonText}>Mit Google anmelden</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.7}>
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.googleButtonText}>Mit Google anmelden</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} style={styles.link}>
             <Text style={styles.linkText}>Passwort vergessen?</Text>

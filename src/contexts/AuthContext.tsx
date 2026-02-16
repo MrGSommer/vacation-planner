@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../api/supabase';
 import { Profile } from '../types/database';
 import { getProfile } from '../api/auth';
+import { useToast } from './ToastContext';
 
 interface AuthContextType {
   session: Session | null;
@@ -43,6 +44,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const { showToast } = useToast();
+  const validatingRef = useRef(false);
 
   // Detect invite hash synchronously before Supabase clears it
   // Check both hash and full URL for type=invite (Supabase v2 uses fragments)
@@ -79,12 +82,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearPasswordRecovery = useCallback(() => setPasswordRecovery(false), []);
 
+  // Force sign-out for deleted/invalid users
+  const forceSignOut = useCallback(async (message: string) => {
+    if (validatingRef.current) return; // prevent double sign-out
+    validatingRef.current = true;
+    try {
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      await supabase.auth.signOut();
+      const { clearCache } = await import('../utils/queryCache');
+      clearCache();
+      showToast(message, 'error', 5000);
+    } finally {
+      validatingRef.current = false;
+    }
+  }, [showToast]);
+
+  // Validate session server-side (getUser hits the API, unlike getSession which is local)
+  const validateSession = useCallback(async () => {
+    if (validatingRef.current) return;
+    const { data: { user: serverUser }, error } = await supabase.auth.getUser();
+    if (error || !serverUser) {
+      await forceSignOut('Dein Konto ist nicht mehr verfügbar. Du wurdest abgemeldet.');
+    }
+  }, [forceSignOut]);
+
   const refreshProfile = async () => {
     if (user) {
       try {
         const p = await getProfile(user.id);
         setProfile(p);
-      } catch {}
+      } catch {
+        // Profile fetch failed — check if user still exists server-side
+        await validateSession();
+      }
     }
   };
 
@@ -93,9 +125,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      if (s) {
+        // Validate server-side that user still exists
+        const { data: { user: serverUser }, error } = await supabase.auth.getUser();
+        if (error || !serverUser) {
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          showToast('Dein Konto ist nicht mehr verfügbar. Du wurdest abgemeldet.', 'error', 5000);
+          return;
+        }
+      }
+      setSession(s);
+      setUser(s?.user ?? null);
       setLoading(false);
     });
 
@@ -110,6 +154,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Re-validate on window focus (web) — catches deletions while tab was in background
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onFocus = () => {
+      if (session) validateSession();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [session, validateSession]);
 
   useEffect(() => {
     if (user) {
