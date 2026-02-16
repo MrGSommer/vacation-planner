@@ -3,7 +3,13 @@
   command = "npx expo export -p web && node scripts/inject-sw-version.js"
   publish = "dist"
 
-# SPA routing: all routes serve index.html
+# Static legal pages for crawlers (must come BEFORE the SPA catch-all)
+[[redirects]]
+  from = "/datenschutz"
+  to = "/datenschutz.html"
+  status = 200
+
+# SPA routing: all other routes serve index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
