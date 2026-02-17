@@ -119,7 +119,7 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Header title="Benachrichtigungen" onBack={() => navigation.goBack()} />
+      <Header title="Benachrichtigungen" onBack={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Profile')} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
 
         {/* Master toggle */}
