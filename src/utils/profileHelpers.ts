@@ -1,3 +1,6 @@
+/** Fallback name shown for deleted users. */
+export const DELETED_USER_NAME = 'Ehemaliger Teilnehmer';
+
 /** Build display name from first_name + last_name, fallback to email. */
 export function getDisplayName(
   profile: { first_name?: string | null; last_name?: string | null; email?: string | null },

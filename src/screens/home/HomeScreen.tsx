@@ -9,11 +9,12 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTrip, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip } from '../../types/database';
-import { formatDateRange, getDayCount, isTripActive } from '../../utils/dateHelpers';
+import { formatDateRange, getDayCount, isTripActive, getTripCountdownText } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/common';
 import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
+import { NotificationPrompt } from '../../components/common/NotificationPrompt';
 import { ShareModal } from './ShareModal';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
@@ -50,6 +51,7 @@ const TripCard: React.FC<{
   const isTraveling = isTripActive(trip.start_date, trip.end_date);
   const displayLabel = isTraveling ? 'Unterwegs' : (statusLabels[trip.status] || trip.status);
   const displayColor = isTraveling ? colors.secondary : (statusColors[trip.status] || colors.textLight);
+  const countdownText = getTripCountdownText(trip);
 
   const cardInner = (
     <LinearGradient
@@ -96,6 +98,9 @@ const TripCard: React.FC<{
             <Text style={styles.cardDates}>
               {formatDateRange(trip.start_date, trip.end_date)} · {getDayCount(trip.start_date, trip.end_date)} Tage
             </Text>
+            {countdownText && (
+              <Text style={styles.cardCountdown}>{countdownText}</Text>
+            )}
           </View>
           <TouchableOpacity
             onPress={onDelete}
@@ -138,17 +143,23 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [deleteCollabs, setDeleteCollabs] = useState<CollaboratorWithProfile[]>([]);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const { activeTrips, pastTrips } = useMemo(() => {
+  const { activeTrips, pastTrips, recentlyCompleted } = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const active: Trip[] = [];
     const past: Trip[] = [];
+    const recent: Trip[] = [];
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     for (const trip of trips) {
       const endDate = new Date(trip.end_date);
       endDate.setDate(endDate.getDate() + 1);
       if (endDate < now) {
         past.push(trip);
+        if (new Date(trip.end_date) >= sevenDaysAgo) {
+          recent.push(trip);
+        }
       } else {
         active.push(trip);
       }
@@ -157,7 +168,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     active.sort((a, b) => a.start_date.localeCompare(b.start_date));
     past.sort((a, b) => b.start_date.localeCompare(a.start_date));
 
-    return { activeTrips: active, pastTrips: past };
+    return { activeTrips: active, pastTrips: past, recentlyCompleted: recent };
   }, [trips]);
 
   const loadCollaborators = useCallback(async () => {
@@ -275,6 +286,24 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchTrips} tintColor={colors.primary} />}
         >
+          {user && <NotificationPrompt userId={user.id} />}
+
+          {recentlyCompleted.map(trip => (
+            <TouchableOpacity
+              key={`recap-${trip.id}`}
+              style={styles.recapBanner}
+              onPress={() => handleTripPress(trip)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.recapBannerIcon}>🎉</Text>
+              <View style={styles.recapBannerContent}>
+                <Text style={styles.recapBannerTitle}>Reise abgeschlossen!</Text>
+                <Text style={styles.recapBannerText}>Schau dir den Rückblick von "{trip.name}" an</Text>
+              </View>
+              <Text style={styles.recapBannerArrow}>›</Text>
+            </TouchableOpacity>
+          ))}
+
           {activeTrips.map((trip, index) => (
             <React.Fragment key={trip.id}>
               {index > 0 && <Separator />}
@@ -422,6 +451,7 @@ const styles = StyleSheet.create({
   cardTitle: { ...typography.h2, color: '#FFFFFF', marginBottom: 2 },
   cardDestination: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginBottom: 4 },
   cardDates: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
+  cardCountdown: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' as const, marginTop: 2 },
   deleteBtn: { padding: spacing.xs },
   deleteIcon: { fontSize: 16, opacity: 0.7 },
   pastHeader: {
@@ -453,4 +483,18 @@ const styles = StyleSheet.create({
   forceDeleteHint: { ...typography.caption, color: colors.textLight, marginTop: 2 },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   cancelBtnText: { ...typography.body, color: colors.primary, fontWeight: '500' },
+  recapBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success + '15',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  recapBannerIcon: { fontSize: 24 },
+  recapBannerContent: { flex: 1 },
+  recapBannerTitle: { ...typography.body, fontWeight: '600', color: colors.success },
+  recapBannerText: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  recapBannerArrow: { fontSize: 22, color: colors.textLight },
 });

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Header, Input, Button } from '../../components/common';
 import { PasswordInput } from '../../components/common/PasswordInput';
+import { GoogleIcon } from '../../components/common/GoogleIcon';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -24,10 +25,15 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     } catch {}
   };
 
+  const [googleLoading, setGoogleLoading] = useState(false);
+
   const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
     try {
       await signInWithGoogle();
-    } catch {}
+    } catch {
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -69,8 +75,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.7}>
-            <Text style={styles.googleIcon}>G</Text>
+          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin} activeOpacity={0.7} disabled={googleLoading}>
+            {googleLoading ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            ) : (
+              <GoogleIcon size={20} />
+            )}
             <Text style={styles.googleButtonText}>Mit Google anmelden</Text>
           </TouchableOpacity>
 
@@ -113,7 +123,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  googleIcon: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
   googleButtonText: { ...typography.body, fontWeight: '600', color: colors.text },
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },

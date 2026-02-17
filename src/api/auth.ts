@@ -59,6 +59,21 @@ export const getProfile = async (userId: string) => {
   return data;
 };
 
+export const deleteAccount = async (password?: string, confirmText?: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Nicht angemeldet');
+
+  const res = await supabase.functions.invoke('delete-account', {
+    body: { password, confirm_text: confirmText },
+  });
+  if (res.error) throw new Error(res.error.message || 'Kontolöschung fehlgeschlagen');
+  if (res.data?.error) throw new Error(res.data.error);
+
+  const { clearCache } = await import('../utils/queryCache');
+  clearCache();
+  await supabase.auth.signOut();
+};
+
 export const updateProfile = async (userId: string, updates: {
   first_name?: string;
   last_name?: string;

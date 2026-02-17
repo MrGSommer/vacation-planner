@@ -59,7 +59,7 @@ export interface AiUserMemory {
 export interface AiTripMessage {
   id: string;
   trip_id: string;
-  sender_id: string;
+  sender_id: string | null;
   sender_name: string;
   role: 'user' | 'assistant';
   encrypted_content: never; // bytea — never accessed directly
@@ -144,7 +144,7 @@ export interface ActivityDocument {
   id: string;
   activity_id: string;
   trip_id: string;
-  user_id: string;
+  user_id: string | null;
   storage_path: string;
   url: string;
   file_name: string;
@@ -156,13 +156,14 @@ export interface ActivityDocument {
 export interface Photo {
   id: string;
   trip_id: string;
-  user_id: string;
+  user_id: string | null;
   storage_path: string;
   url: string;
   thumbnail_url: string | null;
   caption: string | null;
   taken_at: string | null;
   day_id: string | null;
+  creator_name: string | null;
   created_at: string;
 }
 
@@ -181,7 +182,7 @@ export interface Expense {
   id: string;
   trip_id: string;
   category_id: string;
-  user_id: string;
+  user_id: string | null;
   description: string;
   amount: number;
   currency: string;
@@ -189,6 +190,7 @@ export interface Expense {
   scope: 'group' | 'personal';
   paid_by: string | null;
   split_with: string[];
+  creator_name: string | null;
   created_at: string;
   budget_categories?: { name: string; color: string };
 }
@@ -233,7 +235,7 @@ export interface TripInvitation {
   id: string;
   trip_id: string;
   invited_email: string | null;
-  invited_by: string;
+  invited_by: string | null;
   role: 'editor' | 'viewer';
   status: 'pending' | 'accepted' | 'declined';
   token: string;

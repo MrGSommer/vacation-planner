@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button } from '../../components/common';
 import { PasswordInput } from '../../components/common/PasswordInput';
+import { GoogleIcon } from '../../components/common/GoogleIcon';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -24,6 +25,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [agbAccepted, setAgbAccepted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
 
@@ -111,8 +113,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
-              <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
+              <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} containerStyle={{ flex: 1 }} />
+              <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} containerStyle={{ flex: 1 }} />
             </View>
             <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
 
@@ -144,8 +146,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} style={{ flex: 1 }} />
-            <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} style={{ flex: 1 }} />
+            <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} containerStyle={{ flex: 1 }} />
+            <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} containerStyle={{ flex: 1 }} />
           </View>
           <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); clearError(); }} keyboardType="email-address" autoCapitalize="none" />
           <PasswordInput label="Passwort" placeholder="Mindestens 6 Zeichen" value={password} onChangeText={(t) => { setPassword(t); setLocalError(null); }} />
@@ -171,8 +173,12 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.googleButton} onPress={() => signInWithGoogle().catch(() => {})} activeOpacity={0.7}>
-            <Text style={styles.googleIcon}>G</Text>
+          <TouchableOpacity style={styles.googleButton} onPress={() => { setGoogleLoading(true); signInWithGoogle().catch(() => setGoogleLoading(false)); }} activeOpacity={0.7} disabled={googleLoading}>
+            {googleLoading ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            ) : (
+              <GoogleIcon size={20} />
+            )}
             <Text style={styles.googleButtonText}>Mit Google registrieren</Text>
           </TouchableOpacity>
 
@@ -217,7 +223,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  googleIcon: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
   googleButtonText: { ...typography.body, fontWeight: '600', color: colors.text },
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },

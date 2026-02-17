@@ -1,14 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Card, Button, BuyInspirationenModal, PaymentWarningBanner } from '../../components/common';
+import { PasswordInput } from '../../components/common/PasswordInput';
+import { Input } from '../../components/common/Input';
 import { useAuth } from '../../hooks/useAuth';
 import { useAdmin } from '../../hooks/useAdmin';
 import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { createPortalSession } from '../../api/stripe';
+import { deleteAccount } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import appJson from '../../../app.json';
@@ -24,6 +27,41 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [showBuyModal, setShowBuyModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<'confirm' | 'password'>('confirm');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const isOAuthUser = user?.app_metadata?.provider === 'google'
+    || user?.identities?.some((i: any) => i.provider === 'google');
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      if (isOAuthUser) {
+        await deleteAccount(undefined, deleteConfirmText);
+      } else {
+        await deleteAccount(deletePassword);
+      }
+      // Account deleted — signOut already called in deleteAccount()
+      setShowDeleteModal(false);
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Kontolöschung fehlgeschlagen');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeleteStep('confirm');
+    setDeletePassword('');
+    setDeleteConfirmText('');
+    setDeleteError(null);
+    setShowDeleteModal(true);
+  };
 
   // Refresh profile (and credits) every time this tab gains focus
   useFocusEffect(
@@ -214,6 +252,10 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <Button title="Abmelden" onPress={handleSignOut} variant="secondary" style={styles.logoutButton} />
 
+      <TouchableOpacity style={styles.deleteAccountBtn} onPress={openDeleteModal}>
+        <Text style={styles.deleteAccountText}>Konto löschen</Text>
+      </TouchableOpacity>
+
       <Text style={styles.version}>Version {appJson.expo.version}</Text>
 
       <BuyInspirationenModal
@@ -222,6 +264,102 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         userId={user?.id || ''}
         email={user?.email || ''}
       />
+
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleteLoading && setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {deleteStep === 'confirm' ? (
+              <>
+                <Text style={styles.modalTitle}>Konto endgültig löschen?</Text>
+                <Text style={styles.modalBody}>
+                  {'\u2022'} Geteilte Reisen werden an Mitreisende übertragen{'\n'}
+                  {'\u2022'} Reisen ohne Mitreisende werden gelöscht{'\n'}
+                  {'\u2022'} Dein Abonnement wird gekündigt{'\n'}
+                  {'\u2022'} Alle persönlichen Daten werden entfernt{'\n'}
+                  {'\u2022'} Dieser Vorgang ist unwiderruflich
+                </Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalBtnCancel}
+                    onPress={() => setShowDeleteModal(false)}
+                  >
+                    <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalBtnDanger}
+                    onPress={() => setDeleteStep('password')}
+                  >
+                    <Text style={styles.modalBtnDangerText}>Weiter</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>
+                  {isOAuthUser ? 'Löschung bestätigen' : 'Passwort bestätigen'}
+                </Text>
+                {isOAuthUser ? (
+                  <>
+                    <Text style={styles.modalBody}>
+                      Gib «LÖSCHEN» ein, um dein Konto unwiderruflich zu löschen.
+                    </Text>
+                    <Input
+                      label=""
+                      placeholder='LÖSCHEN'
+                      value={deleteConfirmText}
+                      onChangeText={setDeleteConfirmText}
+                      autoCapitalize="characters"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.modalBody}>
+                      Gib dein Passwort ein, um die Löschung zu bestätigen.
+                    </Text>
+                    <PasswordInput
+                      label=""
+                      placeholder="Dein Passwort"
+                      value={deletePassword}
+                      onChangeText={setDeletePassword}
+                    />
+                  </>
+                )}
+                {deleteError && (
+                  <View style={styles.deleteErrorBox}>
+                    <Text style={styles.deleteErrorText}>{deleteError}</Text>
+                  </View>
+                )}
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalBtnCancel}
+                    onPress={() => { setDeleteStep('confirm'); setDeleteError(null); }}
+                    disabled={deleteLoading}
+                  >
+                    <Text style={styles.modalBtnCancelText}>Zurück</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalBtnDanger, deleteLoading && { opacity: 0.6 }]}
+                    onPress={handleDeleteAccount}
+                    disabled={deleteLoading || (!isOAuthUser && !deletePassword) || (isOAuthUser && deleteConfirmText !== 'LÖSCHEN')}
+                  >
+                    {deleteLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.modalBtnDangerText}>Konto löschen</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -254,5 +392,18 @@ const styles = StyleSheet.create({
   subscriptionBtn: { backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
   subscriptionBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
   logoutButton: { marginTop: spacing.md },
+  deleteAccountBtn: { alignItems: 'center', marginTop: spacing.lg },
+  deleteAccountText: { ...typography.bodySmall, color: colors.error },
   version: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.xl, marginBottom: spacing.md },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  modalContent: { backgroundColor: '#FFF', borderRadius: borderRadius.lg, padding: spacing.xl, width: '100%', maxWidth: 400 },
+  modalTitle: { ...typography.h3, marginBottom: spacing.md },
+  modalBody: { ...typography.body, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.lg },
+  modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  modalBtnCancel: { flex: 1, paddingVertical: spacing.sm + 2, borderRadius: borderRadius.md, backgroundColor: colors.background, alignItems: 'center' },
+  modalBtnCancelText: { ...typography.body, fontWeight: '600', color: colors.textSecondary },
+  modalBtnDanger: { flex: 1, paddingVertical: spacing.sm + 2, borderRadius: borderRadius.md, backgroundColor: colors.error, alignItems: 'center', justifyContent: 'center' },
+  modalBtnDangerText: { ...typography.body, fontWeight: '600', color: '#FFF' },
+  deleteErrorBox: { backgroundColor: '#FFEAEA', padding: spacing.sm, borderRadius: borderRadius.md, marginTop: spacing.sm },
+  deleteErrorText: { ...typography.caption, color: colors.error, textAlign: 'center' },
 });

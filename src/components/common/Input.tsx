@@ -6,13 +6,14 @@ interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   rightIcon?: React.ReactNode;
+  containerStyle?: any;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, rightIcon, style, ...props }) => {
+export const Input: React.FC<InputProps> = ({ label, error, rightIcon, style, containerStyle, ...props }) => {
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputContainer, focused && styles.focused, error && styles.errorBorder]}>
         <TextInput

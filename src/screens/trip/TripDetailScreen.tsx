@@ -31,6 +31,7 @@ import { detectCategoryFromTypes } from '../../utils/categoryFields';
 import { createActivity, createDay, getDays } from '../../api/itineraries';
 import { exportKML } from '../../utils/geoImport';
 import { ensureContrast, tintWithWhite } from '../../utils/colorExtraction';
+import { TripRecapCard } from '../../components/trip/TripRecapCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
@@ -504,6 +505,11 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Post-Trip Recap */}
+          {trip.status === 'completed' && (
+            <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} />
+          )}
 
           {/* Map */}
           {Platform.OS === 'web' && (

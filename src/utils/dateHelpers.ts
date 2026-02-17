@@ -60,3 +60,42 @@ export const isTripActive = (startDate: string, endDate: string): boolean => {
 export const formatDateRange = (startDate: string, endDate: string): string => {
   return `${formatDateShort(startDate)} – ${formatDateShort(endDate)}`;
 };
+
+/** Days until a date from today. Negative = past. */
+export const getDaysUntil = (date: string): number => {
+  const target = parseISO(date);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return differenceInDays(target, now);
+};
+
+/** Current trip day (1-based) and total days. Returns null if not active. */
+export const getCurrentTripDay = (startDate: string, endDate: string): { day: number; total: number } | null => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const start = parseISO(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = parseISO(endDate);
+  end.setHours(0, 0, 0, 0);
+  if (now < start || now > end) return null;
+  const day = differenceInDays(now, start) + 1;
+  const total = differenceInDays(end, start) + 1;
+  return { day, total };
+};
+
+/** Get countdown text for a trip card. */
+export const getTripCountdownText = (trip: { start_date: string; end_date: string; status: string }): string | null => {
+  const daysUntil = getDaysUntil(trip.start_date);
+  const tripDay = getCurrentTripDay(trip.start_date, trip.end_date);
+
+  if (tripDay) {
+    return `Tag ${tripDay.day} von ${tripDay.total}`;
+  }
+
+  if (daysUntil > 0 && daysUntil <= 60 && (trip.status === 'upcoming' || trip.status === 'planning')) {
+    return daysUntil === 1 ? 'Morgen geht\'s los!' : `Noch ${daysUntil} Tage`;
+  }
+
+  return null;
+};

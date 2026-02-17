@@ -94,14 +94,14 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
                 placeholder="Vorname"
                 value={firstName}
                 onChangeText={(t) => { setFirstName(t); setError(null); }}
-                style={styles.nameInput}
+                containerStyle={styles.nameInput}
               />
               <Input
                 label="Nachname"
                 placeholder="Nachname"
                 value={lastName}
                 onChangeText={(t) => { setLastName(t); setError(null); }}
-                style={styles.nameInput}
+                containerStyle={styles.nameInput}
               />
             </View>
           )}
