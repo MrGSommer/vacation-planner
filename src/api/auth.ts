@@ -81,6 +81,11 @@ export const updateProfile = async (userId: string, updates: {
   preferred_language?: string;
   preferred_currency?: string;
   notifications_enabled?: boolean;
+  notification_email_enabled?: boolean;
+  notification_push_reminders?: boolean;
+  notification_push_collaborators?: boolean;
+  notification_email_reminders?: boolean;
+  notification_email_collaborators?: boolean;
   ai_trip_context_enabled?: boolean;
   ai_custom_instruction?: string | null;
 }) => {

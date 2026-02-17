@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Header } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,9 +12,21 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>;
 
 export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
   const { user, profile, refreshProfile } = useAuth();
+
+  // Master
   const [enabled, setEnabled] = useState(profile?.notifications_enabled ?? true);
-  const [pushEnabled, setPushEnabled] = useState(false);
+
+  // Push
   const [pushSupported] = useState(isPushSupported());
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushReminders, setPushReminders] = useState(profile?.notification_push_reminders ?? true);
+  const [pushCollaborators, setPushCollaborators] = useState(profile?.notification_push_collaborators ?? true);
+
+  // Email
+  const [emailEnabled, setEmailEnabled] = useState(profile?.notification_email_enabled ?? true);
+  const [emailReminders, setEmailReminders] = useState(profile?.notification_email_reminders ?? true);
+  const [emailCollaborators, setEmailCollaborators] = useState(profile?.notification_email_collaborators ?? true);
+
   const [saving, setSaving] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
 
@@ -24,19 +36,35 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [pushSupported]);
 
-  const handleToggle = async (value: boolean) => {
+  // Sync state when profile refreshes
+  useEffect(() => {
+    if (profile) {
+      setEnabled(profile.notifications_enabled);
+      setEmailEnabled(profile.notification_email_enabled ?? true);
+      setPushReminders(profile.notification_push_reminders ?? true);
+      setPushCollaborators(profile.notification_push_collaborators ?? true);
+      setEmailReminders(profile.notification_email_reminders ?? true);
+      setEmailCollaborators(profile.notification_email_collaborators ?? true);
+    }
+  }, [profile]);
+
+  const savePreference = async (field: string, value: boolean, rollback: () => void) => {
     if (!user) return;
-    setEnabled(value);
     setSaving(true);
     try {
-      await updateProfile(user.id, { notifications_enabled: value });
+      await updateProfile(user.id, { [field]: value });
       await refreshProfile();
     } catch {
-      setEnabled(!value);
-      Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden');
+      rollback();
+      Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleMasterToggle = (value: boolean) => {
+    setEnabled(value);
+    savePreference('notifications_enabled', value, () => setEnabled(!value));
   };
 
   const handlePushToggle = async (value: boolean) => {
@@ -54,29 +82,56 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
         setPushEnabled(false);
       }
     } catch {
-      Alert.alert('Fehler', 'Push-Einstellung konnte nicht gespeichert werden');
+      Alert.alert('Fehler', 'Push-Einstellung konnte nicht gespeichert werden.');
     } finally {
       setPushSaving(false);
     }
   };
 
+  const handleEmailToggle = (value: boolean) => {
+    setEmailEnabled(value);
+    savePreference('notification_email_enabled', value, () => setEmailEnabled(!value));
+  };
+
+  const handlePushReminders = (value: boolean) => {
+    setPushReminders(value);
+    savePreference('notification_push_reminders', value, () => setPushReminders(!value));
+  };
+
+  const handlePushCollaborators = (value: boolean) => {
+    setPushCollaborators(value);
+    savePreference('notification_push_collaborators', value, () => setPushCollaborators(!value));
+  };
+
+  const handleEmailReminders = (value: boolean) => {
+    setEmailReminders(value);
+    savePreference('notification_email_reminders', value, () => setEmailReminders(!value));
+  };
+
+  const handleEmailCollaborators = (value: boolean) => {
+    setEmailCollaborators(value);
+    savePreference('notification_email_collaborators', value, () => setEmailCollaborators(!value));
+  };
+
   const pushPermission = pushSupported ? getPushPermission() : 'unsupported';
   const pushBlocked = pushPermission === 'denied';
+  const masterOff = !enabled;
 
   return (
     <View style={styles.container}>
       <Header title="Benachrichtigungen" onBack={() => navigation.goBack()} />
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+
         {/* Master toggle */}
         <View style={styles.card}>
           <View style={styles.row}>
             <View style={styles.rowInfo}>
               <Text style={styles.rowLabel}>Benachrichtigungen</Text>
-              <Text style={styles.rowDesc}>Erhalte Erinnerungen vor Reisen und Updates von Mitreisenden</Text>
+              <Text style={styles.rowDesc}>Alle Benachrichtigungen ein- oder ausschalten</Text>
             </View>
             <Switch
               value={enabled}
-              onValueChange={handleToggle}
+              onValueChange={handleMasterToggle}
               disabled={saving}
               trackColor={{ false: colors.border, true: colors.primary + '80' }}
               thumbColor={enabled ? colors.primary : colors.textLight}
@@ -84,41 +139,131 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Push Notifications */}
+        {/* Push Section */}
         {pushSupported && (
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <View style={styles.rowInfo}>
-                <Text style={styles.rowLabel}>Push-Benachrichtigungen</Text>
-                <Text style={styles.rowDesc}>
-                  {pushBlocked
-                    ? 'Push wurde im Browser blockiert. Ändere dies in deinen Browser-Einstellungen.'
-                    : 'Benachrichtigungen direkt im Browser anzeigen'}
-                </Text>
+          <>
+            <Text style={[styles.sectionTitle, masterOff && styles.sectionTitleDisabled]}>
+              Push-Benachrichtigungen
+            </Text>
+            <View style={[styles.card, masterOff && styles.cardDisabled]}>
+              {/* Push master */}
+              <View style={styles.row}>
+                <View style={styles.rowInfo}>
+                  <Text style={[styles.rowLabel, masterOff && styles.textDisabled]}>Push aktivieren</Text>
+                  <Text style={[styles.rowDesc, masterOff && styles.textDisabled]}>
+                    {pushBlocked
+                      ? 'Push wurde im Browser blockiert. Ändere dies in deinen Browser-Einstellungen.'
+                      : 'Benachrichtigungen direkt im Browser anzeigen'}
+                  </Text>
+                </View>
+                <Switch
+                  value={pushEnabled}
+                  onValueChange={handlePushToggle}
+                  disabled={pushSaving || pushBlocked || masterOff}
+                  trackColor={{ false: colors.border, true: colors.sky + '80' }}
+                  thumbColor={pushEnabled && !masterOff ? colors.sky : colors.textLight}
+                />
               </View>
-              <Switch
-                value={pushEnabled}
-                onValueChange={handlePushToggle}
-                disabled={pushSaving || pushBlocked || !enabled}
-                trackColor={{ false: colors.border, true: colors.sky + '80' }}
-                thumbColor={pushEnabled ? colors.sky : colors.textLight}
-              />
+
+              {/* Push sub-toggles */}
+              <View style={styles.divider} />
+              <View style={styles.subRow}>
+                <View style={styles.rowInfo}>
+                  <Text style={[styles.subLabel, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    Reise-Erinnerungen
+                  </Text>
+                  <Text style={[styles.subDesc, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    3 Tage und 1 Tag vor Reisebeginn
+                  </Text>
+                </View>
+                <Switch
+                  value={pushReminders}
+                  onValueChange={handlePushReminders}
+                  disabled={saving || masterOff || !pushEnabled}
+                  trackColor={{ false: colors.border, true: colors.sky + '80' }}
+                  thumbColor={pushReminders && pushEnabled && !masterOff ? colors.sky : colors.textLight}
+                />
+              </View>
+
+              <View style={styles.subRow}>
+                <View style={styles.rowInfo}>
+                  <Text style={[styles.subLabel, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    Mitreisende-Updates
+                  </Text>
+                  <Text style={[styles.subDesc, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    Wenn jemand deiner Reise beitritt
+                  </Text>
+                </View>
+                <Switch
+                  value={pushCollaborators}
+                  onValueChange={handlePushCollaborators}
+                  disabled={saving || masterOff || !pushEnabled}
+                  trackColor={{ false: colors.border, true: colors.sky + '80' }}
+                  thumbColor={pushCollaborators && pushEnabled && !masterOff ? colors.sky : colors.textLight}
+                />
+              </View>
             </View>
-          </View>
+          </>
         )}
 
-        {/* Email Notifications info */}
-        <View style={styles.card}>
+        {/* Email Section */}
+        <Text style={[styles.sectionTitle, masterOff && styles.sectionTitleDisabled]}>
+          E-Mail-Benachrichtigungen
+        </Text>
+        <View style={[styles.card, masterOff && styles.cardDisabled]}>
+          {/* Email master */}
           <View style={styles.row}>
             <View style={styles.rowInfo}>
-              <Text style={styles.rowLabel}>E-Mail-Benachrichtigungen</Text>
-              <Text style={styles.rowDesc}>
-                {enabled
-                  ? 'Du erhältst E-Mails vor Reisebeginn und bei Änderungen an deinen Reisen.'
-                  : 'Aktiviere Benachrichtigungen oben, um E-Mails zu erhalten.'}
+              <Text style={[styles.rowLabel, masterOff && styles.textDisabled]}>E-Mails aktivieren</Text>
+              <Text style={[styles.rowDesc, masterOff && styles.textDisabled]}>
+                Benachrichtigungen per E-Mail erhalten
               </Text>
             </View>
-            <Text style={styles.statusIcon}>{enabled ? '✅' : '⏸️'}</Text>
+            <Switch
+              value={emailEnabled}
+              onValueChange={handleEmailToggle}
+              disabled={saving || masterOff}
+              trackColor={{ false: colors.border, true: colors.primary + '80' }}
+              thumbColor={emailEnabled && !masterOff ? colors.primary : colors.textLight}
+            />
+          </View>
+
+          {/* Email sub-toggles */}
+          <View style={styles.divider} />
+          <View style={styles.subRow}>
+            <View style={styles.rowInfo}>
+              <Text style={[styles.subLabel, (masterOff || !emailEnabled) && styles.textDisabled]}>
+                Reise-Erinnerungen
+              </Text>
+              <Text style={[styles.subDesc, (masterOff || !emailEnabled) && styles.textDisabled]}>
+                3 Tage und 1 Tag vor Reisebeginn
+              </Text>
+            </View>
+            <Switch
+              value={emailReminders}
+              onValueChange={handleEmailReminders}
+              disabled={saving || masterOff || !emailEnabled}
+              trackColor={{ false: colors.border, true: colors.primary + '80' }}
+              thumbColor={emailReminders && emailEnabled && !masterOff ? colors.primary : colors.textLight}
+            />
+          </View>
+
+          <View style={styles.subRow}>
+            <View style={styles.rowInfo}>
+              <Text style={[styles.subLabel, (masterOff || !emailEnabled) && styles.textDisabled]}>
+                Mitreisende-Updates
+              </Text>
+              <Text style={[styles.subDesc, (masterOff || !emailEnabled) && styles.textDisabled]}>
+                Wenn jemand deiner Reise beitritt
+              </Text>
+            </View>
+            <Switch
+              value={emailCollaborators}
+              onValueChange={handleEmailCollaborators}
+              disabled={saving || masterOff || !emailEnabled}
+              trackColor={{ false: colors.border, true: colors.primary + '80' }}
+              thumbColor={emailCollaborators && emailEnabled && !masterOff ? colors.primary : colors.textLight}
+            />
           </View>
         </View>
 
@@ -126,20 +271,31 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.infoBox}>
           <Text style={styles.infoIcon}>💡</Text>
           <Text style={styles.infoText}>
-            Du wirst benachrichtigt wenn:{'\n'}
-            {'\u2022'} Eine Reise in 3 Tagen oder morgen startet{'\n'}
-            {'\u2022'} Jemand deiner Reise beitritt{'\n'}
-            {'\u2022'} Neue Aktivitäten hinzugefügt werden
+            Kombiniere Push- und E-Mail-Benachrichtigungen, um keine wichtigen Reise-Updates zu verpassen.
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl },
+  scroll: { flex: 1 },
+  content: { padding: spacing.xl, paddingBottom: spacing.xxl + spacing.xl },
+  sectionTitle: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  sectionTitleDisabled: {
+    opacity: 0.4,
+  },
   card: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
@@ -147,20 +303,39 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     ...shadows.sm,
   },
+  cardDisabled: {
+    opacity: 0.5,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.md,
+    marginTop: spacing.sm,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
+    marginHorizontal: -spacing.xs,
+  },
   rowInfo: { flex: 1, marginRight: spacing.md },
   rowLabel: { ...typography.body, fontWeight: '600', marginBottom: spacing.xs },
   rowDesc: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20 },
-  statusIcon: { fontSize: 20 },
+  subLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: 2 },
+  subDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  textDisabled: {
+    color: colors.textLight,
+  },
   infoBox: {
     flexDirection: 'row',
     backgroundColor: colors.sky + '10',
     borderRadius: borderRadius.lg,
     padding: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     gap: spacing.sm,
   },
   infoIcon: { fontSize: 16, marginTop: 2 },
