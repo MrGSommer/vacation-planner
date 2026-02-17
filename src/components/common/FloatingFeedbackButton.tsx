@@ -11,7 +11,7 @@ export const FloatingFeedbackButton: React.FC = () => {
   return (
     <TouchableOpacity
       style={styles.fab}
-      onPress={() => navigation.navigate('SupportChat')}
+      onPress={() => navigation.navigate('FeedbackModal')}
       activeOpacity={0.8}
     >
       <Text style={styles.text}>?</Text>

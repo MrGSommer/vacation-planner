@@ -4,6 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/common';
 import { useToast } from '../../contexts/ToastContext';
@@ -30,7 +31,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export const FeedbackScreen: React.FC<Props> = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'FeedbackModal'>>();
   const { showToast } = useToast();
   const params = route.params;
@@ -57,6 +58,17 @@ export const FeedbackScreen: React.FC<Props> = () => {
   };
 
   const handleSubmit = async () => {
+    if (type === 'question') {
+      if (!description.trim()) {
+        showToast('Bitte stelle eine Frage', 'error');
+        return;
+      }
+      const question = description.trim();
+      setDescription('');
+      navigation.navigate('SupportChat', { initialQuestion: question });
+      return;
+    }
+
     if (!title.trim() || !description.trim()) {
       showToast('Bitte Titel und Beschreibung ausfuellen', 'error');
       return;
@@ -112,17 +124,19 @@ export const FeedbackScreen: React.FC<Props> = () => {
       </View>
 
       {/* Form */}
-      <TextInput
-        style={styles.input}
-        placeholder="Titel (kurz und praeegnant)"
-        placeholderTextColor={colors.textLight}
-        value={title}
-        onChangeText={setTitle}
-        maxLength={100}
-      />
+      {type !== 'question' && (
+        <TextInput
+          style={styles.input}
+          placeholder="Titel (kurz und praeegnant)"
+          placeholderTextColor={colors.textLight}
+          value={title}
+          onChangeText={setTitle}
+          maxLength={100}
+        />
+      )}
       <TextInput
         style={[styles.input, styles.textArea]}
-        placeholder="Beschreibung (was ist passiert? was hast du erwartet?)"
+        placeholder={type === 'question' ? 'Stelle deine Frage...' : 'Beschreibung (was ist passiert? was hast du erwartet?)'}
         placeholderTextColor={colors.textLight}
         value={description}
         onChangeText={setDescription}
@@ -132,10 +146,10 @@ export const FeedbackScreen: React.FC<Props> = () => {
         textAlignVertical="top"
       />
       <Button
-        title="Feedback senden"
+        title={type === 'question' ? 'Frage an Echo stellen' : 'Feedback senden'}
         onPress={handleSubmit}
         loading={submitting}
-        disabled={!title.trim() || !description.trim()}
+        disabled={type === 'question' ? !description.trim() : (!title.trim() || !description.trim())}
       />
 
       {/* Previous feedbacks */}

@@ -28,7 +28,7 @@ export type RootStackParamList = {
     prefillDescription?: string;
     supportConversationId?: string;
   } | undefined;
-  SupportChat: undefined;
+  SupportChat: { initialQuestion?: string } | undefined;
   AdminDashboard: undefined;
   AdminUserList: undefined;
   AdminUserDetail: { userId: string };

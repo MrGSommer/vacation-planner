@@ -13,6 +13,8 @@ import {
   sendSupportMessage,
   parseSupportConversation,
 } from '../../api/support';
+import { submitFeedback } from '../../api/feedback';
+import { useToast } from '../../contexts/ToastContext';
 import { SupportMessage } from '../../types/database';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
@@ -28,14 +30,17 @@ const QUICK_CHIPS = [
 
 const GREETING: SupportMessage = {
   role: 'assistant',
-  content: 'Hallo! Ich bin der WayFable-Support. Wie kann ich dir helfen? Wähle eine Kategorie oder stelle mir direkt eine Frage.',
+  content: 'Hallo! Ich bin Echo, dein WayFable-Support. Wie kann ich dir helfen?',
   timestamp: new Date().toISOString(),
 };
 
-export const SupportChatScreen: React.FC<Props> = ({ navigation }) => {
+export const SupportChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const flatListRef = useRef<FlatList>(null);
+  const initialQuestionSent = useRef(false);
+  const initialQuestion = route.params?.initialQuestion;
 
   const [messages, setMessages] = useState<SupportMessage[]>([GREETING]);
   const [input, setInput] = useState('');
@@ -71,6 +76,15 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation }) => {
       }
     };
   }, [conversationId, messages, resolved]);
+
+  // Auto-send initial question from FeedbackScreen
+  useEffect(() => {
+    if (initialQuestion && !initialQuestionSent.current) {
+      initialQuestionSent.current = true;
+      const timer = setTimeout(() => handleSend(initialQuestion), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [initialQuestion]);
 
   const handleSend = useCallback(async (text?: string) => {
     const content = (text || input).trim();
@@ -144,22 +158,29 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [conversationId]);
 
-  const handleFeedback = useCallback(() => {
+  const handleFeedback = useCallback(async () => {
     if (conversationId) {
       updateSupportConversation(conversationId, { status: 'escalated', resolved_by: 'feedback' }).catch(() => {});
     }
-    // Build a summary from the conversation
     const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
     const prefillDesc = userMessages.length > 0
       ? `Aus Support-Chat:\n${userMessages.join('\n')}`
       : '';
 
-    navigation.navigate('FeedbackModal', {
-      prefillType: 'question',
-      prefillDescription: prefillDesc,
-      supportConversationId: conversationId || undefined,
-    });
-  }, [conversationId, messages, navigation]);
+    try {
+      await submitFeedback({
+        type: 'question',
+        title: userMessages[0] || 'Frage',
+        description: prefillDesc,
+        supportConversationId: conversationId || undefined,
+      });
+      showToast('Deine Frage wurde eingereicht — wir melden uns!', 'success');
+    } catch {
+      showToast('Frage konnte nicht eingereicht werden', 'error');
+    }
+
+    navigation.navigate('FeedbackModal');
+  }, [conversationId, messages, navigation, showToast]);
 
   const renderMessage = useCallback(({ item }: { item: SupportMessage }) => {
     const isUser = item.role === 'user';
@@ -177,7 +198,7 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation }) => {
       keyboardVerticalOffset={insets.top}
     >
       <Header
-        title="Hilfe & Support"
+        title="Echo — Support"
         onBack={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main', { screen: 'Profile' } as any)}
       />
 
@@ -235,7 +256,7 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation }) => {
       {/* Feedback button (visible after 2+ messages or if unresolved) */}
       {messageCount >= 2 && (
         <TouchableOpacity style={styles.feedbackBar} onPress={handleFeedback}>
-          <Text style={styles.feedbackBarText}>Feedback an das Team senden</Text>
+          <Text style={styles.feedbackBarText}>Frage einreichen</Text>
           <Text style={styles.feedbackBarArrow}>{'>'}</Text>
         </TouchableOpacity>
       )}
