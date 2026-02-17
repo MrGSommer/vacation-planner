@@ -25,8 +25,46 @@ export interface Profile {
   fable_memory_enabled: boolean;
   payment_error_message: string | null;
   is_admin: boolean;
+  notification_push_fable: boolean;
+  notification_email_fable: boolean;
+  notification_admin_signups: boolean;
+  notification_admin_waitlist: boolean;
+  notification_admin_premium: boolean;
+  notification_admin_cancellations: boolean;
+  notification_admin_feedback: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// --- Support Types ---
+
+export interface SupportConversation {
+  id: string;
+  user_id: string;
+  status: 'active' | 'resolved' | 'escalated';
+  messages: SupportMessage[];
+  resolved_by: 'bot' | 'user' | 'feedback' | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  meta?: { resolved?: boolean; category?: string };
+}
+
+export interface SupportInsight {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  category: string | null;
+  key_question: string | null;
+  resolved: boolean;
+  suggested_improvement: string | null;
+  tags: string[];
+  created_at: string;
 }
 
 export interface AiUsageLog {

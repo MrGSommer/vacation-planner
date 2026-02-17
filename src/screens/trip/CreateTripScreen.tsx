@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components/common';
@@ -13,16 +14,26 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, gradients, shadows } from '../../utils/theme';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
+import { RootStackParamList } from '../../types/navigation';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
+  const route = useRoute<RouteProp<RootStackParamList, 'CreateTrip'>>();
   const { create, loading } = useTrips();
   const { trips } = useTrips();
   const { user } = useAuthContext();
   const { isFeatureAllowed, canAddTrip, aiCredits } = useSubscription();
   const [step, setStep] = useState(0);
   const [showAiModal, setShowAiModal] = useState(false);
+
+  // Auto-open Fable modal when navigated with openFable param
+  useEffect(() => {
+    if (route.params?.openFable) {
+      setShowAiModal(true);
+      navigation.setParams({ openFable: undefined });
+    }
+  }, [route.params?.openFable]);
 
   const activeTrips = trips.filter(t => t.status === 'planning' || t.status === 'upcoming' || t.status === 'active');
   const tripLimitReached = !canAddTrip(activeTrips.length);

@@ -8,6 +8,7 @@ export interface PlanJob {
   status: 'pending' | 'generating' | 'completed' | 'failed';
   plan_json: any | null;
   structure_json: any | null;
+  context: any | null;
   error: string | null;
   credits_charged: number;
   created_at: string;
@@ -80,6 +81,23 @@ export async function getRecentCompletedJob(userId: string, tripId?: string): Pr
   }
 
   const { data, error } = await query.maybeSingle();
+  if (error) return null;
+  return data as PlanJob | null;
+}
+
+export async function getRecentCreateModeJob(userId: string): Promise<PlanJob | null> {
+  const cutoff = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const { data, error } = await supabase
+    .from('ai_plan_jobs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .is('trip_id', null)
+    .gte('completed_at', cutoff)
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   if (error) return null;
   return data as PlanJob | null;
 }

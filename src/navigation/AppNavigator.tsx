@@ -35,6 +35,7 @@ import { BetaDashboardScreen } from '../screens/admin/BetaDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
+import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
 import { RootStackParamList } from '../types/navigation';
 
@@ -48,7 +49,10 @@ const linking = {
       TripShare: 'share/:token',
       SubscriptionSuccess: 'subscription-success',
       SubscriptionCancel: 'subscription-cancel',
-      TripDetail: 'trip/:tripId',
+      TripDetail: {
+        path: 'trip/:tripId',
+        parse: { tripId: String, openFable: (v: string) => v === 'true' },
+      },
       Itinerary: 'trip/:tripId/itinerary',
       Map: 'trip/:tripId/map',
       Photos: 'trip/:tripId/photos',
@@ -67,6 +71,7 @@ const linking = {
       AGB: 'agb',
       Impressum: 'impressum',
       FeedbackModal: 'feedback',
+      SupportChat: 'support',
       AdminDashboard: 'admin',
       BetaDashboard: 'admin/beta',
       AdminUserList: 'admin/users',
@@ -132,7 +137,7 @@ export const AppNavigator: React.FC = () => {
 
   if (loading) return <LoadingScreen />;
 
-  const showFab = session && currentRoute !== 'Feedback' && currentRoute !== 'FeedbackModal';
+  const showFab = session && currentRoute !== 'Feedback' && currentRoute !== 'FeedbackModal' && currentRoute !== 'SupportChat';
 
   return (
     <NavigationContainer
@@ -169,6 +174,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AGB" component={AGBScreen} />
               <Stack.Screen name="Impressum" component={ImpressumScreen} />
               <Stack.Screen name="FeedbackModal" component={FeedbackScreen} />
+              <Stack.Screen name="SupportChat" component={SupportChatScreen} />
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
               <Stack.Screen name="BetaDashboard" component={BetaDashboardScreen} />
               <Stack.Screen name="AdminUserList" component={AdminUserListScreen} />

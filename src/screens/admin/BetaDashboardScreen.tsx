@@ -9,6 +9,8 @@ import {
   adminGetBetaStats, BetaStats,
   getBetaTasks, createBetaTask, updateBetaTask, deleteBetaTask, BetaTask,
 } from '../../api/betaDashboard';
+import { adminGetSupportStats, adminGetSupportInsights, adminGetRecentConversations } from '../../api/support';
+import { SupportInsight, SupportConversation } from '../../types/database';
 import { BetaFeedback } from '../../api/feedback';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -16,7 +18,7 @@ import { RootStackParamList } from '../../types/navigation';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'BetaDashboard'> };
 
-type Tab = 'feedback' | 'stats' | 'tasks';
+type Tab = 'feedback' | 'stats' | 'tasks' | 'insights';
 
 const feedbackTypeLabels: Record<string, string> = { bug: 'Bug', feature: 'Feature', feedback: 'Feedback', question: 'Frage' };
 const feedbackTypeColors: Record<string, string> = { bug: colors.error, feature: colors.accent, feedback: colors.sky, question: colors.warning };
@@ -49,16 +51,30 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [hideDone, setHideDone] = useState(false);
 
+  // Insights state
+  const [insightStats, setInsightStats] = useState<{
+    total: number; resolved: number; resolution_rate: number;
+    by_category: Record<string, number>;
+    top_questions: { question: string; count: number }[];
+    improvements: string[];
+  } | null>(null);
+  const [recentConversations, setRecentConversations] = useState<SupportConversation[]>([]);
+  const [expandedConv, setExpandedConv] = useState<string | null>(null);
+
   const loadAll = useCallback(async () => {
     try {
-      const [fb, s, t] = await Promise.all([
+      const [fb, s, t, is, rc] = await Promise.all([
         adminGetAllFeedback(),
         adminGetBetaStats(),
         getBetaTasks(),
+        adminGetSupportStats().catch(() => null),
+        adminGetRecentConversations(20).catch(() => []),
       ]);
       setFeedbacks(fb);
       setStats(s);
       setTasks(t);
+      if (is) setInsightStats(is);
+      setRecentConversations(rc);
     } catch (e) {
       console.error('Beta dashboard load error:', e);
     }
@@ -155,10 +171,10 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Tab Bar */}
         <View style={styles.tabBar}>
-          {(['feedback', 'stats', 'tasks'] as Tab[]).map(t => (
+          {(['feedback', 'stats', 'tasks', 'insights'] as Tab[]).map(t => (
             <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
               <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                {t === 'feedback' ? `Feedback (${feedbacks.length})` : t === 'stats' ? 'Performance' : `Tasks (${openTasks})`}
+                {t === 'feedback' ? `Feedback (${feedbacks.length})` : t === 'stats' ? 'Performance' : t === 'tasks' ? `Tasks (${openTasks})` : 'Insights'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -388,6 +404,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
           <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
         ) : (
           /* ===== TASKS TAB ===== */
+          tab === 'tasks' ? (
           <>
             <View style={styles.addTaskRow}>
               <TextInput
@@ -440,7 +457,112 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
               ))
             )}
           </>
-        )}
+        ) : tab === 'insights' ? (
+          /* ===== INSIGHTS TAB ===== */
+          insightStats ? (
+          <>
+            {/* KPI Row */}
+            <View style={styles.kpiGrid}>
+              {[
+                { label: 'Gespräche', value: insightStats.total, color: colors.primary },
+                { label: 'Lösungsrate', value: `${insightStats.resolution_rate}%`, color: colors.success },
+                { label: 'Top-Kategorie', value: Object.entries(insightStats.by_category).sort(([,a],[,b]) => b - a)[0]?.[0] || '–', color: colors.accent },
+              ].map(kpi => (
+                <Card key={kpi.label} style={styles.kpiCard}>
+                  <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+                  <Text style={styles.kpiLabel}>{kpi.label}</Text>
+                </Card>
+              ))}
+            </View>
+
+            {/* Category Distribution */}
+            <Card style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Kategorie-Verteilung</Text>
+              {Object.entries(insightStats.by_category)
+                .sort(([,a],[,b]) => b - a)
+                .map(([cat, count]) => (
+                  <View key={cat} style={styles.statsRow}>
+                    <Text style={styles.statsLabel}>{cat}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <View style={{ width: Math.min(count / Math.max(insightStats.total, 1) * 100, 100), height: 8, backgroundColor: colors.primary + '40', borderRadius: 4 }} />
+                      <Text style={styles.statsValue}>{count}</Text>
+                    </View>
+                  </View>
+                ))}
+            </Card>
+
+            {/* Top Questions */}
+            {insightStats.top_questions.length > 0 && (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Häufigste Fragen</Text>
+                {insightStats.top_questions.map((q, i) => (
+                  <View key={i} style={styles.statsRow}>
+                    <Text style={[styles.statsLabel, { flex: 3 }]} numberOfLines={2}>{q.question}</Text>
+                    <Text style={styles.statsValue}>{q.count}x</Text>
+                  </View>
+                ))}
+              </Card>
+            )}
+
+            {/* Suggested Improvements */}
+            {insightStats.improvements.length > 0 && (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>AI-Verbesserungsvorschläge</Text>
+                {insightStats.improvements.slice(0, 10).map((imp, i) => (
+                  <Text key={i} style={[styles.insightText, { marginTop: i > 0 ? spacing.sm : 0 }]}>
+                    {imp}
+                  </Text>
+                ))}
+              </Card>
+            )}
+
+            {/* Recent Conversations */}
+            {recentConversations.length > 0 && (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Letzte Gespräche</Text>
+                {recentConversations.map(conv => (
+                  <TouchableOpacity
+                    key={conv.id}
+                    style={[styles.feedbackCard, { marginBottom: spacing.sm }]}
+                    onPress={() => setExpandedConv(expandedConv === conv.id ? null : conv.id)}
+                  >
+                    <View style={styles.feedbackHeader}>
+                      <View style={[styles.typeBadge, {
+                        backgroundColor: conv.status === 'resolved' ? colors.success + '20'
+                          : conv.status === 'escalated' ? colors.error + '20' : colors.accent + '20'
+                      }]}>
+                        <Text style={[styles.typeBadgeText, {
+                          color: conv.status === 'resolved' ? colors.success
+                            : conv.status === 'escalated' ? colors.error : colors.accent
+                        }]}>
+                          {conv.status === 'resolved' ? 'Gelöst' : conv.status === 'escalated' ? 'Eskaliert' : 'Aktiv'}
+                        </Text>
+                      </View>
+                      <Text style={styles.feedbackMetaText}>{formatDate(conv.created_at)}</Text>
+                    </View>
+                    {Array.isArray(conv.messages) && conv.messages.length > 0 && (
+                      <Text style={styles.feedbackTitle} numberOfLines={expandedConv === conv.id ? undefined : 2}>
+                        {(conv.messages.find((m: any) => m.role === 'user') as any)?.content || '–'}
+                      </Text>
+                    )}
+                    {expandedConv === conv.id && Array.isArray(conv.messages) && (
+                      <View style={{ marginTop: spacing.sm }}>
+                        {conv.messages.map((msg: any, i: number) => (
+                          <Text key={i} style={[styles.feedbackDescription, { fontWeight: msg.role === 'user' ? '600' : '400' }]}>
+                            {msg.role === 'user' ? 'User' : 'Bot'}: {msg.content}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </Card>
+            )}
+          </>
+          ) : (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
+          )
+        ) : null}
       </ScrollView>
     </AdminGuard>
   );

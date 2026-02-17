@@ -166,6 +166,9 @@ async function generateInBackground(
       credits_charged: totalCredits,
       completed_at: new Date().toISOString(),
     });
+
+    // --- Push notification ---
+    await sendFablePushNotification(userId, jobId, context.tripId || null, context.destination || structure.trip?.destination || '');
   } catch (e) {
     console.error('Background generation failed:', e);
     await updateJob(jobId, {
@@ -192,6 +195,60 @@ function mergePlan(structure: any, activityDays: any[]): any {
     })),
     budget_categories: structure.budget_categories || [],
   };
+}
+
+// --- Push notification after plan completion ---
+
+async function sendFablePushNotification(userId: string, jobId: string, tripId: string | null, destination: string): Promise<void> {
+  try {
+    // Check user notification preferences
+    const profileRes = await fetch(`${getSupabaseUrl()}/rest/v1/profiles?id=eq.${userId}&select=notifications_enabled,notification_push_fable`, {
+      headers: { 'Authorization': `Bearer ${getServiceRoleKey()}`, 'apikey': getServiceRoleKey() },
+    });
+    const profiles = await profileRes.json();
+    const profile = Array.isArray(profiles) ? profiles[0] : null;
+    if (!profile?.notifications_enabled || !profile?.notification_push_fable) return;
+
+    // Dedup check: notification_logs within 20h
+    const dedupRes = await fetch(
+      `${getSupabaseUrl()}/rest/v1/notification_logs?user_id=eq.${userId}&type=eq.fable_plan_completed&sent_at=gt.${new Date(Date.now() - 20 * 3600_000).toISOString()}&limit=1`,
+      { headers: { 'Authorization': `Bearer ${getServiceRoleKey()}`, 'apikey': getServiceRoleKey() } },
+    );
+    const dedupLogs = await dedupRes.json();
+    if (Array.isArray(dedupLogs) && dedupLogs.length > 0) return;
+
+    const title = 'Reiseplan fertig!';
+    const body = tripId
+      ? `Fable hat deinen Plan für ${destination} erstellt. Prüfe ihn jetzt!`
+      : `Fable hat deinen Reiseplan für ${destination} erstellt.`;
+    const url = tripId
+      ? `https://wayfable.ch/trip/${tripId}?openFable=true`
+      : 'https://wayfable.ch/';
+
+    // Send push
+    await fetch(`${getSupabaseUrl()}/functions/v1/send-push`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getServiceRoleKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId, title, body, url, tag: `fable-plan-${jobId}` }),
+    });
+
+    // Log notification
+    await fetch(`${getSupabaseUrl()}/rest/v1/notification_logs`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getServiceRoleKey()}`,
+        'apikey': getServiceRoleKey(),
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ user_id: userId, type: 'fable_plan_completed', channel: 'push', sent_at: new Date().toISOString() }),
+    });
+  } catch (e) {
+    console.error('Fable push notification failed (non-critical):', e);
+  }
 }
 
 // --- Main handler ---

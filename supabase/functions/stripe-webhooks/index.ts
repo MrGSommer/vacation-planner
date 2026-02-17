@@ -17,6 +17,18 @@ const json = (data: unknown, origin: string, status = 200) =>
 
 const AI_CREDITS_MONTHLY = 30;
 
+/** Fire-and-forget admin notification */
+function notifyAdmin(type: string, data: Record<string, string>) {
+  fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-admin`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ type, data }),
+  }).catch((e) => console.error('notify-admin failed:', e));
+}
+
 /**
  * Resolve profile by stripe_customer_id, with fallback to client_reference_id (Supabase UUID).
  * Links stripe_customer_id on first match via client_reference_id.
@@ -134,6 +146,13 @@ Deno.serve(async (req) => {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
 
+        // Get profile info before downgrade for the notification
+        const { data: cancelProfile } = await supabase
+          .from('profiles')
+          .select('email, first_name, last_name')
+          .eq('stripe_customer_id', customerId)
+          .single();
+
         await supabase
           .from('profiles')
           .update({
@@ -145,6 +164,14 @@ Deno.serve(async (req) => {
             ai_credits_monthly_quota: 0,
           })
           .eq('stripe_customer_id', customerId);
+
+        // Notify admins
+        if (cancelProfile) {
+          notifyAdmin('cancellation', {
+            user_email: cancelProfile.email,
+            user_name: `${cancelProfile.first_name || ''} ${cancelProfile.last_name || ''}`.trim() || cancelProfile.email,
+          });
+        }
         break;
       }
 
@@ -219,9 +246,13 @@ Deno.serve(async (req) => {
             .eq('id', profile.id);
         } else if (session.mode === 'subscription') {
           // Subscription via Payment Link — ensure stripe_customer_id is linked
-          if (clientRefId && customerId) {
-            await resolveProfile(supabase, customerId, clientRefId);
-          }
+          const profile = await resolveProfile(supabase, customerId || null, clientRefId);
+
+          // Notify admins about new premium subscription
+          notifyAdmin('premium', {
+            user_email: session.customer_details?.email || '',
+            user_name: session.customer_details?.name || session.customer_details?.email || '',
+          });
         }
         break;
       }

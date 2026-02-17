@@ -8,6 +8,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTrip, CollaboratorWithProfile } from '../../api/invitations';
+import { getRecentCreateModeJob, PlanJob } from '../../api/aiPlanJobs';
 import { Trip } from '../../types/database';
 import { formatDateRange, getDayCount, isTripActive, getTripCountdownText } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
@@ -142,6 +143,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [deleteTrip, setDeleteTrip] = useState<Trip | null>(null);
   const [deleteCollabs, setDeleteCollabs] = useState<CollaboratorWithProfile[]>([]);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [fableJob, setFableJob] = useState<PlanJob | null>(null);
 
   const { activeTrips, pastTrips, recentlyCompleted } = useMemo(() => {
     const now = new Date();
@@ -183,6 +185,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => { fetchTrips().finally(() => setInitialLoad(false)); }, [fetchTrips]);
   useEffect(() => { loadCollaborators(); }, [loadCollaborators]);
+
+  // Check for recently completed create-mode Fable jobs
+  useEffect(() => {
+    if (!user?.id) return;
+    getRecentCreateModeJob(user.id).then(job => setFableJob(job)).catch(() => {});
+  }, [user?.id]);
 
   const handleTripPress = useCallback((trip: Trip) => {
     navigation.navigate('TripDetail', { tripId: trip.id });
@@ -287,6 +295,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchTrips} tintColor={colors.primary} />}
         >
           {user && <NotificationPrompt userId={user.id} />}
+
+          {fableJob && (
+            <TouchableOpacity
+              style={styles.fableBanner}
+              onPress={() => {
+                setFableJob(null);
+                navigation.navigate('CreateTrip', { openFable: true });
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.fableBannerIcon}>✨</Text>
+              <View style={styles.fableBannerContent}>
+                <Text style={styles.fableBannerTitle}>Dein Reiseplan ist fertig!</Text>
+                <Text style={styles.fableBannerText}>
+                  Fable hat deinen Plan{fableJob.context?.destination ? ` für ${fableJob.context.destination}` : ''} erstellt
+                </Text>
+              </View>
+              <Text style={styles.fableBannerArrow}>›</Text>
+            </TouchableOpacity>
+          )}
 
           {recentlyCompleted.map(trip => (
             <TouchableOpacity
@@ -483,6 +511,20 @@ const styles = StyleSheet.create({
   forceDeleteHint: { ...typography.caption, color: colors.textLight, marginTop: 2 },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   cancelBtnText: { ...typography.body, color: colors.primary, fontWeight: '500' },
+  fableBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary + '15',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  fableBannerIcon: { fontSize: 24 },
+  fableBannerContent: { flex: 1 },
+  fableBannerTitle: { ...typography.body, fontWeight: '600', color: colors.secondary },
+  fableBannerText: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  fableBannerArrow: { fontSize: 22, color: colors.textLight },
   recapBanner: {
     flexDirection: 'row',
     alignItems: 'center',

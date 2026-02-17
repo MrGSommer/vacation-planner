@@ -30,6 +30,7 @@ export async function submitFeedback(data: {
   title: string;
   description: string;
   screenName?: string;
+  supportConversationId?: string;
 }): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Nicht angemeldet');
@@ -42,9 +43,15 @@ export async function submitFeedback(data: {
     screen_name: data.screenName || null,
     device_info: getDeviceInfo(),
     app_version: appJson.expo.version,
+    support_conversation_id: data.supportConversationId || null,
   });
 
   if (error) throw error;
+
+  // Notify admins (fire-and-forget)
+  supabase.functions.invoke('notify-admin', {
+    body: { type: 'feedback', data: { title: data.title, type: data.type, user_email: user.email || '' } },
+  }).catch(() => {});
 }
 
 export async function getMyFeedback(): Promise<BetaFeedback[]> {

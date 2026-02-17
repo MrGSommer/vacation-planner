@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Switch, Alert, ScrollView } from 'react-native'
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Header } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
+import { useAdmin } from '../../hooks/useAdmin';
 import { updateProfile } from '../../api/auth';
 import { isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush } from '../../utils/pushManager';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -12,6 +13,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>;
 
 export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
   const { user, profile, refreshProfile } = useAuth();
+  const { isAdmin } = useAdmin();
 
   // Master
   const [enabled, setEnabled] = useState(profile?.notifications_enabled ?? true);
@@ -21,11 +23,19 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushReminders, setPushReminders] = useState(profile?.notification_push_reminders ?? true);
   const [pushCollaborators, setPushCollaborators] = useState(profile?.notification_push_collaborators ?? true);
+  const [pushFable, setPushFable] = useState(profile?.notification_push_fable ?? true);
 
   // Email
   const [emailEnabled, setEmailEnabled] = useState(profile?.notification_email_enabled ?? true);
   const [emailReminders, setEmailReminders] = useState(profile?.notification_email_reminders ?? true);
   const [emailCollaborators, setEmailCollaborators] = useState(profile?.notification_email_collaborators ?? true);
+
+  // Admin
+  const [adminSignups, setAdminSignups] = useState(profile?.notification_admin_signups ?? true);
+  const [adminWaitlist, setAdminWaitlist] = useState(profile?.notification_admin_waitlist ?? true);
+  const [adminPremium, setAdminPremium] = useState(profile?.notification_admin_premium ?? true);
+  const [adminCancellations, setAdminCancellations] = useState(profile?.notification_admin_cancellations ?? true);
+  const [adminFeedback, setAdminFeedback] = useState(profile?.notification_admin_feedback ?? true);
 
   const [saving, setSaving] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
@@ -43,8 +53,14 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
       setEmailEnabled(profile.notification_email_enabled ?? true);
       setPushReminders(profile.notification_push_reminders ?? true);
       setPushCollaborators(profile.notification_push_collaborators ?? true);
+      setPushFable(profile.notification_push_fable ?? true);
       setEmailReminders(profile.notification_email_reminders ?? true);
       setEmailCollaborators(profile.notification_email_collaborators ?? true);
+      setAdminSignups(profile.notification_admin_signups ?? true);
+      setAdminWaitlist(profile.notification_admin_waitlist ?? true);
+      setAdminPremium(profile.notification_admin_premium ?? true);
+      setAdminCancellations(profile.notification_admin_cancellations ?? true);
+      setAdminFeedback(profile.notification_admin_feedback ?? true);
     }
   }, [profile]);
 
@@ -111,6 +127,32 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
   const handleEmailCollaborators = (value: boolean) => {
     setEmailCollaborators(value);
     savePreference('notification_email_collaborators', value, () => setEmailCollaborators(!value));
+  };
+
+  const handlePushFable = (value: boolean) => {
+    setPushFable(value);
+    savePreference('notification_push_fable', value, () => setPushFable(!value));
+  };
+
+  const handleAdminSignups = (value: boolean) => {
+    setAdminSignups(value);
+    savePreference('notification_admin_signups', value, () => setAdminSignups(!value));
+  };
+  const handleAdminWaitlist = (value: boolean) => {
+    setAdminWaitlist(value);
+    savePreference('notification_admin_waitlist', value, () => setAdminWaitlist(!value));
+  };
+  const handleAdminPremium = (value: boolean) => {
+    setAdminPremium(value);
+    savePreference('notification_admin_premium', value, () => setAdminPremium(!value));
+  };
+  const handleAdminCancellations = (value: boolean) => {
+    setAdminCancellations(value);
+    savePreference('notification_admin_cancellations', value, () => setAdminCancellations(!value));
+  };
+  const handleAdminFeedback = (value: boolean) => {
+    setAdminFeedback(value);
+    savePreference('notification_admin_feedback', value, () => setAdminFeedback(!value));
   };
 
   const pushPermission = pushSupported ? getPushPermission() : 'unsupported';
@@ -202,6 +244,24 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
                   thumbColor={pushCollaborators && pushEnabled && !masterOff ? colors.sky : colors.textLight}
                 />
               </View>
+
+              <View style={styles.subRow}>
+                <View style={styles.rowInfo}>
+                  <Text style={[styles.subLabel, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    Fable-Benachrichtigungen
+                  </Text>
+                  <Text style={[styles.subDesc, (masterOff || !pushEnabled) && styles.textDisabled]}>
+                    Wenn Fable einen Reiseplan im Hintergrund fertiggestellt hat
+                  </Text>
+                </View>
+                <Switch
+                  value={pushFable}
+                  onValueChange={handlePushFable}
+                  disabled={saving || masterOff || !pushEnabled}
+                  trackColor={{ false: colors.border, true: colors.sky + '80' }}
+                  thumbColor={pushFable && pushEnabled && !masterOff ? colors.sky : colors.textLight}
+                />
+              </View>
             </View>
           </>
         )}
@@ -267,6 +327,41 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Admin Section */}
+        {isAdmin && (
+          <>
+            <Text style={[styles.sectionTitle, masterOff && styles.sectionTitleDisabled]}>
+              Admin-Benachrichtigungen
+            </Text>
+            <View style={[styles.card, masterOff && styles.cardDisabled]}>
+              {[
+                { label: 'Neue Registrierungen', desc: 'Wenn sich ein neuer User registriert', value: adminSignups, handler: handleAdminSignups },
+                { label: 'Waitlist-Einträge', desc: 'Wenn jemand sich auf die Warteliste setzt', value: adminWaitlist, handler: handleAdminWaitlist },
+                { label: 'Premium-Abschluss', desc: 'Wenn jemand Premium abschliesst', value: adminPremium, handler: handleAdminPremium },
+                { label: 'Premium-Kündigung', desc: 'Wenn jemand Premium kündigt', value: adminCancellations, handler: handleAdminCancellations },
+                { label: 'Neues Feedback', desc: 'Wenn ein User Feedback sendet', value: adminFeedback, handler: handleAdminFeedback },
+              ].map((item, i) => (
+                <View key={item.label}>
+                  {i > 0 && <View style={styles.subDivider} />}
+                  <View style={i === 0 ? styles.row : styles.subRow}>
+                    <View style={styles.rowInfo}>
+                      <Text style={[i === 0 ? styles.rowLabel : styles.subLabel, masterOff && styles.textDisabled]}>{item.label}</Text>
+                      <Text style={[i === 0 ? styles.rowDesc : styles.subDesc, masterOff && styles.textDisabled]}>{item.desc}</Text>
+                    </View>
+                    <Switch
+                      value={item.value}
+                      onValueChange={item.handler}
+                      disabled={saving || masterOff}
+                      trackColor={{ false: colors.border, true: colors.accent + '80' }}
+                      thumbColor={item.value && !masterOff ? colors.accent : colors.textLight}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {/* Info box */}
         <View style={styles.infoBox}>
           <Text style={styles.infoIcon}>💡</Text>
@@ -329,6 +424,12 @@ const styles = StyleSheet.create({
   subDesc: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
   textDisabled: {
     color: colors.textLight,
+  },
+  subDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: spacing.xs,
+    marginLeft: spacing.md,
   },
   infoBox: {
     flexDirection: 'row',

@@ -3,13 +3,14 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/common';
 import { useToast } from '../../contexts/ToastContext';
 import { submitFeedback, getMyFeedback, BetaFeedback } from '../../api/feedback';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { RootStackParamList } from '../../types/navigation';
 
 type Props = {};
 
@@ -30,10 +31,12 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 export const FeedbackScreen: React.FC<Props> = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute<RouteProp<RootStackParamList, 'FeedbackModal'>>();
   const { showToast } = useToast();
-  const [type, setType] = useState<'bug' | 'feature' | 'feedback' | 'question'>('feedback');
+  const params = route.params;
+  const [type, setType] = useState<'bug' | 'feature' | 'feedback' | 'question'>(params?.prefillType || 'feedback');
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(params?.prefillDescription || '');
   const [submitting, setSubmitting] = useState(false);
   const [feedbacks, setFeedbacks] = useState<BetaFeedback[]>([]);
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
@@ -61,7 +64,12 @@ export const FeedbackScreen: React.FC<Props> = () => {
 
     setSubmitting(true);
     try {
-      await submitFeedback({ type, title: title.trim(), description: description.trim() });
+      await submitFeedback({
+        type,
+        title: title.trim(),
+        description: description.trim(),
+        supportConversationId: params?.supportConversationId,
+      });
       showToast('Feedback gesendet! Danke!', 'success');
       setTitle('');
       setDescription('');

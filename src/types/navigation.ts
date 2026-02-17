@@ -1,7 +1,7 @@
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
-  CreateTrip: undefined;
+  CreateTrip: { openFable?: boolean } | undefined;
   EditTrip: { tripId: string };
   TripDetail: { tripId: string };
   Itinerary: { tripId: string };
@@ -23,7 +23,12 @@ export type RootStackParamList = {
   Impressum: undefined;
   FableSettings: undefined;
   FableTripSettings: { tripId: string };
-  FeedbackModal: undefined;
+  FeedbackModal: {
+    prefillType?: 'bug' | 'feature' | 'feedback' | 'question';
+    prefillDescription?: string;
+    supportConversationId?: string;
+  } | undefined;
+  SupportChat: undefined;
   AdminDashboard: undefined;
   AdminUserList: undefined;
   AdminUserDetail: { userId: string };
