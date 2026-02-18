@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState, Alert, Linking,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, AppState, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,13 +14,8 @@ import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
-import { linkifyText } from '../../utils/linkify';
+import { linkifyText, openExternalUrl } from '../../utils/linkify';
 import { ProgressStep } from '../../services/ai/planExecutor';
-
-const openUrl = (url: string) => {
-  if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
-  else Linking.openURL(url);
-};
 
 function renderMarkdownLinks(text: string, keyPrefix: string): React.ReactNode[] {
   // Handle markdown links [text](url)
@@ -42,7 +37,7 @@ function renderMarkdownLinks(text: string, keyPrefix: string): React.ReactNode[]
       <Text
         key={`${keyPrefix}_link_${idx++}`}
         style={{ color: colors.primary, textDecorationLine: 'underline' }}
-        onPress={() => openUrl(linkUrl)}
+        onPress={() => openExternalUrl(linkUrl)}
         accessibilityRole="link"
       >
         {linkText}

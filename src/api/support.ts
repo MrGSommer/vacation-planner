@@ -121,6 +121,58 @@ export async function adminGetSupportStats(): Promise<{
   };
 }
 
+export interface EchoStats {
+  total_conversations: number;
+  unique_users: number;
+  resolved_by_bot: number;
+  escalated: number;
+  bot_resolution_rate: number;
+  avg_messages_per_conv: number;
+  conversations_today: number;
+  conversations_7d: number;
+}
+
+export async function adminGetEchoStats(): Promise<EchoStats> {
+  const { data, error } = await supabase
+    .from('support_conversations')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  if (error) throw error;
+
+  const all = data || [];
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const uniqueUsers = new Set(all.map(c => c.user_id)).size;
+  const resolvedByBot = all.filter(c => c.status === 'resolved' && c.resolved_by === 'bot').length;
+  const escalated = all.filter(c => c.status === 'escalated' || c.resolved_by === 'feedback').length;
+  const finished = resolvedByBot + escalated;
+  const botResolutionRate = finished > 0 ? Math.round((resolvedByBot / finished) * 100) : 0;
+
+  const totalMessages = all.reduce((sum, c) => {
+    const msgs = Array.isArray(c.messages) ? c.messages.length : 0;
+    return sum + msgs;
+  }, 0);
+  const avgMessages = all.length > 0 ? Math.round((totalMessages / all.length) * 10) / 10 : 0;
+
+  const conversationsToday = all.filter(c => c.created_at?.startsWith(todayStr)).length;
+  const conversations7d = all.filter(c => c.created_at >= sevenDaysAgo).length;
+
+  return {
+    total_conversations: all.length,
+    unique_users: uniqueUsers,
+    resolved_by_bot: resolvedByBot,
+    escalated,
+    bot_resolution_rate: botResolutionRate,
+    avg_messages_per_conv: avgMessages,
+    conversations_today: conversationsToday,
+    conversations_7d: conversations7d,
+  };
+}
+
 export async function adminGetRecentConversations(limit = 20): Promise<SupportConversation[]> {
   const { data, error } = await supabase
     .from('support_conversations')

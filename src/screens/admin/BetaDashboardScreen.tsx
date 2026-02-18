@@ -9,7 +9,7 @@ import {
   adminGetBetaStats, BetaStats,
   getBetaTasks, createBetaTask, updateBetaTask, deleteBetaTask, BetaTask,
 } from '../../api/betaDashboard';
-import { adminGetSupportStats, adminGetSupportInsights, adminGetRecentConversations } from '../../api/support';
+import { adminGetSupportStats, adminGetSupportInsights, adminGetRecentConversations, adminGetEchoStats, EchoStats } from '../../api/support';
 import { SupportInsight, SupportConversation } from '../../types/database';
 import { BetaFeedback } from '../../api/feedback';
 import { getDisplayName } from '../../utils/profileHelpers';
@@ -60,21 +60,24 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
   } | null>(null);
   const [recentConversations, setRecentConversations] = useState<SupportConversation[]>([]);
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
+  const [echoStats, setEchoStats] = useState<EchoStats | null>(null);
 
   const loadAll = useCallback(async () => {
     try {
-      const [fb, s, t, is, rc] = await Promise.all([
+      const [fb, s, t, is, rc, es] = await Promise.all([
         adminGetAllFeedback(),
         adminGetBetaStats(),
         getBetaTasks(),
         adminGetSupportStats().catch(() => null),
         adminGetRecentConversations(20).catch(() => []),
+        adminGetEchoStats().catch(() => null),
       ]);
       setFeedbacks(fb);
       setStats(s);
       setTasks(t);
       if (is) setInsightStats(is);
       setRecentConversations(rc);
+      if (es) setEchoStats(es);
     } catch (e) {
       console.error('Beta dashboard load error:', e);
     }
@@ -460,6 +463,39 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
           /* ===== INSIGHTS TAB ===== */
           insightStats ? (
           <>
+            {/* Echo-Bot Stats */}
+            {echoStats && (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Echo-Bot</Text>
+                <Text style={styles.sectionHint}>Support-Chatbot Nutzung & Lösungsrate</Text>
+                <View style={styles.kpiGrid}>
+                  {[
+                    { label: 'Gespräche', value: echoStats.total_conversations, color: colors.primary },
+                    { label: 'Unique User', value: echoStats.unique_users, color: colors.secondary },
+                    { label: 'Bot-Lösungsrate', value: `${echoStats.bot_resolution_rate}%`, color: colors.success },
+                  ].map(kpi => (
+                    <Card key={kpi.label} style={styles.kpiCard}>
+                      <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+                      <Text style={styles.kpiLabel}>{kpi.label}</Text>
+                    </Card>
+                  ))}
+                </View>
+                {renderStatsRow('Heute', echoStats.conversations_today)}
+                {renderStatsRow('Letzte 7 Tage', echoStats.conversations_7d)}
+                {renderStatsRow('Eskaliert', echoStats.escalated, echoStats.escalated > 0 ? colors.warning : undefined)}
+                {renderStatsRow('Ø Nachrichten/Gespräch', echoStats.avg_messages_per_conv)}
+                <Text style={styles.insightText}>
+                  {echoStats.bot_resolution_rate >= 70
+                    ? 'Starke Bot-Lösungsrate — Echo löst die meisten Anfragen selbst'
+                    : echoStats.bot_resolution_rate >= 40
+                    ? 'Moderate Lösungsrate — Knowledge-Base erweitern für bessere Ergebnisse'
+                    : echoStats.total_conversations > 0
+                    ? 'Niedrige Lösungsrate — Prompts und FAQ-Abdeckung verbessern'
+                    : 'Noch keine Gespräche'}
+                </Text>
+              </Card>
+            )}
+
             {/* KPI Row */}
             <View style={styles.kpiGrid}>
               {[

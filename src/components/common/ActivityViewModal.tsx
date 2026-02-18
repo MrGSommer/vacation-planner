@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Platform, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { Activity } from '../../types/database';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_FIELDS, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
-import { linkifyText } from '../../utils/linkify';
+import { linkifyText, openExternalUrl } from '../../utils/linkify';
 
 interface Props {
   visible: boolean;
@@ -33,11 +33,6 @@ export const ActivityViewModal: React.FC<Props> = ({
   const catColor = CATEGORY_COLORS[activity.category] || colors.primary;
   const catFields = CATEGORY_FIELDS[activity.category] || [];
   const catData = activity.category_data || {};
-
-  const openUrl = (url: string) => {
-    if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
-    else Linking.openURL(url);
-  };
 
   const renderFieldValue = (key: string, type: string): string | null => {
     // Handle place fields (stored as key_name, key_lat, key_lng)
@@ -93,12 +88,12 @@ export const ActivityViewModal: React.FC<Props> = ({
 
             {/* External links */}
             {catData.google_maps_url && (
-              <TouchableOpacity onPress={() => openUrl(catData.google_maps_url)} style={styles.linkRow}>
+              <TouchableOpacity onPress={() => openExternalUrl(catData.google_maps_url)} style={styles.linkRow}>
                 <Text style={styles.linkText}>Auf Google Maps anzeigen</Text>
               </TouchableOpacity>
             )}
             {activity.category === 'hotel' && catData.booking_url && (
-              <TouchableOpacity onPress={() => openUrl(catData.booking_url)} style={styles.linkRow}>
+              <TouchableOpacity onPress={() => openExternalUrl(catData.booking_url)} style={styles.linkRow}>
                 <Text style={styles.linkText}>Hotel suchen</Text>
               </TouchableOpacity>
             )}

@@ -17,6 +17,7 @@ import { submitFeedback } from '../../api/feedback';
 import { useToast } from '../../contexts/ToastContext';
 import { SupportMessage } from '../../types/database';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { renderMarkdown } from '../../utils/simpleMarkdown';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SupportChat'>;
@@ -186,7 +187,9 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation, route }) => {
     const isUser = item.role === 'user';
     return (
       <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.botBubble]}>
-        <Text style={[styles.messageText, isUser && styles.userText]}>{item.content}</Text>
+        <Text style={[styles.messageText, isUser && styles.userText]}>
+          {isUser ? item.content : renderMarkdown(item.content, styles.messageText)}
+        </Text>
       </View>
     );
   }, []);

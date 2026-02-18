@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { AiTripPlan } from '../../services/ai/planExecutor';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { openExternalUrl } from '../../utils/linkify';
 import { Button, Card } from '../common';
 import { formatDate } from '../../utils/dateHelpers';
 
@@ -15,11 +16,6 @@ interface Props {
 }
 
 const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
-
-const openUrl = (url: string) => {
-  if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
-  else Linking.openURL(url);
-};
 
 export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onReject, loading }) => {
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
@@ -117,12 +113,12 @@ export const AiPlanPreview: React.FC<Props> = ({ plan, currency, onConfirm, onRe
                     <Text style={styles.activityLocation}>📍 {act.location_name}</Text>
                   )}
                   {act.category_data?.google_maps_url && (
-                    <TouchableOpacity onPress={() => openUrl(act.category_data.google_maps_url)}>
+                    <TouchableOpacity onPress={() => openExternalUrl(act.category_data.google_maps_url)}>
                       <Text style={styles.linkText}>Auf Karte anzeigen</Text>
                     </TouchableOpacity>
                   )}
                   {act.category === 'hotel' && act.category_data?.booking_url && (
-                    <TouchableOpacity onPress={() => openUrl(act.category_data.booking_url)}>
+                    <TouchableOpacity onPress={() => openExternalUrl(act.category_data.booking_url)}>
                       <Text style={styles.linkText}>Hotel suchen</Text>
                     </TouchableOpacity>
                   )}
