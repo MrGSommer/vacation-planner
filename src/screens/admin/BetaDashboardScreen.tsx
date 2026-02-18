@@ -402,8 +402,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </>
         ) : tab === 'stats' ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxl }} />
-        ) : (
-          /* ===== TASKS TAB ===== */
+        ) : /* ===== TASKS TAB ===== */
           tab === 'tasks' ? (
           <>
             <View style={styles.addTaskRow}>
