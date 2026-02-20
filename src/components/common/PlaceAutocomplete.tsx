@@ -203,7 +203,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
 
   /* ═══════════════════════ Render ═══════════════════════ */
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, showDropdown && { zIndex: 9999 }]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -230,7 +230,7 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
 /* ═══════════════════════ Styles ═══════════════════════ */
 
 const styles = StyleSheet.create({
-  container: { marginBottom: spacing.md, zIndex: 100, position: 'relative' },
+  container: { marginBottom: spacing.md, position: 'relative' },
   label: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
   inputBox: {
     flexDirection: 'row',

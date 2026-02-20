@@ -48,8 +48,22 @@ export const uploadPhoto = async (
   return data;
 };
 
+export const updatePhotoCaption = async (photoId: string, caption: string | null): Promise<void> => {
+  const { error } = await supabase.from('photos').update({ caption }).eq('id', photoId);
+  if (error) throw error;
+};
+
 export const deletePhoto = async (photo: Photo): Promise<void> => {
   await supabase.storage.from('trip-photos').remove([photo.storage_path]);
   const { error } = await supabase.from('photos').delete().eq('id', photo.id);
+  if (error) throw error;
+};
+
+export const deletePhotos = async (photos: Photo[]): Promise<void> => {
+  if (photos.length === 0) return;
+  const paths = photos.map(p => p.storage_path);
+  const ids = photos.map(p => p.id);
+  await supabase.storage.from('trip-photos').remove(paths);
+  const { error } = await supabase.from('photos').delete().in('id', ids);
   if (error) throw error;
 };

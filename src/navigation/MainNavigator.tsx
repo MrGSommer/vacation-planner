@@ -21,7 +21,7 @@ export const MainNavigator: React.FC = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textLight,
-        tabBarStyle: { borderTopColor: colors.border, paddingBottom: insets.bottom > 0 ? insets.bottom : 4, height: 56 + (insets.bottom > 0 ? insets.bottom : 4) },
+        tabBarStyle: { borderTopColor: colors.border, paddingBottom: insets.bottom > 0 ? insets.bottom : 4, height: 65 + (insets.bottom > 0 ? insets.bottom : 4) },
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
@@ -30,7 +30,7 @@ export const MainNavigator: React.FC = () => {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Reisen',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🌍</Text>,
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 25, color }}>🌍</Text>,
         }}
       />
       <Tab.Screen
@@ -42,7 +42,7 @@ export const MainNavigator: React.FC = () => {
             <Avatar
               uri={profile?.avatar_url}
               name={profile ? getDisplayName(profile) : ''}
-              size={24}
+              size={25}
             />
           ),
         }}

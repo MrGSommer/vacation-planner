@@ -19,7 +19,7 @@ interface Props {
   activeTab: string;
 }
 
-export const BOTTOM_NAV_HEIGHT = 56;
+export const BOTTOM_NAV_HEIGHT = 65;
 
 export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: colors.primary,
   },
-  icon: { fontSize: 20 },
-  label: { ...typography.caption, fontSize: 10, marginTop: 2, color: colors.textSecondary },
+  icon: { fontSize: 22 },
+  label: { ...typography.caption, fontSize: 12, marginTop: 2, color: colors.textSecondary },
   labelActive: { color: colors.primary, fontWeight: '600' },
 });
