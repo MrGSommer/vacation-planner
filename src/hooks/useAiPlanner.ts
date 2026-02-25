@@ -18,6 +18,7 @@ import { usePlanGeneration } from '../contexts/PlanGenerationContext';
 import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
 import { searchWeb, WebSearchResult } from '../api/webSearch';
 import { useAiRealtime, useAiTypingBroadcast } from './useAiRealtime';
+import { fetchWeatherData } from './useWeather';
 import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
 
@@ -468,16 +469,24 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         : 'Reisender';
       senderNameRef.current = shortName;
 
-      const [existingData, userMemory, tripMemory, savedMessages, savedConversation] = await Promise.all([
+      const [existingData, userMemory, tripMemory, savedMessages, savedConversation, weatherMap] = await Promise.all([
         loadExistingData(profile),
         profile.fable_memory_enabled ? getAiUserMemory().catch(() => null) : null,
         tripId && fableSettingsRef.current.memoryEnabled ? getAiTripMemory(tripId).catch(() => null) : null,
         tripId ? getAiTripMessages(tripId).catch(() => []) : [],
         tripId ? getAiConversation(tripId).catch(() => null) : null,
+        (tripId && contextRef.current.startDate && contextRef.current.endDate)
+          ? fetchWeatherData(tripId, contextRef.current.startDate, contextRef.current.endDate, contextRef.current.destinationLat ?? null, contextRef.current.destinationLng ?? null).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       if (existingData) {
         contextRef.current.existingData = existingData;
+      }
+      if (weatherMap && weatherMap.size > 0) {
+        contextRef.current.weatherData = Array.from(weatherMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, w]) => ({ date, tempMax: w.tempMax, tempMin: w.tempMin, icon: w.icon }));
       }
       if (userMemory) {
         contextRef.current.userMemory = userMemory;

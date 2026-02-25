@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal, Animated,
-  Dimensions, Alert, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView,
+  Dimensions, Alert, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, EmptyState } from '../../components/common';
-import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption } from '../../api/photos';
-import { Photo } from '../../types/database';
+import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
+import { getDays } from '../../api/itineraries';
+import { Photo, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -52,6 +53,8 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [days, setDays] = useState<ItineraryDay[]>([]);
+  const [dayFilter, setDayFilter] = useState<string | null>(null); // null = all, day_id = filter
 
   // Bulk selection
   const [selectMode, setSelectMode] = useState(false);
@@ -73,8 +76,18 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getPhotos(tripId);
+      const [data, fetchedDays] = await Promise.all([getPhotos(tripId), getDays(tripId)]);
+      setDays(fetchedDays.sort((a, b) => a.date.localeCompare(b.date)));
       setPhotos(data);
+      // Auto-tag photos without day_id
+      const untagged = data.filter(p => !p.day_id && p.taken_at);
+      if (untagged.length > 0 && fetchedDays.length > 0) {
+        const tagged = await autoTagPhotos(tripId);
+        if (tagged > 0) {
+          const refreshed = await getPhotos(tripId);
+          setPhotos(refreshed);
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -84,23 +97,37 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadPhotos(); }, [loadPhotos]);
 
-  // Sort
+  // Sort & filter by day
   const sortedPhotos = useMemo(() => {
-    return [...photos].sort((a, b) => {
+    let filtered = photos;
+    if (dayFilter) {
+      filtered = photos.filter(p => p.day_id === dayFilter);
+    }
+    return [...filtered].sort((a, b) => {
       const dateA = a.taken_at ? parseISO(a.taken_at).getTime() : 0;
       const dateB = b.taken_at ? parseISO(b.taken_at).getTime() : 0;
       return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
     });
-  }, [photos, sortOrder]);
+  }, [photos, sortOrder, dayFilter]);
 
   const flatPhotos = sortedPhotos;
 
-  // Upload with progress
+  // Day counts for filter chips
+  const dayCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of photos) {
+      if (p.day_id) counts.set(p.day_id, (counts.get(p.day_id) || 0) + 1);
+    }
+    return counts;
+  }, [photos]);
+
+  // Upload with progress + EXIF extraction
   const handleUpload = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.7,
       allowsMultipleSelection: true,
+      exif: true,
     });
 
     if (result.canceled || !user) return;
@@ -113,7 +140,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         setUploadProgress({ current: i + 1, total });
         const asset = result.assets[i];
         const fileName = asset.uri.split('/').pop() || 'photo.jpg';
-        await uploadPhoto(tripId, user.id, asset.uri, fileName);
+        // Extract EXIF date
+        const exif = (asset as any).exif;
+        const exifDate = parseExifDate(
+          exif?.DateTimeOriginal || exif?.DateTime || exif?.DateTimeDigitized
+        );
+        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate);
       }
       await loadPhotos();
     } catch (e) {
@@ -198,25 +230,47 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
-  // Export / Share
+  // Export / Share — uses Web Share API or native share sheet
   const handleExport = async (photoUrls: string[]) => {
     if (photoUrls.length === 0) return;
 
     if (Platform.OS === 'web') {
-      for (const url of photoUrls) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = url.split('/').pop() || 'photo.jpg';
-        a.target = '_blank';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+      try {
+        // Try Web Share API (works on mobile browsers)
+        if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+          const files: File[] = [];
+          for (const url of photoUrls) {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const fileName = url.split('/').pop() || 'photo.jpg';
+            files.push(new File([blob], fileName, { type: 'image/jpeg' }));
+          }
+          const shareData = { files };
+          if (navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            return;
+          }
+        }
+        // Fallback: download via blob
+        for (const url of photoUrls) {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = url.split('/').pop() || 'photo.jpg';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }
+      } catch (e) {
+        Alert.alert('Fehler', 'Fotos konnten nicht geteilt werden');
       }
       return;
     }
 
-    // Native: open share sheet (save to camera roll, send via WhatsApp, etc.)
+    // Native: open share sheet
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) {
@@ -331,8 +385,15 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const getDayLabel = (dayId: string | null): string | null => {
+    if (!dayId) return null;
+    const idx = days.findIndex(d => d.id === dayId);
+    return idx >= 0 ? `Tag ${idx + 1}` : null;
+  };
+
   const renderItem = ({ item }: { item: Photo }) => {
     const isSelected = selectedIds.has(item.id);
+    const dayLabel = getDayLabel(item.day_id);
     return (
       <TouchableOpacity
         onPress={() => handlePhotoPress(item)}
@@ -342,9 +403,18 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         style={styles.photoCell}
       >
         <Image source={{ uri: item.url }} style={styles.photo} />
-        {item.taken_at && !selectMode && (
-          <View style={styles.dateOverlay}>
-            <Text style={styles.dateOverlayText}>{formatDateShort(item.taken_at)}</Text>
+        {!selectMode && (
+          <View style={styles.photoOverlays}>
+            {dayLabel && (
+              <View style={styles.dayBadge}>
+                <Text style={styles.dayBadgeText}>{dayLabel}</Text>
+              </View>
+            )}
+            {item.taken_at && (
+              <View style={styles.dateOverlay}>
+                <Text style={styles.dateOverlayText}>{formatDateShort(item.taken_at)}</Text>
+              </View>
+            )}
           </View>
         )}
         {selectMode && (
@@ -396,7 +466,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                 <>
                   <TouchableOpacity style={styles.bulkAction} onPress={handleBulkExport} disabled={bulkProcessing}>
                     <Text style={styles.bulkIcon}>↗</Text>
-                    <Text style={styles.bulkText}>{Platform.OS === 'web' ? 'Laden' : 'Teilen'}</Text>
+                    <Text style={styles.bulkText}>Teilen</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.bulkAction, styles.bulkDelete]} onPress={handleBulkDelete} disabled={bulkProcessing}>
                     <Text style={[styles.bulkIcon, { color: colors.error }]}>✕</Text>
@@ -428,6 +498,35 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             </>
           )}
+        </View>
+      )}
+
+      {/* Day filter chips */}
+      {!loading && days.length > 0 && dayCounts.size > 0 && !selectMode && (
+        <View style={styles.dayFilterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayFilterContent}>
+            <TouchableOpacity
+              style={[styles.dayChip, !dayFilter && styles.dayChipActive]}
+              onPress={() => setDayFilter(null)}
+            >
+              <Text style={[styles.dayChipText, !dayFilter && styles.dayChipTextActive]}>Alle</Text>
+            </TouchableOpacity>
+            {days.map((day, i) => {
+              const count = dayCounts.get(day.id) || 0;
+              if (count === 0) return null;
+              return (
+                <TouchableOpacity
+                  key={day.id}
+                  style={[styles.dayChip, dayFilter === day.id && styles.dayChipActive]}
+                  onPress={() => setDayFilter(dayFilter === day.id ? null : day.id)}
+                >
+                  <Text style={[styles.dayChipText, dayFilter === day.id && styles.dayChipTextActive]}>
+                    Tag {i + 1} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 
@@ -580,6 +679,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexWrap: 'wrap' as const,
   },
   sortButton: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -628,6 +728,23 @@ const styles = StyleSheet.create({
   uploadProgressBar: { flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden' },
   uploadProgressFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 2 },
 
+  // Day filter
+  dayFilterRow: {
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  dayFilterContent: {
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs, gap: spacing.xs,
+  },
+  dayChip: {
+    paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full, backgroundColor: colors.background,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  dayChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  dayChipText: { ...typography.caption, fontWeight: '500' as const, color: colors.text },
+  dayChipTextActive: { color: '#fff' },
+
   // Grid
   grid: { paddingBottom: 100 },
   columnWrapper: { gap: GAP, marginBottom: GAP },
@@ -635,8 +752,17 @@ const styles = StyleSheet.create({
   // Photo cell
   photoCell: { width: PHOTO_SIZE, height: PHOTO_SIZE, overflow: 'hidden', position: 'relative' },
   photo: { width: '100%', height: '100%' },
+  photoOverlays: {
+    position: 'absolute' as const, bottom: 0, left: 0, right: 0,
+    flexDirection: 'row' as const, justifyContent: 'space-between' as const,
+    padding: 4,
+  },
+  dayBadge: {
+    backgroundColor: 'rgba(108,92,231,0.85)', paddingHorizontal: 5, paddingVertical: 2,
+    borderRadius: 6,
+  },
+  dayBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' as const },
   dateOverlay: {
-    position: 'absolute', bottom: 4, left: 4,
     backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 5, paddingVertical: 2,
     borderRadius: 6,
   },

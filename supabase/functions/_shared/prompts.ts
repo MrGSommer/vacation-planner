@@ -69,6 +69,14 @@ Diese Reise ist bereits vorbei (Enddatum: ${endDate}). Wechsle in den Rückblick
     prompt += `\n\nWEB-SUCHERGEBNISSE (aktuell):\n${context.webSearchResults}\nFasse die relevanten Ergebnisse zusammen. Zitiere Quellen als Markdown-Links: [Titel](URL).\nGib mindestens 1-2 Quellen an.`;
   }
 
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTERVORHERSAGE FÜR DIE REISE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+    prompt += `\nNutze diese Wetterdaten um passende Empfehlungen zu geben (z.B. Regenjacke bei Regen, Indoor-Aktivitäten bei schlechtem Wetter, Sonnenschutz bei Hitze).`;
+  }
+
   if (existingData) {
     prompt += `\n\nDer Trip hat bereits folgende Daten:`;
     if (existingData.activities?.length > 0) {
@@ -216,6 +224,13 @@ ${JSON.stringify(preferences, null, 2)}`;
     prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
   }
 
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTERVORHERSAGE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+  }
+
   if (existingData && mode === 'enhance') {
     prompt += `\n\nBESTEHENDE DATEN (NICHT duplizieren!):`;
     if (existingData.stops?.length > 0) {
@@ -298,6 +313,14 @@ ${JSON.stringify(preferences, null, 2)}`;
   }
 
   prompt += `\n\nGENERIERE AKTIVITÄTEN FÜR FOLGENDE TAGE:\n${JSON.stringify(dayDates)}`;
+
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTERVORHERSAGE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+    prompt += `\nPasse Aktivitäten ans Wetter an: Indoor bei Regen/Schnee, Outdoor bei Sonne. Erwähne das Wetter in Beschreibungen wo relevant.`;
+  }
 
   if (existingData && mode === 'enhance') {
     if (existingData.activities?.length > 0) {
@@ -423,6 +446,14 @@ ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.tripMemory) {
     prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+  }
+
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTERVORHERSAGE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+    prompt += `\nPasse Aktivitäten ans Wetter an: Indoor bei Regen/Schnee, Outdoor bei Sonne.`;
   }
 
   if (existingData && mode === 'enhance') {
@@ -561,6 +592,14 @@ REISE-DETAILS:
     prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
   }
 
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTER WÄHREND DER REISE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+    prompt += `\nPasse die Packliste ans Wetter an (Regenjacke, Sonnencreme, warme Kleidung, etc.).`;
+  }
+
   if (existingData?.packingItems?.length > 0) {
     prompt += `\n\nBEREITS VORHANDENE ITEMS (NICHT duplizieren!):
 ${existingData.packingItems.map((i: any) => `- ${i.name} (${i.category}, ${i.quantity}x)`).join('\n')}`;
@@ -653,6 +692,14 @@ REISE-DETAILS:
 
   if (context.tripMemory) {
     prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+  }
+
+  if (context.weatherData?.length > 0) {
+    prompt += `\n\nWETTERVORHERSAGE:`;
+    context.weatherData.forEach((w: any) => {
+      prompt += `\n- ${w.date}: ${w.icon} ${w.tempMax}° / ${w.tempMin}°`;
+    });
+    prompt += `\nPasse Aktivitäten ans Wetter an: Indoor bei Regen/Schnee, Outdoor bei Sonne.`;
   }
 
   if (existingData?.stops?.length > 0) {

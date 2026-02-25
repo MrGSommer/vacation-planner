@@ -10,7 +10,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTrip, CollaboratorWithProfile } from '../../api/invitations';
 import { getRecentCreateModeJob, PlanJob } from '../../api/aiPlanJobs';
 import { Trip } from '../../types/database';
-import { formatDateRange, getDayCount, isTripActive, getTripCountdownText } from '../../utils/dateHelpers';
+import { formatDateRange, getDayCount, isTripActive, getTripCountdownText, getDaysUntil, getCurrentTripDay } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/common';
@@ -144,6 +144,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [deleteCollabs, setDeleteCollabs] = useState<CollaboratorWithProfile[]>([]);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [fableJob, setFableJob] = useState<PlanJob | null>(null);
+  const [dismissedRecaps, setDismissedRecaps] = useState<Set<string>>(new Set());
 
   const { activeTrips, pastTrips, recentlyCompleted } = useMemo(() => {
     const now = new Date();
@@ -272,8 +273,65 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.betaText}>Beta</Text>
           </View>
         </View>
-        <Text style={styles.headerTitle}>Meine Reisen</Text>
-        <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
+        <View style={styles.headerBody}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Meine Reisen</Text>
+            <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
+          </View>
+          {(() => {
+            const nextTrip = activeTrips[0];
+            if (!nextTrip) return null;
+            const active = isTripActive(nextTrip.start_date, nextTrip.end_date);
+            const tripDay = getCurrentTripDay(nextTrip.start_date, nextTrip.end_date);
+            const daysUntil = getDaysUntil(nextTrip.start_date);
+
+            if (!active && (daysUntil <= 0 || daysUntil > 60)) return null;
+
+            const HYPE = [
+              'Koffer packen!', 'Vorfreude pur!', 'Abenteuer wartet!',
+              'Fernweh gestillt!', 'Countdown läuft!', 'Ab in die Ferne!',
+              'Reisefieber!', 'Auf geht\'s!',
+            ];
+            const ACTIVE = [
+              'Geniess es!', 'Abenteuer!', 'Entdecke!',
+              'Lebe den Moment!', 'Unvergesslich!', 'Traumhaft!',
+            ];
+
+            const seed = nextTrip.id.charCodeAt(0) + nextTrip.id.charCodeAt(1);
+            let mainText: string;
+            let subText: string;
+            let emoji: string;
+
+            if (active && tripDay) {
+              mainText = `Tag ${tripDay.day}/${tripDay.total}`;
+              subText = ACTIVE[seed % ACTIVE.length];
+              emoji = '\uD83C\uDF0D';
+            } else if (daysUntil === 1) {
+              mainText = 'Morgen!';
+              subText = 'Es geht los!';
+              emoji = '\uD83D\uDE80';
+            } else {
+              mainText = `${daysUntil} Tage`;
+              subText = HYPE[seed % HYPE.length];
+              emoji = daysUntil <= 7 ? '\uD83D\uDD25' : '\u2708\uFE0F';
+            }
+
+            return (
+              <TouchableOpacity
+                style={styles.countdownWidget}
+                onPress={() => handleTripPress(nextTrip)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.countdownEmoji}>{emoji}</Text>
+                <View style={styles.countdownTextWrap}>
+                  <Text style={styles.countdownMain}>{mainText}</Text>
+                  <Text style={styles.countdownTripName} numberOfLines={1}>{nextTrip.name}</Text>
+                  <Text style={styles.countdownPhrase}>{subText}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })()}
+        </View>
         {paymentWarning && (
           <PaymentWarningBanner message={paymentErrorMessage} />
         )}
@@ -316,19 +374,27 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           )}
 
-          {recentlyCompleted.map(trip => (
+          {recentlyCompleted.filter(t => !dismissedRecaps.has(t.id)).map(trip => (
             <TouchableOpacity
               key={`recap-${trip.id}`}
               style={styles.recapBanner}
-              onPress={() => handleTripPress(trip)}
+              onPress={() => {
+                setDismissedRecaps(prev => new Set(prev).add(trip.id));
+                handleTripPress(trip);
+              }}
               activeOpacity={0.7}
             >
-              <Text style={styles.recapBannerIcon}>🎉</Text>
+              <Text style={styles.recapBannerIcon}>{'\uD83C\uDF89'}</Text>
               <View style={styles.recapBannerContent}>
                 <Text style={styles.recapBannerTitle}>Reise erlebt!</Text>
                 <Text style={styles.recapBannerText}>Schau dir den Rückblick von "{trip.name}" an</Text>
               </View>
-              <Text style={styles.recapBannerArrow}>›</Text>
+              <TouchableOpacity
+                onPress={(e: any) => { e.stopPropagation(); setDismissedRecaps(prev => new Set(prev).add(trip.id)); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.recapBannerClose}>{'\u2715'}</Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
 
@@ -456,8 +522,21 @@ const styles = StyleSheet.create({
   brandName: { fontSize: 22, fontWeight: '800' as const, color: colors.secondary },
   betaBadge: { backgroundColor: colors.secondary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm },
   betaText: { ...typography.caption, color: '#FFFFFF', fontWeight: '700' as const, fontSize: 10 },
+  headerBody: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, gap: spacing.sm },
+  headerLeft: { flexShrink: 1, minWidth: 80 },
   headerTitle: { ...typography.h1 },
   headerSubtitle: { ...typography.bodySmall, marginTop: spacing.xs },
+  countdownWidget: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm,
+    backgroundColor: colors.accent + '15', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.lg, borderWidth: 1.5, borderColor: colors.accent + '30',
+    flexShrink: 0,
+  },
+  countdownEmoji: { fontSize: 28 },
+  countdownTextWrap: { alignItems: 'flex-end' as const },
+  countdownMain: { fontSize: 20, fontWeight: '800' as const, color: colors.accent, letterSpacing: -0.3 },
+  countdownTripName: { ...typography.caption, color: colors.textSecondary, maxWidth: 130, textAlign: 'right' as const },
+  countdownPhrase: { ...typography.caption, fontSize: 11, color: colors.accent, fontStyle: 'italic' as const },
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },
   cardPast: { opacity: 0.55 },
   cardGradient: { flex: 1 },
@@ -539,4 +618,5 @@ const styles = StyleSheet.create({
   recapBannerTitle: { ...typography.body, fontWeight: '600', color: colors.success },
   recapBannerText: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   recapBannerArrow: { fontSize: 22, color: colors.textLight },
+  recapBannerClose: { fontSize: 16, color: colors.textLight, padding: spacing.xs },
 });

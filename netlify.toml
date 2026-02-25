@@ -1,6 +1,6 @@
 # Build: inject unique SW version hash after Expo export
 [build]
-  command = "npx expo export -p web && node scripts/inject-sw-version.js"
+  command = "node scripts/generate-build-info.js && npx expo export -p web && node scripts/inject-sw-version.js"
   publish = "dist"
 
 # Static legal pages for crawlers (must come BEFORE the SPA catch-all)

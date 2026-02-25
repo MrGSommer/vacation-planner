@@ -50,6 +50,12 @@ export interface AiContext {
   webSearchResults?: string;
   collaboratorNames?: string[];
   lastPreferencesGathered?: string[];
+  weatherData?: Array<{
+    date: string;
+    tempMax: number;
+    tempMin: number;
+    icon: string;
+  }>;
   fableSettings?: {
     budgetVisible: boolean;
     packingVisible: boolean;

@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
 import type { ActivityFormData } from '../../components/common';
 import { getDays, getActivities, getActivitiesForTrip, createDay, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
+import { getPhotos } from '../../api/photos';
 import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { getDayDates, formatDateShort, formatTime, getToday } from '../../utils/dateHelpers';
@@ -21,6 +22,7 @@ import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
+import { useWeather } from '../../hooks/useWeather';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -44,10 +46,15 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [allTripActivities, setAllTripActivities] = useState<Activity[]>([]);
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [modalDefaultCategory, setModalDefaultCategory] = useState<string | undefined>(undefined);
+  const [photoCounts, setPhotoCounts] = useState<Map<string, number>>(new Map());
   const [tripStartDate, setTripStartDate] = useState<string>('');
   const [tripEndDate, setTripEndDate] = useState<string>('');
+  const [tripDestLat, setTripDestLat] = useState<number | null>(null);
+  const [tripDestLng, setTripDestLng] = useState<number | null>(null);
   const tabScrollRef = useRef<ScrollView>(null);
   const tabWidths = useRef<number[]>([]);
+
+  const weather = useWeather(tripId, tripStartDate, tripEndDate, tripDestLat, tripDestLng);
 
   const scrollToActiveTab = useCallback((dayId: string) => {
     const idx = days.findIndex(d => d.id === dayId);
@@ -62,11 +69,19 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   // Task 6: Split loadData into loadTripData (once) and loadActivities (per day)
   const loadTripData = useCallback(async () => {
     try {
-      const [trip, fetchedAllActivities] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId)]);
+      const [trip, fetchedAllActivities, tripPhotos] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId), getPhotos(tripId).catch(() => [])]);
       setAllTripActivities(fetchedAllActivities);
       setHotelActivities(fetchedAllActivities.filter(a => a.category === 'hotel'));
       setTripStartDate(trip.start_date);
       setTripEndDate(trip.end_date);
+      setTripDestLat(trip.destination_lat);
+      setTripDestLng(trip.destination_lng);
+      // Build photo counts per day
+      const pCounts = new Map<string, number>();
+      for (const p of tripPhotos) {
+        if (p.day_id) pCounts.set(p.day_id, (pCounts.get(p.day_id) || 0) + 1);
+      }
+      setPhotoCounts(pCounts);
       const dates = getDayDates(trip.start_date, trip.end_date);
       setDayDates(dates);
 
@@ -407,22 +422,41 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Day Tabs */}
       <View style={styles.tabBar}>
         <ScrollView ref={tabScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={styles.tabsContent}>
-          {days.map((day, i) => (
-            <TouchableOpacity
-              key={day.id}
-              style={[styles.tab, selectedDayId === day.id && styles.tabActive]}
-              onPress={() => loadDayActivities(day.id)}
-            >
-              <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
-              <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
-            </TouchableOpacity>
-          ))}
+          {days.map((day, i) => {
+            const w = weather.get(day.date);
+            const pc = photoCounts.get(day.id) || 0;
+            return (
+              <TouchableOpacity
+                key={day.id}
+                style={[styles.tab, selectedDayId === day.id && styles.tabActive]}
+                onPress={() => loadDayActivities(day.id)}
+              >
+                <View style={styles.tabTopRow}>
+                  <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
+                  {pc > 0 && <Text style={[styles.tabPhotoCount, selectedDayId === day.id && styles.tabPhotoCountActive]}>{'\uD83D\uDCF8'}{pc}</Text>}
+                </View>
+                <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
+                {w && <Text style={[styles.tabWeather, selectedDayId === day.id && styles.tabWeatherActive]}>{w.icon} {w.tempMax}°</Text>}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
       {/* Activities Timeline with swipe */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
         <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent} keyboardDismissMode="on-drag">
+          {/* Weather summary for selected day */}
+          {selectedDate && weather.get(selectedDate) && (() => {
+            const w = weather.get(selectedDate)!;
+            return (
+              <View style={styles.weatherBanner}>
+                <Text style={styles.weatherBannerIcon}>{w.icon}</Text>
+                <Text style={styles.weatherBannerTemp}>{w.tempMax}° / {w.tempMin}°</Text>
+              </View>
+            );
+          })()}
+
           {/* Anreise on first day */}
           {isFirstDay && renderTravelCard('arrival', arrivalTransport)}
 
@@ -538,10 +572,15 @@ const styles = StyleSheet.create({
   tabsContent: { paddingHorizontal: spacing.md, gap: spacing.sm, alignItems: 'center' },
   tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.card },
   tabActive: { backgroundColor: colors.primary },
+  tabTopRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 4 },
   tabDay: { ...typography.bodySmall, fontWeight: '600', textAlign: 'center' },
   tabDayActive: { color: '#FFFFFF' },
+  tabPhotoCount: { fontSize: 10, color: colors.textLight },
+  tabPhotoCountActive: { color: 'rgba(255,255,255,0.7)' },
   tabDate: { ...typography.caption, textAlign: 'center' },
   tabDateActive: { color: 'rgba(255,255,255,0.8)' },
+  tabWeather: { ...typography.caption, fontSize: 10, textAlign: 'center' as const, color: colors.textLight, marginTop: 1 },
+  tabWeatherActive: { color: 'rgba(255,255,255,0.7)' },
   timeline: { flex: 1 },
   timelineContent: { padding: spacing.md, paddingBottom: 140 },
   emptyDay: { alignItems: 'center', paddingVertical: spacing.xxl },
@@ -590,4 +629,7 @@ const styles = StyleSheet.create({
   travelDayDetail: { ...typography.caption, color: colors.accent, marginTop: 2, fontWeight: '500' },
   travelDayPlaceholder: { ...typography.bodySmall, color: colors.textLight, flex: 1 },
   travelDayPlus: { fontSize: 24, color: colors.primary, fontWeight: '300' },
+  weatherBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
+  weatherBannerIcon: { fontSize: 18 },
+  weatherBannerTemp: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' as const },
 });

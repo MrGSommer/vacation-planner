@@ -8,7 +8,7 @@ import {
   getPackingLists, createPackingList, getPackingItems,
   createPackingItem, createPackingItems, togglePackingItem,
   togglePackingItems, deletePackingItem, deletePackingItems,
-  updatePackingItemAssignment,
+  updatePackingItemAssignment, updatePackingItem,
 } from '../../api/packing';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { PackingItem } from '../../types/database';
@@ -25,6 +25,23 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
+
+const CATEGORY_ICONS: Record<string, string> = {
+  'Kleidung': '\uD83D\uDC55',
+  'Toilettenartikel': '\uD83E\uDDF4',
+  'Elektronik': '\uD83D\uDD0C',
+  'Dokumente': '\uD83D\uDCC4',
+  'Medikamente': '\uD83D\uDC8A',
+  'Medizin': '\uD83D\uDC8A',
+  'Sonstiges': '\uD83D\uDCE6',
+};
+
+interface CustomTemplate {
+  id: string;
+  label: string;
+  icon: string;
+  items: { name: string; category: string; quantity: number }[];
+}
 
 export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
@@ -46,11 +63,31 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Template picker
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+
+  // Template editing
+  const [editingTemplate, setEditingTemplate] = useState<CustomTemplate | null>(null);
+  const [editTemplateName, setEditTemplateName] = useState('');
+
+  // Edit item
+  const [editingItem, setEditingItem] = useState<PackingItem | null>(null);
+  const [editItemName, setEditItemName] = useState('');
+  const [editItemCategory, setEditItemCategory] = useState<string>(PACKING_CATEGORIES[0]);
+  const [editItemQuantity, setEditItemQuantity] = useState(1);
+
+  // Drag-to-category
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   // Collaborators for assignment
   const [collaborators, setCollaborators] = useState<CollaboratorWithProfile[]>([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignItemId, setAssignItemId] = useState<string | null>(null);
+
+  // Collapsed categories
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -58,7 +95,6 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         getPackingLists(tripId),
         getCollaborators(tripId),
       ]);
-      // Safety net: ensure current user always appears in collaborator list
       if (user && !collabs.find(c => c.user_id === user.id)) {
         collabs.unshift({
           id: 'self',
@@ -87,10 +123,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Realtime updates for packing items
-  const handlePackingRealtime = useCallback(() => {
-    loadData();
-  }, [loadData]);
+  const handlePackingRealtime = useCallback(() => { loadData(); }, [loadData]);
 
   useRealtime(
     'packing_items',
@@ -98,7 +131,6 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     handlePackingRealtime,
   );
 
-  // Reopen Fable modal when returning from FableTripSettings
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if ((route.params as any)?.openFable) {
@@ -111,7 +143,6 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleToggle = async (item: PackingItem) => {
     if (selectionMode) {
-      // In selection mode, tap toggles selection
       setSelectedIds(prev => {
         const next = new Set(prev);
         if (next.has(item.id)) next.delete(item.id);
@@ -214,9 +245,81 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const openEditItem = (item: PackingItem) => {
+    setEditingItem(item);
+    setEditItemName(item.name);
+    setEditItemCategory(item.category);
+    setEditItemQuantity(item.quantity);
+  };
+
+  const handleSaveEditItem = async () => {
+    if (!editingItem || !editItemName.trim()) return;
+    try {
+      await updatePackingItem(editingItem.id, {
+        name: editItemName.trim(),
+        category: editItemCategory,
+        quantity: editItemQuantity,
+      });
+      setItems(prev => prev.map(i =>
+        i.id === editingItem.id
+          ? { ...i, name: editItemName.trim(), category: editItemCategory, quantity: editItemQuantity }
+          : i
+      ));
+      setEditingItem(null);
+      showToast('Gegenstand aktualisiert', 'success');
+    } catch {
+      showToast('Fehler beim Speichern', 'error');
+    }
+  };
+
+  const handleDeleteFromEdit = () => {
+    if (!editingItem) return;
+    const id = editingItem.id;
+    setEditingItem(null);
+    handleDelete(id);
+  };
+
+  // Long press → open category picker for moving item
+  const handleItemLongPress = (item: PackingItem) => {
+    if (selectionMode) return;
+    setDraggingItemId(item.id);
+    setShowCategoryPicker(true);
+  };
+
+  const handleMoveToCategory = async (newCategory: string) => {
+    if (!draggingItemId) return;
+    try {
+      await updatePackingItem(draggingItemId, { category: newCategory });
+      setItems(prev => prev.map(i =>
+        i.id === draggingItemId ? { ...i, category: newCategory } : i
+      ));
+      setShowCategoryPicker(false);
+      setDraggingItemId(null);
+      showToast(`Verschoben nach ${newCategory}`, 'success');
+    } catch {
+      showToast('Fehler beim Verschieben', 'error');
+    }
+  };
+
+  // Load custom templates from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('wayfable_custom_templates');
+      if (stored) setCustomTemplates(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  const persistTemplates = (templates: CustomTemplate[]) => {
+    setCustomTemplates(templates);
+    try {
+      localStorage.setItem('wayfable_custom_templates', JSON.stringify(templates));
+    } catch {}
+  };
+
   const handleTemplateSelect = async (tripTypeId: string) => {
     if (!listId) return;
-    const templateItems = PACKING_TEMPLATES[tripTypeId];
+    const templateItems = PACKING_TEMPLATES[tripTypeId]
+      || customTemplates.find(t => t.id === tripTypeId)?.items;
     if (!templateItems) return;
     try {
       await createPackingItems(listId, templateItems);
@@ -226,6 +329,51 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     } catch {
       showToast('Fehler beim Laden der Vorlage', 'error');
     }
+  };
+
+  const handleSaveAsTemplate = () => {
+    if (!newTemplateName.trim() || items.length === 0) return;
+    const id = `custom_${Date.now()}`;
+    const templateItems = items.map(i => ({ name: i.name, category: i.category, quantity: i.quantity }));
+    const newTemplate: CustomTemplate = { id, label: newTemplateName.trim(), icon: '\uD83D\uDCCB', items: templateItems };
+    persistTemplates([...customTemplates, newTemplate]);
+    setShowSaveTemplate(false);
+    setNewTemplateName('');
+    showToast('Vorlage gespeichert', 'success');
+  };
+
+  const handleDeleteCustomTemplate = (id: string) => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Vorlage löschen?')) return;
+    }
+    persistTemplates(customTemplates.filter(t => t.id !== id));
+    showToast('Vorlage gelöscht', 'success');
+  };
+
+  const handleEditTemplate = (tmpl: CustomTemplate) => {
+    setEditingTemplate(tmpl);
+    setEditTemplateName(tmpl.label);
+    setShowTemplatePicker(false);
+  };
+
+  const handleSaveEditTemplate = () => {
+    if (!editingTemplate || !editTemplateName.trim()) return;
+    const updated = customTemplates.map(t =>
+      t.id === editingTemplate.id ? { ...t, label: editTemplateName.trim() } : t
+    );
+    persistTemplates(updated);
+    setEditingTemplate(null);
+    setEditTemplateName('');
+    showToast('Vorlage aktualisiert', 'success');
+  };
+
+  const handleRemoveTemplateItem = (itemIndex: number) => {
+    if (!editingTemplate) return;
+    const newItems = editingTemplate.items.filter((_, i) => i !== itemIndex);
+    const updated = { ...editingTemplate, items: newItems };
+    setEditingTemplate(updated);
+    const updatedTemplates = customTemplates.map(t => t.id === updated.id ? updated : t);
+    persistTemplates(updatedTemplates);
   };
 
   const handleAssign = async (userId: string | null) => {
@@ -252,6 +400,15 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     return name.charAt(0).toUpperCase();
   };
 
+  const toggleCategory = (cat: string) => {
+    setCollapsedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
   const packed = items.filter(i => i.is_packed).length;
   const totalItems = items.length;
   const progress = totalItems > 0 ? (packed / totalItems) * 100 : 0;
@@ -262,8 +419,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     return acc;
   }, {} as Record<string, PackingItem[]>);
 
-  // Also group any items with categories not in PACKING_CATEGORIES
-  const knownCats = new Set(PACKING_CATEGORIES);
+  const knownCats = new Set<string>(PACKING_CATEGORIES);
   const otherItems = items.filter(i => !knownCats.has(i.category));
   if (otherItems.length > 0) {
     const otherGrouped = otherItems.reduce((acc, item) => {
@@ -292,13 +448,28 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       />
 
-      {/* Progress */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+      {/* Progress Card */}
+      {totalItems > 0 && (
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressEmoji}>{progress === 100 ? '✅' : '🧳'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.progressTitle}>
+                {progress === 100 ? 'Alles eingepackt!' : `${packed} von ${totalItems} eingepackt`}
+              </Text>
+              <Text style={styles.progressPercent}>{progress.toFixed(0)}%</Text>
+            </View>
+          </View>
+          <View style={styles.progressBarOuter}>
+            <LinearGradient
+              colors={progress === 100 ? [colors.success, '#00D2A0'] : [colors.primary, colors.secondary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.progressBarFill, { width: `${Math.max(progress, 2)}%` }]}
+            />
+          </View>
         </View>
-        <Text style={styles.progressText}>{packed}/{totalItems} eingepackt ({progress.toFixed(0)}%)</Text>
-      </View>
+      )}
 
       {loading ? (
         <PackingSkeleton />
@@ -312,51 +483,92 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
-          {Object.entries(grouped).map(([category, catItems]) => (
-            <View key={category} style={styles.categorySection}>
-              <Text style={styles.categoryTitle}>{category}</Text>
-              {catItems.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.itemRow, selectionMode && selectedIds.has(item.id) && styles.itemRowSelected]}
-                  onPress={() => handleToggle(item)}
-                  onLongPress={() => handleLongPress(item)}
-                >
-                  {selectionMode ? (
-                    <View style={[styles.checkbox, selectedIds.has(item.id) && styles.selectedCheck]}>
-                      {selectedIds.has(item.id) && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  ) : (
-                    <View style={[styles.checkbox, item.is_packed && styles.checked]}>
-                      {item.is_packed && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  )}
-                  <Text style={[styles.itemName, !selectionMode && item.is_packed && styles.itemPacked]}>{item.name}</Text>
-                  {item.quantity > 1 && <Text style={styles.quantity}>×{item.quantity}</Text>}
+          {Object.entries(grouped).map(([category, catItems]) => {
+            const catPacked = catItems.filter(i => i.is_packed).length;
+            const isCollapsed = collapsedCats.has(category);
+            const catIcon = CATEGORY_ICONS[category] || '\uD83D\uDCE6';
 
-                  {/* Assignment avatar */}
-                  <TouchableOpacity
-                    onPress={(e: any) => {
-                      e.stopPropagation();
-                      if (selectionMode) return;
-                      setAssignItemId(item.id);
-                      setShowAssignModal(true);
-                    }}
-                    style={styles.assignBtn}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                  >
-                    {item.assigned_to ? (
-                      <View style={styles.assignAvatar}>
-                        <Text style={styles.assignAvatarText}>{getAssigneeInitial(item.assigned_to)}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.assignPlaceholder}>👥</Text>
-                    )}
-                  </TouchableOpacity>
+            return (
+              <View key={category} style={styles.categoryCard}>
+                <TouchableOpacity
+                  style={styles.categoryHeader}
+                  onPress={() => toggleCategory(category)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.categoryIcon}>{catIcon}</Text>
+                  <Text style={styles.categoryTitle}>{category}</Text>
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryBadgeText}>{catPacked}/{catItems.length}</Text>
+                  </View>
+                  <Text style={styles.chevron}>{isCollapsed ? '\u25B6' : '\u25BC'}</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          ))}
+
+                {!isCollapsed && catItems.map(item => (
+                  <View
+                    key={item.id}
+                    style={[styles.itemRow, selectionMode && selectedIds.has(item.id) && styles.itemRowSelected]}
+                  >
+                    {/* Checkbox — separate touch target */}
+                    <TouchableOpacity
+                      onPress={() => handleToggle(item)}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      {selectionMode ? (
+                        <View style={[styles.checkbox, selectedIds.has(item.id) && styles.selectedCheck]}>
+                          {selectedIds.has(item.id) && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                      ) : (
+                        <View style={[styles.checkbox, item.is_packed && styles.checked]}>
+                          {item.is_packed && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Tap name → edit, long press → move category */}
+                    <TouchableOpacity
+                      style={styles.itemNameArea}
+                      onPress={() => selectionMode ? handleToggle(item) : openEditItem(item)}
+                      onLongPress={() => handleItemLongPress(item)}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={[styles.itemName, !selectionMode && item.is_packed && styles.itemPacked]}>{item.name}</Text>
+                      {item.quantity > 1 && <Text style={styles.quantity}>×{item.quantity}</Text>}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (selectionMode) return;
+                        setAssignItemId(item.id);
+                        setShowAssignModal(true);
+                      }}
+                      style={styles.assignBtn}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      {item.assigned_to ? (
+                        <View style={styles.assignAvatar}>
+                          <Text style={styles.assignAvatarText}>{getAssigneeInitial(item.assigned_to)}</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.assignPlaceholder}>👥</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+
+          {/* Save as template button */}
+          {items.length > 0 && (
+            <TouchableOpacity
+              style={styles.saveTemplateBtn}
+              onPress={() => setShowSaveTemplate(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.saveTemplateBtnIcon}>💾</Text>
+              <Text style={styles.saveTemplateBtnText}>Als Vorlage speichern</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       )}
 
@@ -380,8 +592,8 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Add Item Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setShowModal(false); setNewQuantity(1); }}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Gegenstand hinzufügen</Text>
             <Input label="Name" placeholder="z.B. Sonnencreme" value={newName} onChangeText={setNewName} />
             <Text style={styles.fieldLabel}>Kategorie</Text>
@@ -392,6 +604,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   style={[styles.catChip, newCategory === cat && styles.catChipActive]}
                   onPress={() => setNewCategory(cat)}
                 >
+                  <Text style={styles.catChipIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
                   <Text style={[styles.catText, newCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
@@ -417,31 +630,230 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               <Button title="Hinzufügen" onPress={handleAdd} disabled={!newName.trim()} style={styles.modalBtn} />
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Template Picker Modal */}
       <Modal visible={showTemplatePicker} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowTemplatePicker(false)}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Vorlage wählen</Text>
-            <Text style={styles.templateSubtitle}>Wähle einen Reisetyp, um passende Gegenstände hinzuzufügen</Text>
-            <View style={styles.templateGrid}>
-              {TRIP_TYPES.map(type => (
+            <Text style={styles.templateSubtitle}>Wähle einen Reisetyp oder eine eigene Vorlage</Text>
+            <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false}>
+              {/* Built-in templates */}
+              <Text style={styles.templateSectionLabel}>Reisetypen</Text>
+              <View style={styles.templateGrid}>
+                {TRIP_TYPES.map(type => (
+                  <TouchableOpacity
+                    key={type.id}
+                    style={styles.templateChip}
+                    onPress={() => handleTemplateSelect(type.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.templateChipIcon}>{type.icon}</Text>
+                    <Text style={styles.templateChipLabel}>{type.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom templates */}
+              {customTemplates.length > 0 && (
+                <>
+                  <Text style={styles.templateSectionLabel}>Eigene Vorlagen</Text>
+                  <View style={styles.templateGrid}>
+                    {customTemplates.map(tmpl => (
+                      <View key={tmpl.id} style={styles.customTemplateRow}>
+                        <TouchableOpacity
+                          style={[styles.templateChip, styles.templateChipCustom]}
+                          onPress={() => handleTemplateSelect(tmpl.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.templateChipIcon}>{tmpl.icon}</Text>
+                          <Text style={styles.templateChipLabel} numberOfLines={1}>{tmpl.label}</Text>
+                          <Text style={styles.templateChipCount}>{tmpl.items.length}</Text>
+                        </TouchableOpacity>
+                        <View style={styles.templateActions}>
+                          <TouchableOpacity
+                            onPress={() => handleEditTemplate(tmpl)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.templateActionIcon}>✏️</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteCustomTemplate(tmpl.id)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.templateActionIcon}>🗑️</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {/* Create new template */}
+              <TouchableOpacity
+                style={styles.newTemplateBtn}
+                onPress={() => { setShowTemplatePicker(false); setShowSaveTemplate(true); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.newTemplateBtnIcon}>+</Text>
+                <Text style={styles.newTemplateBtnText}>Aktuelle Liste als Vorlage speichern</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <Button title="Schliessen" onPress={() => setShowTemplatePicker(false)} variant="ghost" />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Save as Template Modal */}
+      <Modal visible={showSaveTemplate} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setShowSaveTemplate(false); setNewTemplateName(''); }}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Vorlage speichern</Text>
+            <Text style={styles.templateSubtitle}>
+              Speichere die aktuelle Packliste ({items.length} Gegenstände) als wiederverwendbare Vorlage
+            </Text>
+            <Input
+              label="Name der Vorlage"
+              placeholder="z.B. Strandurlaub mit Kind"
+              value={newTemplateName}
+              onChangeText={setNewTemplateName}
+            />
+            <View style={styles.modalButtons}>
+              <Button title="Abbrechen" onPress={() => { setShowSaveTemplate(false); setNewTemplateName(''); }} variant="ghost" style={styles.modalBtn} />
+              <Button title="Speichern" onPress={handleSaveAsTemplate} disabled={!newTemplateName.trim() || items.length === 0} style={styles.modalBtn} />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Template Modal */}
+      <Modal visible={!!editingTemplate} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Vorlage bearbeiten</Text>
+            <Input
+              label="Name"
+              value={editTemplateName}
+              onChangeText={setEditTemplateName}
+              placeholder="Vorlagenname"
+            />
+            <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>
+              Gegenstände ({editingTemplate?.items.length || 0})
+            </Text>
+            <ScrollView style={{ maxHeight: 300, flexGrow: 0 }} showsVerticalScrollIndicator={false}>
+              {editingTemplate?.items.map((item, index) => (
+                <View key={index} style={styles.editTemplateItem}>
+                  <Text style={styles.editTemplateItemIcon}>
+                    {CATEGORY_ICONS[item.category] || '\uD83D\uDCE6'}
+                  </Text>
+                  <Text style={styles.editTemplateItemName} numberOfLines={1}>{item.name}</Text>
+                  {item.quantity > 1 && (
+                    <Text style={styles.editTemplateItemQty}>×{item.quantity}</Text>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => handleRemoveTemplateItem(index)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={{ fontSize: 16, color: colors.error }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={[styles.modalButtons, { marginTop: spacing.md }]}>
+              <Button
+                title="Abbrechen"
+                onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }}
+                variant="ghost"
+                style={styles.modalBtn}
+              />
+              <Button
+                title="Speichern"
+                onPress={handleSaveEditTemplate}
+                disabled={!editTemplateName.trim()}
+                style={styles.modalBtn}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Item Modal */}
+      <Modal visible={!!editingItem} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditingItem(null)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Gegenstand bearbeiten</Text>
+            <Input label="Name" placeholder="z.B. Sonnencreme" value={editItemName} onChangeText={setEditItemName} />
+            <Text style={styles.fieldLabel}>Kategorie</Text>
+            <View style={styles.catRow}>
+              {PACKING_CATEGORIES.map(cat => (
                 <TouchableOpacity
-                  key={type.id}
-                  style={styles.templateCard}
-                  onPress={() => handleTemplateSelect(type.id)}
-                  activeOpacity={0.7}
+                  key={cat}
+                  style={[styles.catChip, editItemCategory === cat && styles.catChipActive]}
+                  onPress={() => setEditItemCategory(cat)}
                 >
-                  <Text style={styles.templateIcon}>{type.icon}</Text>
-                  <Text style={styles.templateLabel}>{type.label}</Text>
+                  <Text style={styles.catChipIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
+                  <Text style={[styles.catText, editItemCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Button title="Abbrechen" onPress={() => setShowTemplatePicker(false)} variant="ghost" />
+            <Text style={styles.fieldLabel}>Menge</Text>
+            <View style={styles.quantityRow}>
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => setEditItemQuantity(q => Math.max(1, q - 1))}
+              >
+                <Text style={styles.quantityBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.quantityValue}>{editItemQuantity}</Text>
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => setEditItemQuantity(q => q + 1)}
+              >
+                <Text style={styles.quantityBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.editDeleteBtn}
+                onPress={handleDeleteFromEdit}
+              >
+                <Text style={styles.editDeleteBtnText}>🗑️ Löschen</Text>
+              </TouchableOpacity>
+              <Button title="Abbrechen" onPress={() => setEditingItem(null)} variant="ghost" style={styles.modalBtn} />
+              <Button title="Speichern" onPress={handleSaveEditItem} disabled={!editItemName.trim()} style={styles.modalBtn} />
+            </View>
           </View>
-        </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Category Picker (long press move) */}
+      <Modal visible={showCategoryPicker} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.assignOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowCategoryPicker(false); setDraggingItemId(null); }}
+        >
+          <View style={styles.assignModal}>
+            <Text style={styles.assignTitle}>Verschieben nach</Text>
+            {PACKING_CATEGORIES.map(cat => {
+              const currentCat = draggingItemId ? items.find(i => i.id === draggingItemId)?.category : null;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  style={styles.assignOption}
+                  onPress={() => handleMoveToCategory(cat)}
+                >
+                  <Text style={styles.assignOptionIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
+                  <Text style={styles.assignOptionName}>{cat}</Text>
+                  {currentCat === cat && <Text style={styles.assignCheck}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Assignment Modal */}
@@ -454,7 +866,6 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.assignModal}>
             <Text style={styles.assignTitle}>Zuweisen an</Text>
 
-            {/* Team / unassigned option */}
             <TouchableOpacity style={styles.assignOption} onPress={() => handleAssign(null)}>
               <Text style={styles.assignOptionIcon}>👥</Text>
               <Text style={styles.assignOptionName}>Team (alle)</Text>
@@ -514,24 +925,75 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   headerBtn: { fontSize: 22, color: colors.primary, fontWeight: '600' },
-  progressContainer: { padding: spacing.md },
-  progressBar: { height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: 8, backgroundColor: colors.success, borderRadius: 4 },
-  progressText: { ...typography.caption, marginTop: spacing.xs, textAlign: 'center' },
+
+  // Progress card
+  progressCard: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    ...shadows.sm,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  progressEmoji: { fontSize: 24 },
+  progressTitle: { ...typography.bodySmall, fontWeight: '600', color: colors.text },
+  progressPercent: { ...typography.caption, color: colors.textSecondary },
+  progressBarOuter: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: { height: 6, borderRadius: 3 },
+
   content: { padding: spacing.md, paddingBottom: 140 },
-  categorySection: { marginBottom: spacing.lg },
-  categoryTitle: { ...typography.h3, marginBottom: spacing.sm },
+
+  // Category cards
+  categoryCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    ...shadows.sm,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    gap: spacing.sm,
+  },
+  categoryIcon: { fontSize: 18 },
+  categoryTitle: { ...typography.body, fontWeight: '600', flex: 1 },
+  categoryBadge: {
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  categoryBadgeText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
+  chevron: { fontSize: 10, color: colors.textLight },
+
+  // Items
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   itemRowSelected: { backgroundColor: colors.primary + '10' },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 6,
     borderWidth: 2,
     borderColor: colors.border,
@@ -541,10 +1003,11 @@ const styles = StyleSheet.create({
   },
   checked: { backgroundColor: colors.success, borderColor: colors.success },
   selectedCheck: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  itemName: { ...typography.body, flex: 1 },
+  checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  itemNameArea: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.md, gap: spacing.xs },
+  itemName: { ...typography.body, flex: 1, fontSize: 15 },
   itemPacked: { textDecorationLine: 'line-through', color: colors.textLight },
-  quantity: { ...typography.bodySmall, color: colors.textSecondary, marginRight: spacing.sm },
+  quantity: { ...typography.caption, fontWeight: '600', color: colors.textSecondary, marginRight: spacing.sm },
   assignBtn: { paddingLeft: spacing.xs },
   assignAvatar: {
     width: 24,
@@ -556,6 +1019,22 @@ const styles = StyleSheet.create({
   },
   assignAvatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   assignPlaceholder: { fontSize: 16 },
+
+  // Save as template inline button
+  saveTemplateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    borderStyle: 'dashed',
+  },
+  saveTemplateBtnIcon: { fontSize: 16 },
+  saveTemplateBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
 
   // Selection bar
   selectionBar: {
@@ -581,8 +1060,18 @@ const styles = StyleSheet.create({
   modalTitle: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  catChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1.5, borderColor: colors.border },
+  catChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  catChipIcon: { fontSize: 14 },
   catText: { ...typography.caption, fontWeight: '600' },
   catTextActive: { color: '#fff' },
   quantityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
@@ -600,22 +1089,79 @@ const styles = StyleSheet.create({
   quantityValue: { ...typography.body, fontWeight: '600', minWidth: 40, textAlign: 'center' },
   modalButtons: { flexDirection: 'row', gap: spacing.md },
   modalBtn: { flex: 1 },
-
-  // Template picker
-  templateSubtitle: { ...typography.bodySmall, marginBottom: spacing.lg },
-  templateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  templateCard: {
-    width: '30%',
-    aspectRatio: 1,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.lg,
+  editDeleteBtn: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.error + '30',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  editDeleteBtnText: { ...typography.caption, fontWeight: '600', color: colors.error },
+
+  // Template picker — compact chips
+  templateSubtitle: { ...typography.bodySmall, marginBottom: spacing.md },
+  templateSectionLabel: { ...typography.caption, fontWeight: '700', color: colors.textSecondary, marginBottom: spacing.sm, marginTop: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  templateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  templateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  templateIcon: { fontSize: 32, marginBottom: spacing.xs },
-  templateLabel: { ...typography.caption, fontWeight: '600', textAlign: 'center' },
+  templateChipCustom: {
+    flex: 1,
+    borderColor: colors.accent + '40',
+    backgroundColor: colors.accent + '08',
+  },
+  templateChipIcon: { fontSize: 18 },
+  templateChipLabel: { ...typography.bodySmall, fontWeight: '600', flexShrink: 1 },
+  templateChipCount: { ...typography.caption, color: colors.textLight, marginLeft: 'auto' },
+  customTemplateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  templateActions: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  templateActionIcon: { fontSize: 14 },
+  newTemplateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  newTemplateBtnIcon: { fontSize: 18, color: colors.textSecondary },
+  newTemplateBtnText: { ...typography.bodySmall, color: colors.textSecondary },
+
+  // Edit template modal
+  editTemplateItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  editTemplateItemIcon: { fontSize: 14 },
+  editTemplateItemName: { ...typography.bodySmall, flex: 1 },
+  editTemplateItemQty: { ...typography.caption, color: colors.textSecondary },
 
   // Assignment modal
   assignOverlay: {

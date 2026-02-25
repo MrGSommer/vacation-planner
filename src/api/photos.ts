@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Photo } from '../types/database';
+import { Photo, ItineraryDay } from '../types/database';
 
 export const getPhotos = async (tripId: string): Promise<Photo[]> => {
   const { data, error } = await supabase
@@ -11,12 +11,74 @@ export const getPhotos = async (tripId: string): Promise<Photo[]> => {
   return data || [];
 };
 
+/** Parse EXIF date string (YYYY:MM:DD HH:MM:SS) to ISO string */
+export const parseExifDate = (exifDate: string | undefined | null): string | null => {
+  if (!exifDate) return null;
+  // EXIF format: "2024:03:15 14:30:00" or "2024:03:15"
+  const cleaned = exifDate.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3');
+  const date = new Date(cleaned);
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
+/** Auto-assign a photo to the correct itinerary day based on taken_at date */
+export const autoAssignDayId = async (
+  tripId: string,
+  takenAtISO: string,
+): Promise<string | null> => {
+  const dateStr = takenAtISO.slice(0, 10); // YYYY-MM-DD
+  const { data } = await supabase
+    .from('itinerary_days')
+    .select('id, date')
+    .eq('trip_id', tripId)
+    .eq('date', dateStr)
+    .limit(1);
+  return data && data.length > 0 ? data[0].id : null;
+};
+
+/** Batch auto-assign day_id for photos that don't have one */
+export const autoTagPhotos = async (tripId: string): Promise<number> => {
+  // Get all photos without day_id that have a taken_at
+  const { data: photos } = await supabase
+    .from('photos')
+    .select('id, taken_at')
+    .eq('trip_id', tripId)
+    .is('day_id', null)
+    .not('taken_at', 'is', null);
+
+  if (!photos || photos.length === 0) return 0;
+
+  // Get all itinerary days for trip
+  const { data: days } = await supabase
+    .from('itinerary_days')
+    .select('id, date')
+    .eq('trip_id', tripId);
+
+  if (!days || days.length === 0) return 0;
+
+  const dayMap = new Map(days.map(d => [d.date, d.id]));
+  let tagged = 0;
+
+  for (const photo of photos) {
+    if (!photo.taken_at) continue;
+    const dateStr = photo.taken_at.slice(0, 10);
+    const dayId = dayMap.get(dateStr);
+    if (dayId) {
+      await supabase.from('photos').update({ day_id: dayId }).eq('id', photo.id);
+      tagged++;
+    }
+  }
+
+  return tagged;
+};
+
 export const uploadPhoto = async (
   tripId: string,
   userId: string,
   uri: string,
   fileName: string,
-  dayId?: string
+  dayId?: string,
+  exifDate?: string | null,
 ): Promise<Photo> => {
   const path = `${tripId}/${Date.now()}_${fileName}`;
 
@@ -32,6 +94,14 @@ export const uploadPhoto = async (
     .from('trip-photos')
     .getPublicUrl(path);
 
+  const takenAt = exifDate || new Date().toISOString();
+
+  // Auto-assign day_id if not provided
+  let resolvedDayId = dayId || null;
+  if (!resolvedDayId && takenAt) {
+    resolvedDayId = await autoAssignDayId(tripId, takenAt);
+  }
+
   const { data, error } = await supabase
     .from('photos')
     .insert({
@@ -39,8 +109,8 @@ export const uploadPhoto = async (
       user_id: userId,
       storage_path: path,
       url: publicUrl,
-      day_id: dayId || null,
-      taken_at: new Date().toISOString(),
+      day_id: resolvedDayId,
+      taken_at: takenAt,
     })
     .select()
     .single();

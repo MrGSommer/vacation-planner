@@ -15,6 +15,7 @@ import { deleteAccount } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import appJson from '../../../app.json';
+import { BUILD_NUMBER, BUILD_STAMP } from '../../utils/buildInfo';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -256,7 +257,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.deleteAccountText}>Konto löschen</Text>
       </TouchableOpacity>
 
-      <Text style={styles.version}>Version {appJson.expo.version}</Text>
+      <Text style={styles.version}>Version {appJson.expo.version} (Build {BUILD_NUMBER})</Text>
 
       <BuyInspirationenModal
         visible={showBuyModal}

@@ -94,6 +94,20 @@ export const deletePackingItems = async (ids: string[]): Promise<void> => {
   if (error) throw error;
 };
 
+export const updatePackingItem = async (
+  id: string,
+  fields: { name?: string; category?: string; quantity?: number },
+): Promise<PackingItem> => {
+  const { data, error } = await supabase
+    .from('packing_items')
+    .update(fields)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
 export const updatePackingItemAssignment = async (
   id: string,
   userId: string | null,

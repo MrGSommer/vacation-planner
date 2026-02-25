@@ -1,6 +1,7 @@
 import { supabase } from '../api/supabase';
 import { Platform, Dimensions } from 'react-native';
 import appJson from '../../app.json';
+import { BUILD_NUMBER } from '../utils/buildInfo';
 
 type Severity = 'critical' | 'error' | 'warning';
 
@@ -63,7 +64,7 @@ export function logError(
         component,
         context: context || {},
         device_info: getDeviceInfo(),
-        app_version: appJson.expo.version,
+        app_version: `${appJson.expo.version}+${BUILD_NUMBER}`,
       }).then(() => {
         // fire-and-forget
       });
