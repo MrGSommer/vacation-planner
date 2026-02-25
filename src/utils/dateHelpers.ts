@@ -97,5 +97,13 @@ export const getTripCountdownText = (trip: { start_date: string; end_date: strin
     return daysUntil === 1 ? 'Morgen geht\'s los!' : `Noch ${daysUntil} Tage`;
   }
 
+  // Completed trips: show how long ago
+  if (trip.status === 'completed') {
+    const daysSince = Math.abs(getDaysUntil(trip.end_date));
+    if (daysSince <= 30) {
+      return daysSince === 0 ? 'Heute zurückgekehrt' : daysSince === 1 ? 'Gestern zurückgekehrt' : `Vor ${daysSince} Tagen zurückgekehrt`;
+    }
+  }
+
   return null;
 };

@@ -1,11 +1,19 @@
 import { supabase } from './supabase';
 import { AiContext } from './aiChat';
 
+export interface PlanJobProgress {
+  phase: 'structure' | 'activities' | 'done' | 'cancelled' | 'failed';
+  current_day: number;
+  total_days: number;
+  current_date?: string;
+  trip_id?: string;
+}
+
 export interface PlanJob {
   id: string;
   trip_id: string | null;
   user_id: string;
-  status: 'pending' | 'generating' | 'completed' | 'failed';
+  status: 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled';
   plan_json: any | null;
   structure_json: any | null;
   context: any | null;
@@ -13,6 +21,7 @@ export interface PlanJob {
   credits_charged: number;
   created_at: string;
   completed_at: string | null;
+  progress: PlanJobProgress | null;
 }
 
 export async function startPlanGeneration(
@@ -100,4 +109,13 @@ export async function getRecentCreateModeJob(userId: string): Promise<PlanJob | 
 
   if (error) return null;
   return data as PlanJob | null;
+}
+
+export async function cancelPlanJob(jobId: string): Promise<void> {
+  const { error } = await supabase
+    .from('ai_plan_jobs')
+    .update({ status: 'cancelled' })
+    .eq('id', jobId);
+
+  if (error) throw new Error(error.message);
 }

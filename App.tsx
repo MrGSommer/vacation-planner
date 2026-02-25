@@ -7,6 +7,7 @@ import { AuthProvider } from './src/contexts/AuthContext';
 import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
 import { TripProvider } from './src/contexts/TripContext';
 import { ToastProvider } from './src/contexts/ToastContext';
+import { PlanGenerationProvider } from './src/contexts/PlanGenerationContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
@@ -38,9 +39,11 @@ export default function App() {
               <AuthProvider>
                 <SubscriptionProvider>
                   <TripProvider>
-                    <StatusBar style="auto" />
-                    <UpdateBanner />
-                    <AppNavigator />
+                    <PlanGenerationProvider>
+                      <StatusBar style="auto" />
+                      <UpdateBanner />
+                      <AppNavigator />
+                    </PlanGenerationProvider>
                   </TripProvider>
                 </SubscriptionProvider>
               </AuthProvider>

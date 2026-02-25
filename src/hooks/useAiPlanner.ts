@@ -14,6 +14,7 @@ import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
 import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
 import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
 import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
+import { usePlanGeneration } from '../contexts/PlanGenerationContext';
 import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
 import { searchWeb, WebSearchResult } from '../api/webSearch';
 import { useAiRealtime, useAiTypingBroadcast } from './useAiRealtime';
@@ -64,7 +65,7 @@ export interface UseAiPlannerOptions {
   onCreditsUpdate?: (newBalance: number) => void;
 }
 
-const MAX_MESSAGES = 20;
+const MAX_MESSAGES = 30;
 const MAX_INPUT_TOKENS_ESTIMATE = 15000;
 const CHARS_PER_TOKEN = 3.8;
 const SAVE_DEBOUNCE_MS = 500;
@@ -185,6 +186,7 @@ function mergePlan(
 export type GenerationGranularity = 'all' | 'weekly' | 'daily';
 
 export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initialCredits, onCreditsUpdate }: UseAiPlannerOptions) => {
+  const planGeneration = usePlanGeneration();
   const [phase, setPhase] = useState<AiPhase>('idle');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [metadata, setMetadata] = useState<AiMetadata | null>(null);
@@ -201,6 +203,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [webSearching, setWebSearching] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [lockUserName, setLockUserName] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -508,6 +511,27 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           if (savedPlan) setPlan(savedPlan);
           setPhase(savedConversation.phase as AiPhase);
         }
+        // Check for active plan generation job — delegate to global context
+        const activeJob = await getActiveJob(userId).catch(() => null);
+        if (activeJob) {
+          setActiveJobId(activeJob.id);
+          if (activeJob.structure_json) setStructure(activeJob.structure_json);
+          // Show info in chat rather than blocking
+          const progressInfo = activeJob.progress;
+          const progressText = progressInfo?.phase === 'activities' && progressInfo.total_days > 0
+            ? `Tag ${progressInfo.current_day}/${progressInfo.total_days}`
+            : 'Wird erstellt';
+          const infoMsg: AiChatMessage = {
+            id: nextId(),
+            role: 'assistant',
+            content: `Dein Reiseplan wird gerade erstellt (${progressText}). Der Fortschritt wird oben im Bildschirm angezeigt.`,
+            timestamp: Date.now(),
+            senderName: 'Fable',
+          };
+          setMessages(prev => [...prev, infoMsg]);
+          setPhase('generating_plan');
+          setProgressStep('activities');
+        }
         setRestored(true);
         setSending(false);
         return;
@@ -569,7 +593,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         }
       }
 
-      const greetingContent = mode === 'enhance'
+      // Check if trip is in the past (completed)
+      const isTripPast = contextRef.current.endDate && new Date(contextRef.current.endDate + 'T23:59:59') < new Date();
+
+      const greetingContent = isTripPast
+        ? `Hallo! Meine Reise nach ${destination} ist bereits vorbei. Was kann ich mit diesem Trip machen?`
+        : mode === 'enhance'
         ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.${changeNote}`
         : `Hallo! Ich plane eine Reise nach ${destination}. Hilf mir bei der Planung.`;
 
@@ -616,6 +645,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         setMetadata(meta);
         if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
+        if (meta.preferences_gathered?.length) {
+          contextRef.current.lastPreferencesGathered = meta.preferences_gathered;
+        }
         if (meta.group_type && tripId) {
           contextRef.current.groupType = meta.group_type;
           const updates: Partial<Trip> = { group_type: meta.group_type };
@@ -810,6 +842,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         setMetadata(meta);
         if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
         if (meta.transport_mode) contextRef.current.transportMode = meta.transport_mode;
+        if (meta.preferences_gathered?.length) {
+          contextRef.current.lastPreferencesGathered = meta.preferences_gathered;
+        }
         if (meta.group_type && tripId) {
           contextRef.current.groupType = meta.group_type;
           const updates: Partial<Trip> = { group_type: meta.group_type };
@@ -857,49 +892,37 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     return `Route: **${route}**\n${days} Tage, ${stops} Stops, ${budgetCats} Budget-Kategorien`;
   }, []);
 
-  // Polling for server-agent jobs
+  // Sync with global PlanGenerationContext for job completion/failure
   useEffect(() => {
     if (!activeJobId) return;
 
-    const poll = async () => {
-      try {
-        const job = await getPlanJobStatus(activeJobId);
-        if (job.status === 'completed' && job.plan_json) {
-          setPlan(job.plan_json);
-          setActiveJobId(null);
-          setProgressStep(null);
+    // When PlanGenerationContext signals completion, update local state
+    if (planGeneration.completed && planGeneration.activeJobId === activeJobId) {
+      setActiveJobId(null);
+      setProgressStep(null);
 
-          const summaryMsg: AiChatMessage = {
-            id: nextId(),
-            role: 'assistant',
-            content: restored
-              ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
-              : buildPlanSummary(job.plan_json),
-            timestamp: Date.now(),
-            senderName: 'Fable',
-          };
-          setMessages(prev => {
-            const updated = [...prev, summaryMsg];
-            debouncedSave('plan_review', metadata, job.plan_json);
-            return updated;
-          });
-          setPhase('plan_review');
-        } else if (job.status === 'failed') {
-          setActiveJobId(null);
-          setProgressStep(null);
-          setError(job.error || 'Plan-Generierung fehlgeschlagen');
-          setPhase('conversing');
-        }
-      } catch {
-        // Ignore polling errors — will retry
-      }
-    };
+      const completedMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: restored
+          ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
+          : 'Dein Reiseplan ist fertig! Alle Tage und Aktivitäten wurden erstellt. Schau im Tagesplan nach.',
+        timestamp: Date.now(),
+        senderName: 'Fable',
+      };
+      setMessages(prev => [...prev, completedMsg]);
+      setPhase('completed');
+    }
 
-    pollingRef.current = setInterval(poll, 3000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [activeJobId, restored, metadata, buildPlanSummary, debouncedSave]);
+    // Handle error from context
+    if (planGeneration.error && !planGeneration.isGenerating && planGeneration.activeJobId === null) {
+      setActiveJobId(null);
+      setProgressStep(null);
+      setError(planGeneration.error);
+      setPhase('conversing');
+      planGeneration.dismissError();
+    }
+  }, [activeJobId, planGeneration.completed, planGeneration.error, planGeneration.isGenerating, planGeneration.activeJobId, restored]);
 
   // Phase 1: Generate structure only → show overview
   const generateStructure = useCallback(async () => {
@@ -952,7 +975,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     }
   }, [messages, estimateTime, buildStructureSummary]);
 
-  // Phase 2a: Generate all activities via server agent (background)
+  // Phase 2a: Generate all activities via server agent (background, day-by-day)
   const generateAllViaServer = useCallback(async () => {
     if (!structure) return;
     setPhase('generating_plan');
@@ -965,14 +988,27 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       const { job_id } = await startPlanGeneration(planContext, [], structure);
       setActiveJobId(job_id);
-      // Polling will take over from here
+
+      // Delegate tracking to global PlanGenerationContext
+      const dest = contextRef.current.destination || '';
+      planGeneration.startTracking(job_id, dest);
+
+      // Show info message so user can close modal
+      const infoMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: 'Dein Plan wird jetzt erstellt. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt. Sobald ein Tag fertig ist, erscheint er im Tagesplan.',
+        timestamp: Date.now(),
+        senderName: 'Fable',
+      };
+      setMessages(prev => [...prev, infoMsg]);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'generateAllViaServer' } });
       setError('Server-Generierung konnte nicht gestartet werden');
       setPhase('structure_overview');
       setProgressStep(null);
     }
-  }, [structure, messages]);
+  }, [structure, messages, planGeneration]);
 
   // Phase 2b: Generate activities client-side (original approach, used for incremental/fallback)
   const generateActivitiesClientSide = useCallback(async (dayDatesToGenerate?: string[]) => {
@@ -989,7 +1025,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const activitiesContext: AiContext = { ...planContext, dayDates };
 
       let allActivities: { days: Array<{ date: string; activities: any[] }> } = { days: [] };
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = 7; // 1 week per batch
 
       if (dayDates.length > BATCH_SIZE) {
         const batches: string[][] = [];
@@ -997,7 +1033,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           batches.push(dayDates.slice(i, i + BATCH_SIZE));
         }
 
-        for (const batchDates of batches) {
+        for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+          const batchDates = batches[batchIdx];
+          setBatchProgress({ current: batchIdx + 1, total: batches.length });
+
           const batchMsg: AiMessage = {
             role: 'user',
             content: `Erstelle Aktivitäten für die Tage ${batchDates.join(', ')} als JSON.`,
@@ -1005,7 +1044,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const batchResponse = await sendAiMessage('plan_activities', [batchMsg], { ...activitiesContext, dayDates: batchDates });
           const batch = parsePlanJson(batchResponse.content);
           allActivities.days.push(...(batch.days || []));
+
+          // Progressive update: merge partial results into plan after each batch
+          const partialPlan = mergePlan(structure, allActivities);
+          setPlan(partialPlan);
         }
+        setBatchProgress(null);
       } else {
         const activitiesMsg: AiMessage = {
           role: 'user',
@@ -1037,6 +1081,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setError('Aktivitäten konnten nicht erstellt werden – bitte versuche es erneut');
       setPhase('structure_overview');
       setProgressStep(null);
+      setBatchProgress(null);
     }
   }, [structure, messages, metadata, debouncedSave, buildPlanSummary]);
 
@@ -1184,6 +1229,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setCreditsBalance(null);
     setEstimatedSeconds(null);
     setActiveJobId(null);
+    setBatchProgress(null);
     setWebSearching(false);
     setTypingUsers([]);
     setLockUserName(null);
@@ -1418,6 +1464,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     creditsBalance,
     estimatedSeconds,
     activeJobId,
+    batchProgress,
     contextReady,
     webSearching,
     typingUsers,

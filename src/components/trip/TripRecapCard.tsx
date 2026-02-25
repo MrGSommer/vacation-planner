@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Trip } from '../../types/database';
 import { getPhotos } from '../../api/photos';
 import { getStops } from '../../api/stops';
+import { updateTrip } from '../../api/trips';
 import { sendAiMessage, AiMessage } from '../../api/aiChat';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { getDayCount } from '../../utils/dateHelpers';
@@ -14,9 +16,10 @@ interface Props {
 }
 
 export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent }) => {
+  const navigation = useNavigation<any>();
   const [photoCount, setPhotoCount] = useState(0);
   const [stopCount, setStopCount] = useState(0);
-  const [recap, setRecap] = useState<string | null>(null);
+  const [recap, setRecap] = useState<string | null>(trip.fable_recap || null);
   const [recapLoading, setRecapLoading] = useState(false);
   const [recapError, setRecapError] = useState<string | null>(null);
 
@@ -27,9 +30,16 @@ export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent
     ]);
   }, [trip.id]);
 
+  // Sync with trip prop if recap was loaded externally
+  useEffect(() => {
+    if (trip.fable_recap && !recap) {
+      setRecap(trip.fable_recap);
+    }
+  }, [trip.fable_recap]);
+
   const days = getDayCount(trip.start_date, trip.end_date);
 
-  const handleFableRecap = async () => {
+  const generateRecap = async () => {
     setRecapLoading(true);
     setRecapError(null);
     try {
@@ -48,13 +58,24 @@ export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent
 Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise besonders gemacht haben könnte.`,
         },
       ];
-      const response = await sendAiMessage('conversation', messages, {
+      const response = await sendAiMessage('recap', messages, {
         destination: trip.destination,
         startDate: trip.start_date,
         endDate: trip.end_date,
         currency: trip.currency,
       });
-      setRecap(response.content);
+      // Strip any metadata/memory tags that might leak through
+      const clean = response.content
+        .replace(/<metadata>[\s\S]*?<\/metadata>/g, '')
+        .replace(/<memory_update>[\s\S]*?<\/memory_update>/g, '')
+        .replace(/<trip_memory_update>[\s\S]*?<\/trip_memory_update>/g, '')
+        .trim();
+      setRecap(clean);
+
+      // Persist to DB so it's available next time
+      updateTrip(trip.id, { fable_recap: clean } as any).catch(e =>
+        console.error('Failed to save recap:', e),
+      );
     } catch (e: any) {
       setRecapError(e.message || 'Rückblick konnte nicht erstellt werden');
     } finally {
@@ -63,10 +84,10 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
   };
 
   const stats = [
-    { icon: '📅', value: days, label: 'Tage' },
-    { icon: '📋', value: activityCount, label: 'Aktivitäten' },
-    { icon: '📍', value: stopCount, label: 'Stopps' },
-    { icon: '📸', value: photoCount, label: 'Fotos' },
+    { icon: '\uD83D\uDCC5', value: days, label: 'Tage', screen: 'Itinerary', params: { tripId: trip.id } },
+    { icon: '\uD83D\uDCCB', value: activityCount, label: 'Aktivitäten', screen: 'Itinerary', params: { tripId: trip.id } },
+    { icon: '\uD83D\uDCCD', value: stopCount, label: 'Stopps', screen: 'Stops', params: { tripId: trip.id } },
+    { icon: '\uD83D\uDCF8', value: photoCount, label: 'Fotos', screen: 'Photos', params: { tripId: trip.id } },
   ];
 
   return (
@@ -75,30 +96,51 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
 
       <View style={styles.statsGrid}>
         {stats.map(s => (
-          <View key={s.label} style={styles.statItem}>
+          <TouchableOpacity
+            key={s.label}
+            style={styles.statItem}
+            onPress={() => navigation.navigate(s.screen, s.params)}
+            activeOpacity={0.7}
+          >
             <Text style={styles.statIcon}>{s.icon}</Text>
             <Text style={styles.statValue}>{s.value}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
       {totalSpent > 0 && (
-        <View style={styles.budgetRow}>
+        <TouchableOpacity
+          style={styles.budgetRow}
+          onPress={() => navigation.navigate('Budget', { tripId: trip.id })}
+          activeOpacity={0.7}
+        >
           <Text style={styles.budgetLabel}>Gesamtausgaben</Text>
           <Text style={styles.budgetValue}>{totalSpent.toFixed(0)} {trip.currency}</Text>
-        </View>
+        </TouchableOpacity>
       )}
 
       {recap ? (
         <View style={styles.recapBox}>
-          <Text style={styles.recapIcon}>✨</Text>
+          <Text style={styles.recapIconText}>{'\u2728'}</Text>
           <Text style={styles.recapText}>{recap}</Text>
+          <TouchableOpacity
+            style={styles.redoBtn}
+            onPress={generateRecap}
+            disabled={recapLoading}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {recapLoading ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Text style={styles.redoIcon}>{'\u21BB'}</Text>
+            )}
+          </TouchableOpacity>
         </View>
       ) : (
         <TouchableOpacity
           style={styles.fableBtn}
-          onPress={handleFableRecap}
+          onPress={generateRecap}
           disabled={recapLoading}
           activeOpacity={0.7}
         >
@@ -106,7 +148,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
             <ActivityIndicator size="small" color={colors.accent} />
           ) : (
             <>
-              <Text style={styles.fableBtnIcon}>✨</Text>
+              <Text style={styles.fableBtnIcon}>{'\u2728'}</Text>
               <View>
                 <Text style={styles.fableBtnText}>Fable Rückblick</Text>
                 <Text style={styles.fableBtnHint}>1 Inspiration</Text>
@@ -180,7 +222,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  recapIcon: {
+  recapIconText: {
     fontSize: 18,
     marginTop: 2,
   },
@@ -189,6 +231,20 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
     lineHeight: 22,
+  },
+  redoBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.accent + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  redoIcon: {
+    fontSize: 18,
+    color: colors.accent,
+    fontWeight: '600',
   },
   fableBtn: {
     flexDirection: 'row',

@@ -24,14 +24,14 @@ const statusLabels: Record<string, string> = {
   planning: 'Planung',
   upcoming: 'Bevorstehend',
   active: 'Aktiv',
-  completed: 'Abgeschlossen',
+  completed: 'Erlebt',
 };
 
 const statusColors: Record<string, string> = {
   planning: colors.accent,
   upcoming: colors.sky,
   active: colors.success,
-  completed: colors.textLight,
+  completed: '#D4A017',
 };
 
 const MAX_AVATARS = 4;
@@ -325,7 +325,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <Text style={styles.recapBannerIcon}>🎉</Text>
               <View style={styles.recapBannerContent}>
-                <Text style={styles.recapBannerTitle}>Reise abgeschlossen!</Text>
+                <Text style={styles.recapBannerTitle}>Reise erlebt!</Text>
                 <Text style={styles.recapBannerText}>Schau dir den Rückblick von "{trip.name}" an</Text>
               </View>
               <Text style={styles.recapBannerArrow}>›</Text>
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.h1 },
   headerSubtitle: { ...typography.bodySmall, marginTop: spacing.xs },
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },
-  cardPast: { opacity: 0.65 },
+  cardPast: { opacity: 0.85 },
   cardGradient: { flex: 1 },
   cardContent: { flex: 1, justifyContent: 'space-between', padding: spacing.md },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

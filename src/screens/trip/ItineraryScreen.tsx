@@ -20,6 +20,7 @@ import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton'
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -28,6 +29,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { showToast } = useToast();
   const { user } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  const { isGenerating: isPlanGenerating, tripId: generatingTripId } = usePlanGeneration();
+  const isGeneratingThisTrip = isPlanGenerating && generatingTripId === tripId;
   const [showAiModal, setShowAiModal] = useState(false);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -428,9 +431,13 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {filteredActivities.length === 0 && !continuingStay && !newCheckIn ? (
             <View style={styles.emptyDay}>
-              <Text style={styles.emptyIcon}>📝</Text>
-              <Text style={styles.emptyText}>Noch keine Aktivitäten</Text>
-              <Text style={styles.emptySubtext}>Tippe auf +, um eine Aktivität hinzuzufügen</Text>
+              <Text style={styles.emptyIcon}>{isGeneratingThisTrip ? '\u2728' : '\uD83D\uDCDD'}</Text>
+              <Text style={styles.emptyText}>
+                {isGeneratingThisTrip ? 'Fable plant diesen Tag...' : 'Noch keine Aktivitäten'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {isGeneratingThisTrip ? 'Aktivitäten erscheinen automatisch' : 'Tippe auf +, um eine Aktivität hinzuzufügen'}
+              </Text>
             </View>
           ) : (
             filteredActivities.map((activity, i) => (

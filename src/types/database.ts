@@ -140,6 +140,7 @@ export interface Trip {
   fable_web_search: boolean;
   fable_memory_enabled: boolean;
   fable_instruction: string | null;
+  fable_recap: string | null;
   created_at: string;
   updated_at: string;
 }

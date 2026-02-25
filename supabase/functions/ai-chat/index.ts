@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 
     // Log usage (greeting logged as conversation, no credits charged)
     const creditsCharged = isGreeting ? 0 : ((task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1);
-    const logTask = task === 'plan_generation_full' ? 'plan_generation' : (isGreeting ? 'conversation' : task);
+    const logTask = task === 'plan_generation_full' ? 'plan_generation' : (isGreeting || task === 'recap') ? 'conversation' : task;
     logUsage(user.id, context.tripId || null, logTask, creditsCharged, model, result.usage, durationMs);
 
     return json({ content, usage: result.usage, credits_remaining: newBalance ?? null }, origin);

@@ -409,7 +409,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </>
       )}
-      <Text style={styles.tripName}>{trip.name}</Text>
+      <View style={styles.tripNameRow}>
+        <Text style={styles.tripName}>{trip.name}</Text>
+        {trip.status === 'completed' && (
+          <View style={styles.erlebtBadge}>
+            <Text style={styles.erlebtBadgeText}>Erlebt</Text>
+          </View>
+        )}
+      </View>
       <Text style={styles.destination}>{trip.destination}</Text>
       <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
     </>
@@ -684,7 +691,10 @@ const styles = StyleSheet.create({
   menuIcon: { fontSize: 18, marginRight: spacing.sm, width: 24 },
   menuLabel: { ...typography.body, fontWeight: '500' },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  tripName: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  tripNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
+  erlebtBadge: { backgroundColor: '#D4A017', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  erlebtBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  tripName: { ...typography.h1, color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   attribution: { ...typography.caption, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: spacing.xs },

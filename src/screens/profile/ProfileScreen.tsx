@@ -102,7 +102,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </Card>
         <Card style={styles.statCard}>
           <Text style={styles.statValue}>{completedTrips}</Text>
-          <Text style={styles.statLabel}>Abgeschlossen</Text>
+          <Text style={styles.statLabel}>Erlebt</Text>
         </Card>
         <Card style={styles.statCard}>
           <Text style={styles.statValue}>{upcomingTrips}</Text>

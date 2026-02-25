@@ -37,6 +37,7 @@ import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
+import { PlanGenerationBar } from '../components/common/PlanGenerationBar';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -148,6 +149,7 @@ export const AppNavigator: React.FC = () => {
       }}
     >
       <View style={{ flex: 1 }}>
+        {session && <PlanGenerationBar />}
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {session ? (
             <>

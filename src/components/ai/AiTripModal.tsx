@@ -120,7 +120,7 @@ export const AiTripModal: React.FC<Props> = ({
   const {
     phase, messages, metadata, plan, structure, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
-    restored, creditsBalance, estimatedSeconds, activeJobId,
+    restored, creditsBalance, estimatedSeconds, activeJobId, batchProgress,
     contextReady, webSearching, typingUsers, lockUserName, fableDisabled,
     startConversation, sendMessage, generatePlan,
     generateStructure, generateAllViaServer, generateActivitiesClientSide,
@@ -133,6 +133,7 @@ export const AiTripModal: React.FC<Props> = ({
   const [pendingAction, setPendingAction] = useState<'packing_list' | 'budget_categories' | 'day_plan' | null>(null);
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
+  const shownSuggestionsRef = useRef<Set<string>>(new Set());
 
   // Can the user send messages? Premium or has credits
   const canSendMessages = isPremium || (creditsBalance !== null && creditsBalance > 0);
@@ -280,6 +281,11 @@ export const AiTripModal: React.FC<Props> = ({
       return (
         <View style={styles.executingContainer}>
           <AiPlanningAnimation />
+          {batchProgress && (
+            <Text style={styles.backgroundHint}>
+              Woche {batchProgress.current} von {batchProgress.total} wird erstellt...
+            </Text>
+          )}
           {activeJobId && (
             <Text style={styles.backgroundHint}>
               Generierung läuft im Hintergrund — du kannst die App schliessen
@@ -647,25 +653,33 @@ export const AiTripModal: React.FC<Props> = ({
         )}
 
         {/* Suggestion chips (conversing only — horizontal) */}
-        {!isPlanReview && !metadata?.form_options?.length && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsContainer}
-            contentContainerStyle={styles.chipsContent}
-          >
-            {metadata.suggested_questions.map((q, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.chip}
-                onPress={() => handleChipPress(q)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.chipText} numberOfLines={1}>{q}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
+        {!isPlanReview && !metadata?.form_options?.length && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (() => {
+          // Filter out already-shown suggestions to prevent loops
+          const newSuggestions = metadata.suggested_questions.filter(q => !shownSuggestionsRef.current.has(q));
+          // If all filtered out, show current ones (AI generated fresh set)
+          const displaySuggestions = newSuggestions.length > 0 ? newSuggestions : metadata.suggested_questions;
+          // Track shown suggestions
+          displaySuggestions.forEach(q => shownSuggestionsRef.current.add(q));
+          return (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipsContainer}
+              contentContainerStyle={styles.chipsContent}
+            >
+              {displaySuggestions.map((q, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.chip}
+                  onPress={() => handleChipPress(q)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.chipText} numberOfLines={1}>{q}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          );
+        })()}
 
         {/* Generate plan button (conversing only) */}
         {!isPlanReview && metadata?.ready_to_plan && !sending && !metadata?.agent_action && (
