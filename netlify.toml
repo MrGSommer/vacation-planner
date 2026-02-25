@@ -51,6 +51,12 @@
   [headers.values]
     Cache-Control = "public, no-cache, must-revalidate"
 
+# Version file must NEVER be cached — used for update detection fallback
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, no-cache, no-store, must-revalidate"
+
 # Security headers
 [[headers]]
   for = "/*"

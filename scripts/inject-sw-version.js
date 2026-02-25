@@ -32,3 +32,9 @@ if (replaced === content) {
   fs.writeFileSync(swPath, replaced, 'utf8');
   console.log(`[inject-sw-version] SW version set to: ${buildHash}`);
 }
+
+// Also write version.json for the fallback update check (independent of SW lifecycle)
+const versionJsonPath = path.join(__dirname, '..', 'dist', 'version.json');
+fs.writeFileSync(versionJsonPath, JSON.stringify({ v: buildHash }), 'utf8');
+console.log(`[inject-sw-version] version.json written`);
+

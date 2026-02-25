@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.h1 },
   headerSubtitle: { ...typography.bodySmall, marginTop: spacing.xs },
   card: { height: 200, borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.lg },
-  cardPast: { opacity: 0.85 },
+  cardPast: { opacity: 0.55 },
   cardGradient: { flex: 1 },
   cardContent: { flex: 1, justifyContent: 'space-between', padding: spacing.md },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

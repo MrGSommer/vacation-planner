@@ -63,7 +63,7 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Network-only for API calls (Supabase, Google, Stripe, Anthropic)
+  // Network-only for API calls (Supabase, Google, Stripe, Anthropic) and version check
   if (
     url.hostname.includes('supabase') ||
     url.hostname.includes('googleapis.com') ||
@@ -71,7 +71,8 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('stripe.com') ||
     url.hostname.includes('anthropic.com') ||
     url.pathname.startsWith('/rest/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname === '/version.json'
   ) {
     return; // Let browser handle natively (network-only)
   }
