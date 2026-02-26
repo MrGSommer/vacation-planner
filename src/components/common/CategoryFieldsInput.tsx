@@ -195,13 +195,25 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
                 }
                 if (flight.dep_time_local) {
                   const depParts = flight.dep_time_local.split(/[T ]/);
-                  if (depParts[1]) updates.departure_time = depParts[1].substring(0, 5);
-                  if (!data.departure_date && depParts[0]) updates.departure_date = depParts[0];
+                  if (depParts.length >= 2) {
+                    // Full datetime "YYYY-MM-DD HH:MM" → date + time
+                    updates.departure_time = depParts[1].substring(0, 5);
+                    if (!data.departure_date && depParts[0]) updates.departure_date = depParts[0];
+                  } else if (/^\d{2}:\d{2}/.test(depParts[0])) {
+                    // Time-only "HH:MM" → just time, no date
+                    updates.departure_time = depParts[0].substring(0, 5);
+                  }
                 }
                 if (flight.arr_time_local) {
                   const arrParts = flight.arr_time_local.split(/[T ]/);
-                  if (arrParts[0]) updates.arrival_date = arrParts[0];
-                  if (arrParts[1]) updates.arrival_time = arrParts[1].substring(0, 5);
+                  if (arrParts.length >= 2) {
+                    // Full datetime "YYYY-MM-DD HH:MM" → date + time
+                    updates.arrival_date = arrParts[0];
+                    updates.arrival_time = arrParts[1].substring(0, 5);
+                  } else if (/^\d{2}:\d{2}/.test(arrParts[0])) {
+                    // Time-only "HH:MM" → just time, no date
+                    updates.arrival_time = arrParts[0].substring(0, 5);
+                  }
                 }
                 updates.flight_verified = true;
                 updates.flight_iata = flight.flight_iata;

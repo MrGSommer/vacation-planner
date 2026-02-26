@@ -1,4 +1,4 @@
-const ALLOWED_ORIGINS = ['https://wayfable.ch', 'http://localhost:8081', 'http://localhost:19006'];
+const ALLOWED_ORIGINS = ['https://wayfable.ch', 'https://wayfable.netlify.app', 'http://localhost:8081', 'http://localhost:19006'];
 
 export const corsHeaders = (origin: string) => ({
   'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
