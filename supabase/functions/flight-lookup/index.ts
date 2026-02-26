@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
 
     console.log(`flight-lookup: candidates=${candidates.join(',')}, date: ${dateParam || 'none'}`);
 
-    // Smart endpoint selection based on date proximity
+    // Determine if the requested date is close enough for live /flight data
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     let daysDiff = 0;
@@ -274,53 +274,54 @@ Deno.serve(async (req) => {
       daysDiff = Math.round((reqDate.getTime() - new Date(todayStr + 'T00:00:00').getTime()) / (24 * 60 * 60_000));
     }
 
-    const tryFlightEndpoint = !dateParam || (daysDiff >= -1 && daysDiff <= 1);
+    // /flight endpoint returns today's live data — useful for:
+    // 1. Exact date match (live status)
+    // 2. Template fallback (route/times for any date, when /schedules is empty)
+    const isLiveCandidate = !dateParam || (daysDiff >= -1 && daysDiff <= 1);
 
     let flightData: any = null;
     let isLiveData = false;
     let matchedIata = normalized;
-    // Fallback: /flight data when date doesn't match (use as schedule template)
     let flightTemplateFallback: any = null;
     let fallbackCandidate = '';
 
-    // Try each candidate flight number
     for (const candidate of candidates) {
       if (flightData) break;
 
-      // Step 1: /flight endpoint (only for today ± 1 day or no date specified)
-      if (tryFlightEndpoint) {
-        try {
-          const flightRes = await fetch(
-            `${AIRLABS_BASE}/flight?flight_iata=${candidate}&api_key=${AIRLABS_API_KEY}`,
-            { signal: AbortSignal.timeout(8000) },
-          );
-          if (flightRes.ok) {
-            const data = await flightRes.json();
-            if (data?.response) {
-              if (dateParam) {
-                const depTime = data.response.dep_time || data.response.dep_time_utc || '';
-                if (depTime.startsWith(dateParam)) {
-                  flightData = data.response;
-                  isLiveData = true;
-                  matchedIata = candidate;
-                } else {
-                  // Date doesn't match, but flight exists — save as template
-                  flightTemplateFallback = data.response;
-                  fallbackCandidate = candidate;
-                }
-              } else {
+      // Step 1: /flight endpoint — always call to get route data (template or live)
+      try {
+        const flightRes = await fetch(
+          `${AIRLABS_BASE}/flight?flight_iata=${candidate}&api_key=${AIRLABS_API_KEY}`,
+          { signal: AbortSignal.timeout(8000) },
+        );
+        if (flightRes.ok) {
+          const data = await flightRes.json();
+          if (data?.response) {
+            if (!dateParam) {
+              // No date specified — use live data directly
+              flightData = data.response;
+              isLiveData = true;
+              matchedIata = candidate;
+            } else {
+              const depTime = data.response.dep_time || data.response.dep_time_utc || '';
+              if (isLiveCandidate && depTime.startsWith(dateParam)) {
+                // Date matches and within live window — use as live data
                 flightData = data.response;
                 isLiveData = true;
                 matchedIata = candidate;
+              } else {
+                // Date doesn't match — save as template (route/times are reusable)
+                flightTemplateFallback = data.response;
+                fallbackCandidate = candidate;
               }
             }
           }
-        } catch {
-          // /flight failed, continue
         }
+      } catch {
+        // /flight failed, continue to /schedules
       }
 
-      // Step 2: /schedules endpoint (if /flight didn't return data)
+      // Step 2: /schedules endpoint (if /flight didn't return exact match)
       if (!flightData) {
         try {
           const schedRes = await fetch(
@@ -350,15 +351,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 3: If no exact match found but /flight had data for a different date,
-    // use it as a template (same route/times, different date). This handles the
-    // common case where /flight returns today's data but user wants tomorrow,
-    // and /schedules is empty (free tier limitation).
+    // Step 3: Use /flight data as template when /schedules is empty.
+    // The /flight endpoint returns today's flight, but route info (airports,
+    // times, airline, duration) is the same for any date. normalizeFlightData()
+    // replaces the date portion with the requested date.
     if (!flightData && flightTemplateFallback) {
       flightData = flightTemplateFallback;
       matchedIata = fallbackCandidate;
-      isLiveData = false; // Not live — it's a schedule template from a different date
-      console.log(`flight-lookup: using /flight template fallback for ${matchedIata}`);
+      isLiveData = false;
     }
 
     if (!flightData) {
