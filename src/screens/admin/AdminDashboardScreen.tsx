@@ -76,6 +76,24 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <Card style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Werkzeuge</Text>
+              <View style={styles.toolsGrid}>
+                <TouchableOpacity style={styles.toolBtn} onPress={() => navigation.navigate('AdminEmailTest')}>
+                  <Text style={styles.toolIcon}>{'✉'}</Text>
+                  <Text style={styles.toolLabel}>E-Mail-Test</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBtn} onPress={() => navigation.navigate('AdminAnnouncements')}>
+                  <Text style={styles.toolIcon}>{'📢'}</Text>
+                  <Text style={styles.toolLabel}>Ankündigungen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBtn} onPress={() => navigation.navigate('BetaDashboard')}>
+                  <Text style={styles.toolIcon}>{'🧪'}</Text>
+                  <Text style={styles.toolLabel}>Beta-Tester</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
+
+            <Card style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Letzte Registrierungen</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('AdminUserList')}>
@@ -137,4 +155,15 @@ const styles = StyleSheet.create({
   tierTextPremium: { color: colors.secondary },
   tierTextTrialing: { color: colors.accent },
   dateText: { ...typography.caption, color: colors.textLight, minWidth: 75, textAlign: 'right' },
+  toolsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.sm },
+  toolBtn: {
+    flex: 1,
+    minWidth: 100,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.background,
+  },
+  toolIcon: { fontSize: 24, marginBottom: spacing.xs },
+  toolLabel: { ...typography.bodySmall, fontWeight: '500', color: colors.text },
 });

@@ -34,9 +34,12 @@ import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { BetaDashboardScreen } from '../screens/admin/BetaDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
+import { AdminEmailTestScreen } from '../screens/admin/AdminEmailTestScreen';
+import { AdminAnnouncementsScreen } from '../screens/admin/AdminAnnouncementsScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
+import { AnnouncementModal } from '../components/common/AnnouncementModal';
 import { PlanGenerationBar } from '../components/common/PlanGenerationBar';
 import { RootStackParamList } from '../types/navigation';
 
@@ -77,6 +80,8 @@ const linking = {
       BetaDashboard: 'admin/beta',
       AdminUserList: 'admin/users',
       AdminUserDetail: 'admin/users/:userId',
+      AdminEmailTest: 'admin/email-test',
+      AdminAnnouncements: 'admin/announcements',
       ResetPassword: 'reset-password',
       Main: {
         screens: {
@@ -181,6 +186,8 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="BetaDashboard" component={BetaDashboardScreen} />
               <Stack.Screen name="AdminUserList" component={AdminUserListScreen} />
               <Stack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
+              <Stack.Screen name="AdminEmailTest" component={AdminEmailTestScreen} />
+              <Stack.Screen name="AdminAnnouncements" component={AdminAnnouncementsScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
             </>
           ) : (
@@ -189,6 +196,7 @@ export const AppNavigator: React.FC = () => {
           <Stack.Screen name="TripShare" component={TripShareScreen} />
         </Stack.Navigator>
         {showFab && <FloatingFeedbackButton />}
+        {session && <AnnouncementModal />}
         {session && <TrialExpiredModal />}
       </View>
     </NavigationContainer>

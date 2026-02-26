@@ -23,6 +23,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 import { useWeather } from '../../hooks/useWeather';
+import { useFlightStatus, getFlightStatusLabel, isVerifiedFlight } from '../../hooks/useFlightStatus';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -55,6 +56,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const tabWidths = useRef<number[]>([]);
 
   const weather = useWeather(tripId, tripStartDate, tripEndDate, tripDestLat, tripDestLng);
+  const flightStatuses = useFlightStatus(allTripActivities, tripStartDate, tripEndDate);
 
   const scrollToActiveTab = useCallback((dayId: string) => {
     const idx = days.findIndex(d => d.id === dayId);
@@ -166,6 +168,28 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  // Re-sort activities by start_time within a day and update sort_order in DB
+  const resortActivitiesByTime = async (dayId: string) => {
+    try {
+      const acts = await getActivities(dayId);
+      const sorted = [...acts].sort((a, b) => {
+        if (!a.start_time && !b.start_time) return a.sort_order - b.sort_order;
+        if (!a.start_time) return 1;
+        if (!b.start_time) return -1;
+        return a.start_time.localeCompare(b.start_time);
+      });
+      // Only update if order actually changed
+      const needsUpdate = sorted.some((act, idx) => act.sort_order !== idx);
+      if (needsUpdate) {
+        await Promise.all(sorted.map((act, idx) =>
+          act.sort_order !== idx ? updateActivity(act.id, { sort_order: idx }) : Promise.resolve(null),
+        ));
+      }
+    } catch (e) {
+      console.error('Failed to resort activities:', e);
+    }
+  };
+
   const handleModalSave = async (data: ActivityFormData) => {
     if (!data.title) return;
     try {
@@ -211,6 +235,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           check_out_date: data.categoryData.check_out_date || null,
           category_data: data.categoryData,
         });
+      }
+      // Re-sort by time if this activity has a start_time
+      if (data.startTime && targetDayId) {
+        await resortActivitiesByTime(targetDayId);
       }
       setShowModal(false);
       setModalActivity(null);
@@ -367,6 +395,15 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.travelDayTitle}>{transport.title}</Text>
             {detail && <Text style={styles.travelDayDetail}>{linkifyText(detail)}</Text>}
             {transport.location_name && <Text style={styles.accommodationAddress}>📍 {transport.location_name}</Text>}
+            {flightStatuses.has(transport.id) && (() => {
+              const fs = flightStatuses.get(transport.id)!;
+              const { label: statusLabel, color: statusColor } = getFlightStatusLabel(fs.status);
+              return statusLabel ? (
+                <View style={[styles.flightStatusBadge, { backgroundColor: statusColor + '20', marginTop: 4 }]}>
+                  <Text style={[styles.flightStatusText, { color: statusColor }]}>{statusLabel}</Text>
+                </View>
+              ) : null;
+            })()}
           </View>
         </TouchableOpacity>
       );
@@ -487,6 +524,16 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Text style={styles.activityTitle}>{activity.title}</Text>
                       {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
                     </View>
+                    {/* Flight status badge */}
+                    {flightStatuses.has(activity.id) && (() => {
+                      const fs = flightStatuses.get(activity.id)!;
+                      const { label, color } = getFlightStatusLabel(fs.status);
+                      return label ? (
+                        <View style={[styles.flightStatusBadge, { backgroundColor: color + '20' }]}>
+                          <Text style={[styles.flightStatusText, { color }]}>{label}</Text>
+                        </View>
+                      ) : null;
+                    })()}
                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
                       <Text style={styles.deleteBtnText}>✕</Text>
                     </TouchableOpacity>
@@ -535,6 +582,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setViewActivity(null)}
         onEdit={(a) => { setViewActivity(null); openEdit(a); }}
         onDelete={(id) => { setViewActivity(null); handleDelete(id); }}
+        flightStatus={viewActivity ? flightStatuses.get(viewActivity.id) : undefined}
       />
 
       <ActivityModal
@@ -629,6 +677,8 @@ const styles = StyleSheet.create({
   travelDayDetail: { ...typography.caption, color: colors.accent, marginTop: 2, fontWeight: '500' },
   travelDayPlaceholder: { ...typography.bodySmall, color: colors.textLight, flex: 1 },
   travelDayPlus: { fontSize: 24, color: colors.primary, fontWeight: '300' },
+  flightStatusBadge: { alignSelf: 'flex-start' as const, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
+  flightStatusText: { fontSize: 10, fontWeight: '700' as const, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
   weatherBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
   weatherBannerIcon: { fontSize: 18 },
   weatherBannerTemp: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' as const },

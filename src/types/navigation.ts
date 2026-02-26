@@ -32,6 +32,8 @@ export type RootStackParamList = {
   AdminDashboard: undefined;
   AdminUserList: undefined;
   AdminUserDetail: { userId: string };
+  AdminEmailTest: undefined;
+  AdminAnnouncements: undefined;
   BetaDashboard: undefined;
   ResetPassword: undefined;
 };

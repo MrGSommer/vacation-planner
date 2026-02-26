@@ -3,7 +3,7 @@
 // ItineraryScreen's Realtime subscription auto-refreshes as activities appear
 
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { MODELS, getUser, deductCreditsAtomic, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey } from '../_shared/claude.ts';
+import { MODELS, getUser, deductCreditsAtomic, refundCredits, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey, extractTextContent, getTemperature } from '../_shared/claude.ts';
 import { buildStructureSystemPrompt, buildActivitiesSystemPrompt } from '../_shared/prompts.ts';
 import { enrichPlanWithPlaces, lookupPlace } from '../_shared/places.ts';
 
@@ -238,15 +238,18 @@ async function generateInBackground(
       totalCredits += creditsNeeded;
 
       const startTime = Date.now();
-      const response = await callClaude(MODELS.plan_generation, structurePrompt, structureMsg, 4096);
+      const response = await callClaude(MODELS.plan_generation, structurePrompt, structureMsg, 4096, getTemperature('plan_generation'));
       const durationMs = Date.now() - startTime;
 
       if (!response.ok) {
+        // Refund credits on API failure
+        await refundCredits(userId, creditsNeeded);
+        totalCredits -= creditsNeeded;
         throw new Error(`Claude API error: ${response.status}`);
       }
 
       const result = await response.json();
-      const content = result.content?.[0]?.text || '';
+      const content = extractTextContent(result);
       structure = parsePlanJson(content);
 
       logUsage(userId, tripId, 'plan_generation', creditsNeeded, MODELS.plan_generation, result.usage, durationMs);
@@ -363,7 +366,7 @@ async function generateInBackground(
       const dayMsg = [{ role: 'user', content: `Erstelle Aktivitäten für den Tag ${currentDate} als JSON.` }];
 
       const startTime = Date.now();
-      const response = await callClaude(MODELS.plan_activities, dayPrompt, dayMsg, 4096);
+      const response = await callClaude(MODELS.plan_activities, dayPrompt, dayMsg, 4096, getTemperature('plan_activities'));
       const durationMs = Date.now() - startTime;
 
       if (!response.ok) {
@@ -376,7 +379,7 @@ async function generateInBackground(
       }
 
       const result = await response.json();
-      const content = result.content?.[0]?.text || '';
+      const content = extractTextContent(result);
 
       logUsage(userId, tripId, 'plan_activities', 0, MODELS.plan_activities, result.usage, durationMs);
 
@@ -534,6 +537,6 @@ Deno.serve(async (req) => {
     return json({ job_id: jobId, status: 'pending' }, origin);
   } catch (e) {
     console.error('generate-plan error:', e);
-    return json({ error: (e as Error).message }, origin, 500);
+    return json({ error: 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.' }, origin, 500);
   }
 });

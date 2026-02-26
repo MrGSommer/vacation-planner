@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { Activity } from '../../types/database';
+import { FlightInfo } from '../../utils/flightLookup';
+import { getFlightStatusLabel } from '../../hooks/useFlightStatus';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_FIELDS, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
@@ -16,6 +18,7 @@ interface Props {
   onDelete: (id: string) => void;
   isEditor?: boolean;
   userId?: string;
+  flightStatus?: FlightInfo;
 }
 
 function formatDE(dateStr: string): string {
@@ -25,7 +28,7 @@ function formatDE(dateStr: string): string {
 }
 
 export const ActivityViewModal: React.FC<Props> = ({
-  visible, activity, onClose, onEdit, onDelete, isEditor = true, userId,
+  visible, activity, onClose, onEdit, onDelete, isEditor = true, userId, flightStatus,
 }) => {
   if (!activity) return null;
 
@@ -97,6 +100,57 @@ export const ActivityViewModal: React.FC<Props> = ({
                 <Text style={styles.linkText}>Hotel suchen</Text>
               </TouchableOpacity>
             )}
+
+            {/* Live flight status */}
+            {flightStatus?.found && (() => {
+              const { label: statusLabel, color: statusColor } = getFlightStatusLabel(flightStatus.status);
+              const depTime = flightStatus.dep_time_local?.split(/[T ]/)[1]?.substring(0, 5);
+              const arrTime = flightStatus.arr_time_local?.split(/[T ]/)[1]?.substring(0, 5);
+              return (
+                <View style={styles.flightSection}>
+                  <View style={styles.flightSectionHeader}>
+                    <Text style={styles.sectionLabel}>Flugstatus (Live)</Text>
+                    {statusLabel ? (
+                      <View style={[styles.flightBadge, { backgroundColor: statusColor + '20' }]}>
+                        <Text style={[styles.flightBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.flightRoute}>
+                    <View style={styles.flightAirport}>
+                      <Text style={styles.flightCode}>{flightStatus.dep_airport || '—'}</Text>
+                      <Text style={styles.flightCity}>{flightStatus.dep_city || ''}</Text>
+                      {depTime ? <Text style={styles.flightTime}>{depTime}</Text> : null}
+                      {flightStatus.dep_terminal && (
+                        <Text style={styles.flightTerminal}>T{flightStatus.dep_terminal}{flightStatus.dep_gate ? ` Gate ${flightStatus.dep_gate}` : ''}</Text>
+                      )}
+                    </View>
+                    <View style={styles.flightArrow}>
+                      <Text style={styles.flightArrowIcon}>{'✈'}</Text>
+                      {flightStatus.duration_min ? (
+                        <Text style={styles.flightDuration}>
+                          {Math.floor(flightStatus.duration_min / 60)}h{String(flightStatus.duration_min % 60).padStart(2, '0')}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.flightAirport}>
+                      <Text style={styles.flightCode}>{flightStatus.arr_airport || '—'}</Text>
+                      <Text style={styles.flightCity}>{flightStatus.arr_city || ''}</Text>
+                      {arrTime ? <Text style={styles.flightTime}>{arrTime}</Text> : null}
+                      {flightStatus.arr_terminal && (
+                        <Text style={styles.flightTerminal}>T{flightStatus.arr_terminal}{flightStatus.arr_gate ? ` Gate ${flightStatus.arr_gate}` : ''}</Text>
+                      )}
+                    </View>
+                  </View>
+                  {(flightStatus.airline_name || flightStatus.aircraft) && (
+                    <View style={styles.flightMeta}>
+                      {flightStatus.airline_name && <Text style={styles.flightMetaText}>{flightStatus.airline_name}</Text>}
+                      {flightStatus.aircraft && <Text style={styles.flightMetaText}>{flightStatus.aircraft}</Text>}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Category details */}
             {catFields.length > 0 && (
@@ -197,6 +251,21 @@ const styles = StyleSheet.create({
   detailValue: { ...typography.bodySmall, fontWeight: '600', color: colors.text, flexShrink: 1, textAlign: 'right', maxWidth: '60%' },
   notesSection: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   notesText: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+  flightSection: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  flightSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  flightBadge: { paddingHorizontal: spacing.sm + 2, paddingVertical: 3, borderRadius: borderRadius.full },
+  flightBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  flightRoute: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
+  flightAirport: { alignItems: 'center', flex: 1 },
+  flightCode: { fontSize: 20, fontWeight: '700', color: colors.text },
+  flightCity: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  flightTime: { ...typography.body, fontWeight: '600', color: colors.primary, marginTop: 4 },
+  flightTerminal: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  flightArrow: { alignItems: 'center', justifyContent: 'center', paddingTop: 4, paddingHorizontal: spacing.sm },
+  flightArrowIcon: { fontSize: 18, color: colors.textLight },
+  flightDuration: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  flightMeta: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md },
+  flightMetaText: { ...typography.caption, color: colors.textLight },
   documentsSection: {},
   actionBar: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, borderRadius: borderRadius.md, gap: spacing.xs },

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail, RevenueStats } from '../types/database';
+import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail, RevenueStats, EmailTest } from '../types/database';
 
 interface AdminListUsersParams {
   search?: string;
@@ -150,4 +150,73 @@ export const adminGrantTrial = async (
 
 export const adminGetRevenueStats = async (): Promise<RevenueStats> => {
   return adminStripeCall('revenue_stats');
+};
+
+// --- Email Test Functions ---
+
+export const adminSendTestEmail = async (email: string): Promise<{ sent: boolean; error?: string; timestamp: string }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Nicht authentifiziert');
+
+  const res = await fetch(
+    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-email-test`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to: email }),
+    },
+  );
+
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'E-Mail-Test fehlgeschlagen');
+  return json;
+};
+
+export const adminSaveEmailTest = async (
+  adminId: string,
+  recipientEmail: string,
+  subject: string,
+  sendSuccess: boolean,
+  sendError?: string,
+): Promise<EmailTest> => {
+  const { data, error } = await supabase
+    .from('email_tests')
+    .insert({
+      admin_id: adminId,
+      recipient_email: recipientEmail,
+      subject,
+      send_success: sendSuccess,
+      send_error: sendError || null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const adminGetEmailTests = async (limit = 20): Promise<EmailTest[]> => {
+  const { data, error } = await supabase
+    .from('email_tests')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const adminConfirmEmailTest = async (testId: string): Promise<EmailTest> => {
+  const { data, error } = await supabase
+    .from('email_tests')
+    .update({ manually_confirmed: true, confirmed_at: new Date().toISOString() })
+    .eq('id', testId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 };

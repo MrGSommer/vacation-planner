@@ -17,6 +17,7 @@ import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompleted
 import { usePlanGeneration } from '../contexts/PlanGenerationContext';
 import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
 import { searchWeb, WebSearchResult } from '../api/webSearch';
+import { lookupFlight, FlightInfo } from '../utils/flightLookup';
 import { useAiRealtime, useAiTypingBroadcast } from './useAiRealtime';
 import { fetchWeatherData } from './useWeather';
 import { getShortName } from '../utils/profileHelpers';
@@ -125,6 +126,35 @@ function parseWebSearchRequest(text: string): { cleanText: string; searchQuery: 
 
   const cleanText = text.replace(searchRegex, '').trim();
   return { cleanText, searchQuery: match[1].trim() };
+}
+
+function parseFlightLookupRequest(text: string): { cleanText: string; flightIata: string | null } {
+  const flightRegex = /<flight_lookup>([\s\S]*?)<\/flight_lookup>/;
+  const match = text.match(flightRegex);
+
+  if (!match) {
+    return { cleanText: text, flightIata: null };
+  }
+
+  const cleanText = text.replace(flightRegex, '').trim();
+  return { cleanText, flightIata: match[1].trim() };
+}
+
+function formatFlightResult(flight: FlightInfo): string {
+  if (!flight.found) return 'Flug nicht gefunden.';
+  const parts: string[] = [];
+  parts.push(`Flug: ${flight.flight_iata}`);
+  if (flight.airline_name) parts.push(`Airline: ${flight.airline_name}`);
+  if (flight.dep_city && flight.dep_airport) parts.push(`Abflug: ${flight.dep_city} (${flight.dep_airport})`);
+  if (flight.arr_city && flight.arr_airport) parts.push(`Ankunft: ${flight.arr_city} (${flight.arr_airport})`);
+  if (flight.dep_time_local) parts.push(`Abflugzeit: ${flight.dep_time_local}`);
+  if (flight.arr_time_local) parts.push(`Ankunftszeit: ${flight.arr_time_local}`);
+  if (flight.duration_min) parts.push(`Flugdauer: ${Math.floor(flight.duration_min / 60)}h${String(flight.duration_min % 60).padStart(2, '0')}`);
+  if (flight.dep_terminal) parts.push(`Abflug-Terminal: ${flight.dep_terminal}${flight.dep_gate ? `, Gate ${flight.dep_gate}` : ''}`);
+  if (flight.arr_terminal) parts.push(`Ankunfts-Terminal: ${flight.arr_terminal}${flight.arr_gate ? `, Gate ${flight.arr_gate}` : ''}`);
+  if (flight.status) parts.push(`Status: ${flight.status}`);
+  if (flight.aircraft) parts.push(`Flugzeug: ${flight.aircraft}`);
+  return parts.join('\n');
 }
 
 function formatSearchResults(results: WebSearchResult[]): string {
@@ -727,6 +757,15 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           : m.content,
       }));
 
+      // Anti-loop: inject system hint after 8+ messages without ready_to_plan
+      const turnCount = updatedMessages.filter(m => m.role === 'user').length;
+      if (turnCount >= 4 && !metadata?.ready_to_plan) {
+        apiMessages.push({
+          role: 'user',
+          content: '[System]: Du hast bereits ' + (turnCount * 2) + '+ Nachrichten ausgetauscht. Setze jetzt ready_to_plan=true in der metadata und fasse kurz zusammen was du planst. Der User wartet auf den Plan-Button.',
+        });
+      }
+
       // Check token budget
       const estimatedTokens = estimateTokens(apiMessages);
       if (estimatedTokens > MAX_INPUT_TOKENS_ESTIMATE) {
@@ -763,6 +802,59 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         tripMemoryRef.current = tripMemoryUpdate;
         contextRef.current.tripMemory = tripMemoryUpdate;
         saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
+      }
+
+      // Check for flight lookup request
+      const { cleanText: textWithoutFlight, flightIata } = parseFlightLookupRequest(cleanText);
+      if (flightIata) {
+        const searchingMsg: AiChatMessage = {
+          id: nextId(), role: 'assistant', content: textWithoutFlight || 'Ich suche die Flugdaten...', timestamp: Date.now(),
+          senderName: 'Fable',
+        };
+        setMessages([...updatedMessages, searchingMsg]);
+
+        try {
+          const flightResult = await lookupFlight(flightIata);
+          const formattedFlight = flightResult ? formatFlightResult(flightResult) : 'Flug nicht gefunden.';
+
+          const followUpMessages: AiMessage[] = [
+            ...apiMessages,
+            { role: 'assistant', content: textWithoutFlight || 'Ich suche die Flugdaten.' },
+            { role: 'user', content: `[System]: Flugdaten für "${flightIata}":\n${formattedFlight}` },
+          ];
+
+          const followUpResponse = await sendAiMessage('conversation', followUpMessages, contextRef.current);
+
+          const { cleanText: fuTextAfterTripMemory, tripMemoryUpdate: fuTripMemory } = parseTripMemoryUpdate(followUpResponse.content);
+          const { cleanText: fuTextAfterMemory, memoryUpdate: fuMemory } = parseMemoryUpdate(fuTextAfterTripMemory);
+          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuTextAfterMemory);
+
+          if (fuMemory && personalMemoryEnabledRef.current) {
+            userMemoryRef.current = fuMemory;
+            contextRef.current.userMemory = fuMemory;
+            saveAiUserMemory(fuMemory).catch(e => console.error('Failed to save memory:', e));
+          }
+          if (fuTripMemory && tripId && fableSettingsRef.current.memoryEnabled) {
+            tripMemoryRef.current = fuTripMemory;
+            contextRef.current.tripMemory = fuTripMemory;
+            saveAiTripMemory(tripId, fuTripMemory).catch(e => console.error('Failed to save trip memory:', e));
+          }
+
+          if (followUpResponse.credits_remaining !== undefined) {
+            const totalCost = creditsCost !== undefined
+              ? (prevCreditsRef.current !== null ? prevCreditsRef.current - followUpResponse.credits_remaining + creditsCost : undefined)
+              : undefined;
+            prevCreditsRef.current = followUpResponse.credits_remaining;
+            setCreditsBalance(followUpResponse.credits_remaining);
+            onCreditsUpdate?.(followUpResponse.credits_remaining);
+            creditsCost = totalCost;
+          }
+
+          cleanText = fuCleanText;
+          meta = fuMeta || meta;
+        } catch (flightErr) {
+          cleanText = textWithoutFlight || cleanText;
+        }
       }
 
       // Check for web search request (gated by trip setting)

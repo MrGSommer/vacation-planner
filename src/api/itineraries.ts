@@ -27,7 +27,8 @@ export const getActivities = async (dayId: string): Promise<Activity[]> => {
     .from('activities')
     .select('*')
     .eq('day_id', dayId)
-    .order('sort_order');
+    .order('start_time', { ascending: true, nullsFirst: false })
+    .order('sort_order', { ascending: true });
   if (error) throw error;
   return data || [];
 };
@@ -38,7 +39,8 @@ export const getActivitiesForTrip = async (tripId: string): Promise<Activity[]> 
       .from('activities')
       .select('*')
       .eq('trip_id', tripId)
-      .order('sort_order');
+      .order('start_time', { ascending: true, nullsFirst: false })
+      .order('sort_order', { ascending: true });
     if (error) throw error;
     return data || [];
   });

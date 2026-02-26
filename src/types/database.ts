@@ -337,3 +337,64 @@ export interface RevenueStats {
   active_subscriptions: number;
   currency: string;
 }
+
+// --- Email Test Types ---
+
+export interface EmailTest {
+  id: string;
+  admin_id: string;
+  recipient_email: string;
+  subject: string;
+  send_success: boolean;
+  send_error: string | null;
+  manually_confirmed: boolean;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
+// --- Announcement Types ---
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  image_url: string | null;
+  cta_text: string | null;
+  cta_url: string | null;
+  active: boolean;
+  priority: number;
+  target_audience: 'all' | 'premium' | 'free';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnnouncementDismissal {
+  id: string;
+  user_id: string;
+  announcement_id: string;
+  dismissed_at: string;
+}
+
+// --- Flight Info Types ---
+
+export interface FlightInfo {
+  found: boolean;
+  flight_iata: string;
+  airline_name: string | null;
+  airline_iata: string | null;
+  dep_airport: string | null;
+  dep_city: string | null;
+  dep_terminal: string | null;
+  dep_gate: string | null;
+  arr_airport: string | null;
+  arr_city: string | null;
+  arr_terminal: string | null;
+  arr_gate: string | null;
+  dep_time_utc: string | null;
+  dep_time_local: string | null;
+  arr_time_utc: string | null;
+  arr_time_local: string | null;
+  duration_min: number | null;
+  status: string | null;
+  aircraft: string | null;
+}

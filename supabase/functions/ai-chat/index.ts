@@ -2,7 +2,12 @@
 // Handles conversation, structure generation, activities generation, and full plan generation
 
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { MODELS, checkRateLimit, getUser, deductCreditsAtomic, logUsage, callClaude, getMaxTokens, getAnthropicKey } from '../_shared/claude.ts';
+import {
+  MODELS, VALID_TASKS, CREDIT_COSTS,
+  checkRateLimit, getUser, deductCreditsAtomic, refundCredits,
+  logUsage, callClaude, getMaxTokens, getTemperature, getAnthropicKey,
+  extractTextContent, validateMessages,
+} from '../_shared/claude.ts';
 import { buildSystemPrompt } from '../_shared/prompts.ts';
 
 // --- Main handler ---
@@ -22,6 +27,16 @@ Deno.serve(async (req) => {
       return json({ error: 'Fehlende Parameter: task, messages, context' }, origin, 400);
     }
 
+    // Task validation
+    if (!VALID_TASKS.includes(task)) {
+      return json({ error: 'Ungültiger Task-Typ' }, origin, 400);
+    }
+
+    // Messages validation
+    if (!validateMessages(messages)) {
+      return json({ error: 'Ungültiges Nachrichtenformat' }, origin, 400);
+    }
+
     // Auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Nicht authentifiziert' }, origin, 401);
@@ -35,13 +50,11 @@ Deno.serve(async (req) => {
       return json({ error: 'Zu viele Anfragen. Bitte warte kurz.' }, origin, 429);
     }
 
-    // Greeting task: no credit deduction (system-initiated, not user action)
-    const isGreeting = task === 'greeting';
-
+    // Credit deduction (from central config)
+    const creditsRequired = CREDIT_COSTS[task] ?? 1;
     let newBalance: number | undefined;
-    if (!isGreeting) {
-      // Credit deduction: plan_generation/plan_generation_full=3, all others=1
-      const creditsRequired = (task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1;
+
+    if (creditsRequired > 0) {
       newBalance = await deductCreditsAtomic(user.id, creditsRequired);
 
       if (newBalance === -1) {
@@ -53,36 +66,42 @@ Deno.serve(async (req) => {
 
     // Build prompt + call Claude
     // greeting uses conversation prompt + model
-    const effectiveTask = isGreeting ? 'conversation' : task;
+    const effectiveTask = task === 'greeting' ? 'conversation' : task;
     const model = MODELS[effectiveTask as keyof typeof MODELS] || MODELS.conversation;
     const systemPrompt = buildSystemPrompt(effectiveTask, context);
     const maxTokens = getMaxTokens(effectiveTask);
+    const temperature = getTemperature(effectiveTask);
 
     if (!getAnthropicKey()) return json({ error: 'AI-Service nicht konfiguriert' }, origin, 500);
 
     const startTime = Date.now();
-    const response = await callClaude(model, systemPrompt, messages, maxTokens);
+    const response = await callClaude(model, systemPrompt, messages, maxTokens, temperature);
     const durationMs = Date.now() - startTime;
 
     if (!response.ok) {
+      // Refund credits on API failure
+      if (creditsRequired > 0) {
+        await refundCredits(user.id, creditsRequired);
+        if (newBalance !== undefined) newBalance += creditsRequired;
+      }
+
       const status = response.status;
-      if (status === 429) return json({ error: 'Rate Limit erreicht – bitte kurz warten', retryable: true }, origin, 429);
-      if (status === 529) return json({ error: 'AI-Service momentan überlastet – bitte kurz warten', retryable: true }, origin, 529);
+      if (status === 429) return json({ error: 'Rate Limit erreicht – bitte kurz warten', retryable: true, credits_remaining: newBalance ?? null }, origin, 429);
+      if (status === 529) return json({ error: 'AI-Service momentan überlastet – bitte kurz warten', retryable: true, credits_remaining: newBalance ?? null }, origin, 529);
       console.error(`Claude API error ${status}:`, await response.text().catch(() => ''));
-      return json({ error: 'AI-Anfrage fehlgeschlagen' }, origin, 502);
+      return json({ error: 'AI-Anfrage fehlgeschlagen', credits_remaining: newBalance ?? null }, origin, 502);
     }
 
     const result = await response.json();
-    const content = result.content?.[0]?.text || '';
+    const content = extractTextContent(result);
 
-    // Log usage (greeting logged as conversation, no credits charged)
-    const creditsCharged = isGreeting ? 0 : ((task === 'plan_generation' || task === 'plan_generation_full') ? 3 : 1);
-    const logTask = task === 'plan_generation_full' ? 'plan_generation' : (isGreeting || task === 'recap') ? 'conversation' : task;
-    logUsage(user.id, context.tripId || null, logTask, creditsCharged, model, result.usage, durationMs);
+    // Log usage
+    const logTask = task === 'plan_generation_full' ? 'plan_generation' : (task === 'greeting' || task === 'recap') ? 'conversation' : task;
+    logUsage(user.id, context.tripId || null, logTask, creditsRequired, model, result.usage, durationMs);
 
     return json({ content, usage: result.usage, credits_remaining: newBalance ?? null }, origin);
   } catch (e) {
     console.error('ai-chat error:', e);
-    return json({ error: (e as Error).message }, origin, 500);
+    return json({ error: 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.' }, origin, 500);
   }
 });
