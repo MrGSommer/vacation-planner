@@ -508,7 +508,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                             {activity.location_name || activity.location_address}
                           </Text>
                           {activity.location_lat && activity.location_lng && (
-                            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                               <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
                             </TouchableOpacity>
                           )}

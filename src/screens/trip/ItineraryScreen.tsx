@@ -283,6 +283,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       // Optimistic: remove from UI immediately
       setActivities(prev => prev.filter(a => a.id !== id));
       setHotelActivities(prev => prev.filter(a => a.id !== id));
+      setAllTripActivities(prev => prev.filter(a => a.id !== id));
       try {
         await deleteActivity(id);
         showToast('Aktivität gelöscht', 'success');
@@ -422,9 +423,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.travelDayTitle}>{transport.title}</Text>
             {detail && <Text style={styles.travelDayDetail}>{linkifyText(detail)}</Text>}
             {transport.location_name && <Text style={styles.accommodationAddress}>📍 {transport.location_name}</Text>}
-            {flightStatuses.has(transport.id) && (() => {
-              const fs = flightStatuses.get(transport.id)!;
-              const { label: statusLabel, color: statusColor } = getFlightStatusLabel(fs.status);
+            {transport.category_data?.transport_type === 'Flug' && transport.category_data?.flight_verified && (() => {
+              const fs = flightStatuses.get(transport.id);
+              const { label: statusLabel, color: statusColor } = fs ? getFlightStatusLabel(fs.status) : { label: 'Geplant', color: '#3498DB' };
               return statusLabel ? (
                 <View style={[styles.flightStatusBadge, { backgroundColor: statusColor + '20', marginTop: 4 }]}>
                   <Text style={[styles.flightStatusText, { color: statusColor }]}>{statusLabel}</Text>
@@ -432,6 +433,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
               ) : null;
             })()}
           </View>
+          <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(transport.id); }} style={styles.deleteBtn}>
+            <Text style={styles.deleteBtnText}>✕</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       );
     }
@@ -551,10 +555,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Text style={styles.activityTitle}>{activity.title}</Text>
                       {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
                     </View>
-                    {/* Flight status badge */}
-                    {flightStatuses.has(activity.id) && (() => {
-                      const fs = flightStatuses.get(activity.id)!;
-                      const { label, color } = getFlightStatusLabel(fs.status);
+                    {/* Flight status badge — verified flights always show badge */}
+                    {activity.category === 'transport' && activity.category_data?.transport_type === 'Flug' && activity.category_data?.flight_verified && (() => {
+                      const fs = flightStatuses.get(activity.id);
+                      const { label, color } = fs ? getFlightStatusLabel(fs.status) : { label: 'Geplant', color: '#3498DB' };
                       return label ? (
                         <View style={[styles.flightStatusBadge, { backgroundColor: color + '20' }]}>
                           <Text style={[styles.flightStatusText, { color }]}>{label}</Text>
@@ -569,7 +573,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>
                       {activity.location_lat && activity.location_lng && (
-                        <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
                         </TouchableOpacity>
                       )}

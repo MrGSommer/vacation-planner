@@ -5,7 +5,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { MODELS, getUser, deductCreditsAtomic, refundCredits, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey, extractTextContent, getTemperature } from '../_shared/claude.ts';
 import { buildStructureSystemPrompt, buildActivitiesSystemPrompt } from '../_shared/prompts.ts';
-import { enrichPlanWithPlaces, lookupPlace } from '../_shared/places.ts';
+import { lookupPlace } from '../_shared/places.ts';
 
 const VALID_CATEGORIES = ['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'stop', 'other'];
 
@@ -167,8 +167,27 @@ function parsePlanJson(content: string): any {
 }
 
 /**
+ * Find the stop/city for a given date (for multi-stop trips).
+ * Returns the stop name if found, otherwise null.
+ */
+function getStopForDate(stops: any[], date: string): string | null {
+  for (const stop of stops) {
+    const arrival = stop.arrival_date;
+    const departure = stop.departure_date;
+    if (arrival && departure && date >= arrival && date <= departure) {
+      return stop.name;
+    }
+    // Single-date stops (no departure = day trip)
+    if (arrival && !departure && date === arrival) {
+      return stop.name;
+    }
+  }
+  return null;
+}
+
+/**
  * Enrich a single day's activities with Google Places data.
- * Like enrichPlanWithPlaces but operates on a flat array of activities.
+ * Uses lookupPlace() from _shared/places.ts per activity.
  */
 async function enrichActivitiesWithPlaces(activities: any[], destination: string): Promise<void> {
   const locationMap = new Map<string, { query: string }>();
@@ -396,8 +415,11 @@ async function generateInBackground(
         continue;
       }
 
-      // Enrich with Places API
-      await enrichActivitiesWithPlaces(dayActivities, destination);
+      // Enrich with Places API — use current stop/city as context (not trip destination)
+      // e.g. "Colosseum, Rome" instead of "Colosseum, Europe Tour"
+      const stopName = getStopForDate(structure.stops || [], currentDate);
+      const placeContext = stopName || destination;
+      await enrichActivitiesWithPlaces(dayActivities, placeContext);
 
       // Insert activities into DB
       const dbActivities = dayActivities.map((act: any, idx: number) => ({

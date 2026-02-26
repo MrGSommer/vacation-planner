@@ -186,8 +186,60 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { flight_iata, flight_date } = body;
+    const { mode, flight_iata, flight_date, dep_iata, arr_iata } = body;
 
+    // ─── Route Search Mode: find all flights between two airports ───
+    if (mode === 'route_search') {
+      if (!dep_iata || !arr_iata || typeof dep_iata !== 'string' || typeof arr_iata !== 'string') {
+        return json({ error: 'dep_iata und arr_iata erforderlich' }, origin, 400);
+      }
+      const depNorm = dep_iata.toUpperCase().trim();
+      const arrNorm = arr_iata.toUpperCase().trim();
+      if (!/^[A-Z]{3}$/.test(depNorm) || !/^[A-Z]{3}$/.test(arrNorm)) {
+        return json({ error: 'Ungültiger IATA-Code (3 Buchstaben)' }, origin, 400);
+      }
+
+      console.log(`flight-lookup route: ${depNorm} → ${arrNorm}`);
+
+      try {
+        const routeRes = await fetch(
+          `${AIRLABS_BASE}/routes?dep_iata=${depNorm}&arr_iata=${arrNorm}&api_key=${AIRLABS_API_KEY}`,
+          { signal: AbortSignal.timeout(10000) },
+        );
+        if (!routeRes.ok) {
+          return json({ error: 'Routensuche fehlgeschlagen' }, origin, 502);
+        }
+        const routeData = await routeRes.json();
+        const flights = routeData?.response || [];
+
+        // Normalize and deduplicate by flight_iata
+        const seen = new Set<string>();
+        const routes = flights
+          .filter((f: any) => {
+            const iata = f.flight_iata;
+            if (!iata || seen.has(iata)) return false;
+            seen.add(iata);
+            return true;
+          })
+          .slice(0, 30) // Limit results
+          .map((f: any) => ({
+            flight_iata: f.flight_iata,
+            airline_iata: f.airline_iata || null,
+            airline_name: f.airline_name || null,
+            dep_time: f.dep_time || null,
+            arr_time: f.arr_time || null,
+            duration: f.duration || null,
+            days: f.days || [], // Operating days: 1=Mon ... 7=Sun
+          }));
+
+        return json({ routes, dep_iata: depNorm, arr_iata: arrNorm }, origin);
+      } catch (e) {
+        console.error('AirLabs /routes error:', e);
+        return json({ error: 'Routensuche fehlgeschlagen' }, origin, 502);
+      }
+    }
+
+    // ─── Single Flight Lookup Mode (default) ───
     if (!flight_iata || typeof flight_iata !== 'string') {
       return json({ error: 'flight_iata erforderlich' }, origin, 400);
     }
@@ -202,15 +254,18 @@ Deno.serve(async (req) => {
     const dateParam = (typeof flight_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(flight_date))
       ? flight_date : undefined;
 
-    console.log(`flight-lookup: ${normalized}, date: ${dateParam || 'none'}`);
+    // Build candidate flight numbers: original + zero-padded variant
+    // Many airlines use 4-digit format in AirLabs (e.g. TP0931 instead of TP931)
+    const candidates = [normalized];
+    const airlinePrefix = normalized.replace(/\d+$/, '');
+    const flightNum = normalized.replace(/^[A-Z0-9]{2}/, '');
+    if (flightNum.length < 4) {
+      candidates.push(airlinePrefix + flightNum.padStart(4, '0'));
+    }
+
+    console.log(`flight-lookup: candidates=${candidates.join(',')}, date: ${dateParam || 'none'}`);
 
     // Smart endpoint selection based on date proximity
-    // - Today ± 1 day: try /flight first (live data), fall back to /schedules
-    // - Future (> 1 day): skip /flight, go straight to /schedules (saves 1 API call)
-    // - Past (> 1 day): only /schedules for schedule info
-    let flightData: any = null;
-    let isLiveData = false; // Track if data came from /flight (live) or /schedules
-
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     let daysDiff = 0;
@@ -220,62 +275,90 @@ Deno.serve(async (req) => {
     }
 
     const tryFlightEndpoint = !dateParam || (daysDiff >= -1 && daysDiff <= 1);
-    const trySchedulesEndpoint = true; // Always available as fallback
 
-    // Step 1: /flight endpoint (only for today ± 1 day or no date specified)
-    if (tryFlightEndpoint) {
-      try {
-        const flightRes = await fetch(
-          `${AIRLABS_BASE}/flight?flight_iata=${normalized}&api_key=${AIRLABS_API_KEY}`,
-          { signal: AbortSignal.timeout(8000) },
-        );
-        if (flightRes.ok) {
-          const data = await flightRes.json();
-          if (data?.response) {
-            if (dateParam) {
-              const depTime = data.response.dep_time || data.response.dep_time_utc || '';
-              if (depTime.startsWith(dateParam)) {
+    let flightData: any = null;
+    let isLiveData = false;
+    let matchedIata = normalized;
+    // Fallback: /flight data when date doesn't match (use as schedule template)
+    let flightTemplateFallback: any = null;
+    let fallbackCandidate = '';
+
+    // Try each candidate flight number
+    for (const candidate of candidates) {
+      if (flightData) break;
+
+      // Step 1: /flight endpoint (only for today ± 1 day or no date specified)
+      if (tryFlightEndpoint) {
+        try {
+          const flightRes = await fetch(
+            `${AIRLABS_BASE}/flight?flight_iata=${candidate}&api_key=${AIRLABS_API_KEY}`,
+            { signal: AbortSignal.timeout(8000) },
+          );
+          if (flightRes.ok) {
+            const data = await flightRes.json();
+            if (data?.response) {
+              if (dateParam) {
+                const depTime = data.response.dep_time || data.response.dep_time_utc || '';
+                if (depTime.startsWith(dateParam)) {
+                  flightData = data.response;
+                  isLiveData = true;
+                  matchedIata = candidate;
+                } else {
+                  // Date doesn't match, but flight exists — save as template
+                  flightTemplateFallback = data.response;
+                  fallbackCandidate = candidate;
+                }
+              } else {
                 flightData = data.response;
                 isLiveData = true;
+                matchedIata = candidate;
               }
-            } else {
-              flightData = data.response;
-              isLiveData = true;
             }
           }
+        } catch {
+          // /flight failed, continue
         }
-      } catch (e) {
-        console.error('AirLabs /flight error:', e);
+      }
+
+      // Step 2: /schedules endpoint (if /flight didn't return data)
+      if (!flightData) {
+        try {
+          const schedRes = await fetch(
+            `${AIRLABS_BASE}/schedules?flight_iata=${candidate}&api_key=${AIRLABS_API_KEY}`,
+            { signal: AbortSignal.timeout(8000) },
+          );
+          if (schedRes.ok) {
+            const data = await schedRes.json();
+            if (data?.response?.length > 0) {
+              if (dateParam) {
+                const requestedDate = new Date(dateParam + 'T00:00:00');
+                const jsDay = requestedDate.getDay();
+                const airlabsDay = jsDay === 0 ? 7 : jsDay;
+                const matching = data.response.find((s: any) =>
+                  !s.days || s.days.length === 0 || s.days.includes(String(airlabsDay))
+                );
+                flightData = matching || data.response[0];
+              } else {
+                flightData = data.response[0];
+              }
+              matchedIata = candidate;
+            }
+          }
+        } catch {
+          // /schedules failed, continue
+        }
       }
     }
 
-    // Step 2: /schedules endpoint (if /flight didn't return data)
-    if (!flightData && trySchedulesEndpoint) {
-      try {
-        const schedRes = await fetch(
-          `${AIRLABS_BASE}/schedules?flight_iata=${normalized}&api_key=${AIRLABS_API_KEY}`,
-          { signal: AbortSignal.timeout(8000) },
-        );
-        if (schedRes.ok) {
-          const data = await schedRes.json();
-          if (data?.response?.length > 0) {
-            if (dateParam) {
-              // Filter by day of week: schedules have 'days' array (1=Mon ... 7=Sun)
-              const requestedDate = new Date(dateParam + 'T00:00:00');
-              const jsDay = requestedDate.getDay(); // 0=Sun, 1=Mon ... 6=Sat
-              const airlabsDay = jsDay === 0 ? 7 : jsDay; // Convert to 1=Mon ... 7=Sun
-              const matching = data.response.find((s: any) =>
-                !s.days || s.days.length === 0 || s.days.includes(String(airlabsDay))
-              );
-              flightData = matching || data.response[0];
-            } else {
-              flightData = data.response[0];
-            }
-          }
-        }
-      } catch (e) {
-        console.error('AirLabs /schedules error:', e);
-      }
+    // Step 3: If no exact match found but /flight had data for a different date,
+    // use it as a template (same route/times, different date). This handles the
+    // common case where /flight returns today's data but user wants tomorrow,
+    // and /schedules is empty (free tier limitation).
+    if (!flightData && flightTemplateFallback) {
+      flightData = flightTemplateFallback;
+      matchedIata = fallbackCandidate;
+      isLiveData = false; // Not live — it's a schedule template from a different date
+      console.log(`flight-lookup: using /flight template fallback for ${matchedIata}`);
     }
 
     if (!flightData) {
@@ -287,6 +370,8 @@ Deno.serve(async (req) => {
     }
 
     const result = await normalizeFlightData(flightData, normalized, dateParam, isLiveData);
+    // Ensure the original flight number is returned (not the zero-padded variant)
+    result.flight_iata = normalized;
     return json(result, origin);
   } catch (e) {
     console.error('flight-lookup error:', e);

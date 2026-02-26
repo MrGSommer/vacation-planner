@@ -4,7 +4,7 @@ import { Activity } from '../../types/database';
 import { FlightInfo } from '../../utils/flightLookup';
 import { getFlightStatusLabel } from '../../hooks/useFlightStatus';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
-import { CATEGORY_FIELDS, CATEGORY_COLORS } from '../../utils/categoryFields';
+import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -34,14 +34,19 @@ export const ActivityViewModal: React.FC<Props> = ({
 
   const cat = ACTIVITY_CATEGORIES.find(c => c.id === activity.category);
   const catColor = CATEGORY_COLORS[activity.category] || colors.primary;
-  const catFields = CATEGORY_FIELDS[activity.category] || [];
   const catData = activity.category_data || {};
+  const baseFields = CATEGORY_FIELDS[activity.category] || [];
+  // For transport: also include type-specific fields (departure_station, arrival_station, etc.)
+  const catFields = activity.category === 'transport'
+    ? [...baseFields, ...getTransportFields(catData.transport_type)]
+    : baseFields;
 
   const renderFieldValue = (key: string, type: string): string | null => {
-    // Handle place fields (stored as key_name, key_lat, key_lng)
-    if (type === 'place') {
-      return catData[`${key}_name`] || null;
+    // Handle place/airport fields (stored as key_name, key_lat, key_lng)
+    if (type === 'place' || type === 'airport') {
+      return catData[`${key}_name`] || catData[key] || null;
     }
+    // For select fields, just show the value directly
     const val = catData[key];
     if (!val) return null;
     if (type === 'date') return formatDE(val);
@@ -77,7 +82,7 @@ export const ActivityViewModal: React.FC<Props> = ({
                 <Text style={[styles.infoText, { flex: 1 }]}>{activity.location_name}</Text>
                 {activity.location_lat && activity.location_lng && (
                   <TouchableOpacity
-                    onPress={() => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined)}
+                    onPress={() => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Text style={styles.mapsLinkIcon}>↗</Text>
@@ -101,52 +106,59 @@ export const ActivityViewModal: React.FC<Props> = ({
               </TouchableOpacity>
             )}
 
-            {/* Live flight status */}
-            {flightStatus?.found && (() => {
-              const { label: statusLabel, color: statusColor } = getFlightStatusLabel(flightStatus.status);
-              const depTime = flightStatus.dep_time_local?.split(/[T ]/)[1]?.substring(0, 5);
-              const arrTime = flightStatus.arr_time_local?.split(/[T ]/)[1]?.substring(0, 5);
+            {/* Flight status badge + live details */}
+            {activity.category === 'transport' && catData.transport_type === 'Flug' && catData.flight_verified && (() => {
+              const hasLive = flightStatus?.found;
+              const { label: statusLabel, color: statusColor } = hasLive
+                ? getFlightStatusLabel(flightStatus!.status)
+                : { label: 'Geplant', color: '#3498DB' };
+              const depTime = flightStatus?.dep_time_local?.split(/[T ]/)[1]?.substring(0, 5);
+              const arrTime = flightStatus?.arr_time_local?.split(/[T ]/)[1]?.substring(0, 5);
               return (
                 <View style={styles.flightSection}>
                   <View style={styles.flightSectionHeader}>
-                    <Text style={styles.sectionLabel}>Flugstatus (Live)</Text>
+                    <Text style={styles.sectionLabel}>{hasLive ? 'Flugstatus (Live)' : 'Flugstatus'}</Text>
                     {statusLabel ? (
                       <View style={[styles.flightBadge, { backgroundColor: statusColor + '20' }]}>
                         <Text style={[styles.flightBadgeText, { color: statusColor }]}>{statusLabel}</Text>
                       </View>
                     ) : null}
                   </View>
-                  <View style={styles.flightRoute}>
-                    <View style={styles.flightAirport}>
-                      <Text style={styles.flightCode}>{flightStatus.dep_airport || '—'}</Text>
-                      <Text style={styles.flightCity}>{flightStatus.dep_city || ''}</Text>
-                      {depTime ? <Text style={styles.flightTime}>{depTime}</Text> : null}
-                      {flightStatus.dep_terminal && (
-                        <Text style={styles.flightTerminal}>T{flightStatus.dep_terminal}{flightStatus.dep_gate ? ` Gate ${flightStatus.dep_gate}` : ''}</Text>
+                  {hasLive && (
+                    <>
+                      <View style={styles.flightRoute}>
+                        <View style={styles.flightAirport}>
+                          <Text style={styles.flightCode}>{flightStatus!.dep_airport || '—'}</Text>
+                          <Text style={styles.flightCity}>{flightStatus!.dep_city || ''}</Text>
+                          {depTime ? <Text style={styles.flightTime}>{depTime}</Text> : null}
+                          {flightStatus!.dep_terminal && (
+                            <Text style={styles.flightTerminal}>T{flightStatus!.dep_terminal}{flightStatus!.dep_gate ? ` Gate ${flightStatus!.dep_gate}` : ''}</Text>
+                          )}
+                        </View>
+                        <View style={styles.flightArrow}>
+                          <Text style={styles.flightArrowIcon}>{'✈'}</Text>
+                          {flightStatus!.duration_min ? (
+                            <Text style={styles.flightDuration}>
+                              {Math.floor(flightStatus!.duration_min / 60)}h{String(flightStatus!.duration_min % 60).padStart(2, '0')}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.flightAirport}>
+                          <Text style={styles.flightCode}>{flightStatus!.arr_airport || '—'}</Text>
+                          <Text style={styles.flightCity}>{flightStatus!.arr_city || ''}</Text>
+                          {arrTime ? <Text style={styles.flightTime}>{arrTime}</Text> : null}
+                          {flightStatus!.arr_terminal && (
+                            <Text style={styles.flightTerminal}>T{flightStatus!.arr_terminal}{flightStatus!.arr_gate ? ` Gate ${flightStatus!.arr_gate}` : ''}</Text>
+                          )}
+                        </View>
+                      </View>
+                      {(flightStatus!.airline_name || flightStatus!.aircraft) && (
+                        <View style={styles.flightMeta}>
+                          {flightStatus!.airline_name && <Text style={styles.flightMetaText}>{flightStatus!.airline_name}</Text>}
+                          {flightStatus!.aircraft && <Text style={styles.flightMetaText}>{flightStatus!.aircraft}</Text>}
+                        </View>
                       )}
-                    </View>
-                    <View style={styles.flightArrow}>
-                      <Text style={styles.flightArrowIcon}>{'✈'}</Text>
-                      {flightStatus.duration_min ? (
-                        <Text style={styles.flightDuration}>
-                          {Math.floor(flightStatus.duration_min / 60)}h{String(flightStatus.duration_min % 60).padStart(2, '0')}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.flightAirport}>
-                      <Text style={styles.flightCode}>{flightStatus.arr_airport || '—'}</Text>
-                      <Text style={styles.flightCity}>{flightStatus.arr_city || ''}</Text>
-                      {arrTime ? <Text style={styles.flightTime}>{arrTime}</Text> : null}
-                      {flightStatus.arr_terminal && (
-                        <Text style={styles.flightTerminal}>T{flightStatus.arr_terminal}{flightStatus.arr_gate ? ` Gate ${flightStatus.arr_gate}` : ''}</Text>
-                      )}
-                    </View>
-                  </View>
-                  {(flightStatus.airline_name || flightStatus.aircraft) && (
-                    <View style={styles.flightMeta}>
-                      {flightStatus.airline_name && <Text style={styles.flightMetaText}>{flightStatus.airline_name}</Text>}
-                      {flightStatus.aircraft && <Text style={styles.flightMetaText}>{flightStatus.aircraft}</Text>}
-                    </View>
+                    </>
                   )}
                 </View>
               );
