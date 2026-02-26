@@ -144,7 +144,24 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [deleteCollabs, setDeleteCollabs] = useState<CollaboratorWithProfile[]>([]);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [fableJob, setFableJob] = useState<PlanJob | null>(null);
-  const [dismissedRecaps, setDismissedRecaps] = useState<Set<string>>(new Set());
+
+  // Persistent recap banner dismissals via localStorage
+  const DISMISSED_RECAPS_KEY = 'wayfable_dismissed_recaps';
+  const [dismissedRecaps, setDismissedRecaps] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(DISMISSED_RECAPS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const dismissRecap = useCallback((tripId: string) => {
+    setDismissedRecaps(prev => {
+      const next = new Set(prev).add(tripId);
+      try { localStorage.setItem(DISMISSED_RECAPS_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
 
   const { activeTrips, pastTrips, recentlyCompleted } = useMemo(() => {
     const now = new Date();
@@ -379,7 +396,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               key={`recap-${trip.id}`}
               style={styles.recapBanner}
               onPress={() => {
-                setDismissedRecaps(prev => new Set(prev).add(trip.id));
+                dismissRecap(trip.id);
                 handleTripPress(trip);
               }}
               activeOpacity={0.7}
@@ -390,7 +407,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.recapBannerText}>Schau dir den Rückblick von "{trip.name}" an</Text>
               </View>
               <TouchableOpacity
-                onPress={(e: any) => { e.stopPropagation(); setDismissedRecaps(prev => new Set(prev).add(trip.id)); }}
+                onPress={(e: any) => { e.stopPropagation(); dismissRecap(trip.id); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.recapBannerClose}>{'\u2715'}</Text>

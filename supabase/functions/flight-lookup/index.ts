@@ -73,17 +73,36 @@ interface FlightResponse {
   aircraft: string | null;
 }
 
-// Combine a flight_date (YYYY-MM-DD) with a time-only or datetime string
-function applyDate(flightDate: string, timeVal: string | null): string | null {
+// Replace/set the date portion of a time value, preserving only the time.
+// dayOffset handles overnight flights (e.g. arrival = departure + 1 day).
+function replaceDate(targetDate: string, timeVal: string | null, dayOffset = 0): string | null {
   if (!timeVal) return null;
-  // Already has a date portion (e.g. "2026-03-15 10:30" or "2026-03-15T10:30:00")
-  if (/^\d{4}-\d{2}-\d{2}/.test(timeVal)) return timeVal;
-  // Time-only (e.g. "10:30") — prepend the flight_date
-  return `${flightDate} ${timeVal}`;
+
+  // Extract just the time portion
+  let timePart: string;
+  if (/^\d{4}-\d{2}-\d{2}/.test(timeVal)) {
+    // Full datetime (e.g. "2026-02-26 19:53") — strip the date, keep time
+    timePart = timeVal.split(/[T ]/)[1] || timeVal;
+  } else {
+    // Already time-only (e.g. "19:53")
+    timePart = timeVal;
+  }
+
+  if (dayOffset === 0) {
+    return `${targetDate} ${timePart}`;
+  }
+
+  // Apply day offset for overnight arrivals
+  const d = new Date(targetDate + 'T00:00:00');
+  d.setDate(d.getDate() + dayOffset);
+  const offsetDate = d.toISOString().split('T')[0];
+  return `${offsetDate} ${timePart}`;
 }
 
 // Normalize AirLabs response to our format
-async function normalizeFlightData(flight: any, flightIata: string, flightDate?: string): Promise<FlightResponse> {
+// isLive=true means data came from /flight endpoint (real-time status)
+// isLive=false means data came from /schedules (status is meaningless for future dates)
+async function normalizeFlightData(flight: any, flightIata: string, flightDate?: string, isLive = false): Promise<FlightResponse> {
   // Enrich airport info in parallel
   const depIata = flight.dep_iata || null;
   const arrIata = flight.arr_iata || null;
@@ -98,12 +117,22 @@ async function normalizeFlightData(flight: any, flightIata: string, flightDate?:
   let depTimeUtc = flight.dep_time_utc || flight.dep_time || null;
   let arrTimeUtc = flight.arr_time_utc || flight.arr_time || null;
 
-  // If flight_date provided and times are time-only (from /schedules), attach the date
+  // Replace API dates with user's requested date (API returns "today" dates)
   if (flightDate && /^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
-    depTimeLocal = applyDate(flightDate, depTimeLocal);
-    arrTimeLocal = applyDate(flightDate, arrTimeLocal);
-    depTimeUtc = applyDate(flightDate, depTimeUtc);
-    arrTimeUtc = applyDate(flightDate, arrTimeUtc);
+    // Calculate day offset between dep→arr (for overnight flights, e.g. dep 23:30 → arr 01:15+1)
+    const origDepDate = depTimeLocal?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+    const origArrDate = arrTimeLocal?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+    let arrDayOffset = 0;
+    if (origDepDate && origArrDate && origDepDate !== origArrDate) {
+      arrDayOffset = Math.round(
+        (new Date(origArrDate + 'T00:00:00').getTime() - new Date(origDepDate + 'T00:00:00').getTime()) / (24 * 60 * 60_000)
+      );
+    }
+
+    depTimeLocal = replaceDate(flightDate, depTimeLocal);
+    arrTimeLocal = replaceDate(flightDate, arrTimeLocal, arrDayOffset);
+    depTimeUtc = replaceDate(flightDate, depTimeUtc);
+    arrTimeUtc = replaceDate(flightDate, arrTimeUtc, arrDayOffset);
   }
 
   return {
@@ -124,7 +153,9 @@ async function normalizeFlightData(flight: any, flightIata: string, flightDate?:
     dep_time_local: depTimeLocal,
     arr_time_local: arrTimeLocal,
     duration_min: flight.duration || null,
-    status: flight.status || flight.flight_status || null,
+    // Live data (/flight): real-time status (delayed, active, landed, etc.)
+    // Schedule data (/schedules): always return "scheduled" for future flights
+    status: isLive ? (flight.status || flight.flight_status || 'scheduled') : 'scheduled',
     aircraft: flight.aircraft_icao || null,
   };
 }
@@ -173,35 +204,53 @@ Deno.serve(async (req) => {
 
     console.log(`flight-lookup: ${normalized}, date: ${dateParam || 'none'}`);
 
-    // Try /flight endpoint first (live/recent flights)
+    // Smart endpoint selection based on date proximity
+    // - Today ± 1 day: try /flight first (live data), fall back to /schedules
+    // - Future (> 1 day): skip /flight, go straight to /schedules (saves 1 API call)
+    // - Past (> 1 day): only /schedules for schedule info
     let flightData: any = null;
+    let isLiveData = false; // Track if data came from /flight (live) or /schedules
 
-    try {
-      const flightRes = await fetch(
-        `${AIRLABS_BASE}/flight?flight_iata=${normalized}&api_key=${AIRLABS_API_KEY}`,
-        { signal: AbortSignal.timeout(8000) },
-      );
-      if (flightRes.ok) {
-        const data = await flightRes.json();
-        if (data?.response) {
-          // If date given, only use live data if it matches the requested date
-          if (dateParam) {
-            const depTime = data.response.dep_time || data.response.dep_time_utc || '';
-            if (depTime.startsWith(dateParam)) {
-              flightData = data.response;
-            }
-            // else: live flight is for a different date, skip to schedules
-          } else {
-            flightData = data.response;
-          }
-        }
-      }
-    } catch (e) {
-      console.error('AirLabs /flight error:', e);
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    let daysDiff = 0;
+    if (dateParam) {
+      const reqDate = new Date(dateParam + 'T00:00:00');
+      daysDiff = Math.round((reqDate.getTime() - new Date(todayStr + 'T00:00:00').getTime()) / (24 * 60 * 60_000));
     }
 
-    // Fallback: /schedules endpoint (future scheduled flights)
-    if (!flightData) {
+    const tryFlightEndpoint = !dateParam || (daysDiff >= -1 && daysDiff <= 1);
+    const trySchedulesEndpoint = true; // Always available as fallback
+
+    // Step 1: /flight endpoint (only for today ± 1 day or no date specified)
+    if (tryFlightEndpoint) {
+      try {
+        const flightRes = await fetch(
+          `${AIRLABS_BASE}/flight?flight_iata=${normalized}&api_key=${AIRLABS_API_KEY}`,
+          { signal: AbortSignal.timeout(8000) },
+        );
+        if (flightRes.ok) {
+          const data = await flightRes.json();
+          if (data?.response) {
+            if (dateParam) {
+              const depTime = data.response.dep_time || data.response.dep_time_utc || '';
+              if (depTime.startsWith(dateParam)) {
+                flightData = data.response;
+                isLiveData = true;
+              }
+            } else {
+              flightData = data.response;
+              isLiveData = true;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('AirLabs /flight error:', e);
+      }
+    }
+
+    // Step 2: /schedules endpoint (if /flight didn't return data)
+    if (!flightData && trySchedulesEndpoint) {
       try {
         const schedRes = await fetch(
           `${AIRLABS_BASE}/schedules?flight_iata=${normalized}&api_key=${AIRLABS_API_KEY}`,
@@ -237,7 +286,7 @@ Deno.serve(async (req) => {
       }, origin);
     }
 
-    const result = await normalizeFlightData(flightData, normalized, dateParam);
+    const result = await normalizeFlightData(flightData, normalized, dateParam, isLiveData);
     return json(result, origin);
   } catch (e) {
     console.error('flight-lookup error:', e);

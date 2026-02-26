@@ -28,9 +28,24 @@ export function isValidFlightNumber(value: string): boolean {
   return FLIGHT_IATA_REGEX.test(value.toUpperCase().replace(/\s/g, ''));
 }
 
+// Client-side cache: deduplicates calls from useFlightStatus + FlightLookupWidget
+const flightCache = new Map<string, { data: FlightInfo; fetchedAt: number }>();
+const CACHE_TTL_MS = 15 * 60_000; // 15 minutes
+
+function getCacheKey(flightIata: string, flightDate?: string): string {
+  return `${flightIata}_${flightDate || ''}`;
+}
+
 export async function lookupFlight(flightIata: string, flightDate?: string): Promise<FlightInfo | null> {
   const normalized = flightIata.toUpperCase().replace(/\s/g, '');
   if (!isValidFlightNumber(normalized)) return null;
+
+  // Check client cache first
+  const cacheKey = getCacheKey(normalized, flightDate);
+  const cached = flightCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
 
   try {
     const body: Record<string, string> = { flight_iata: normalized };
@@ -48,7 +63,14 @@ export async function lookupFlight(flightIata: string, flightDate?: string): Pro
 
     if (data?.error && !data?.found) return null;
 
-    return data as FlightInfo;
+    const result = data as FlightInfo;
+
+    // Cache successful results
+    if (result?.found) {
+      flightCache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+    }
+
+    return result;
   } catch (e) {
     console.error('Flight lookup failed:', e);
     return null;

@@ -56,7 +56,34 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const tabWidths = useRef<number[]>([]);
 
   const weather = useWeather(tripId, tripStartDate, tripEndDate, tripDestLat, tripDestLng);
-  const flightStatuses = useFlightStatus(allTripActivities, tripStartDate, tripEndDate);
+
+  // Only pass visible flights to useFlightStatus: current day + arrival/departure transports
+  const visibleFlightActivities = useMemo(() => {
+    if (!selectedDayId) return [];
+    const selectedDay = days.find(d => d.id === selectedDayId);
+    const selectedDate = selectedDay?.date;
+    const isFirst = selectedDate === tripStartDate;
+    const isLast = selectedDate === tripEndDate;
+    const visible: Activity[] = [];
+    // Current day's activities (flights)
+    for (const act of activities) {
+      if (act.category === 'transport' && act.category_data?.transport_type === 'Flug' && act.category_data?.flight_verified) {
+        visible.push(act);
+      }
+    }
+    // Arrival/departure transport from allTripActivities (shown on first/last day)
+    if (isFirst || isLast) {
+      for (const act of allTripActivities) {
+        if (act.category !== 'transport' || act.category_data?.transport_type !== 'Flug' || !act.category_data?.flight_verified) continue;
+        if (visible.some(v => v.id === act.id)) continue;
+        if (isFirst && act.category_data?.is_arrival) visible.push(act);
+        if (isLast && act.category_data?.is_departure) visible.push(act);
+      }
+    }
+    return visible;
+  }, [activities, allTripActivities, selectedDayId, days, tripStartDate, tripEndDate]);
+
+  const flightStatuses = useFlightStatus(visibleFlightActivities, tripStartDate, tripEndDate);
 
   const scrollToActiveTab = useCallback((dayId: string) => {
     const idx = days.findIndex(d => d.id === dayId);

@@ -1,42 +1,79 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { lookupFlight, FlightInfo, isValidFlightNumber } from '../utils/flightLookup';
 import { Activity } from '../types/database';
 
-// Refresh interval: 10 minutes for live tracking
-const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+/**
+ * Determines if a flight is in the "live window" where real-time status
+ * is available from the AirLabs /flight endpoint (~24h before departure
+ * until landing). Outside this window only schedule data is available.
+ */
+function isInLiveWindow(flightDate?: string, depTime?: string, arrTime?: string): boolean {
+  if (!flightDate) return false;
 
-// In-memory cache to avoid redundant API calls across re-renders
-const flightCache = new Map<string, { data: FlightInfo; fetchedAt: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min cache
+  const now = new Date();
+
+  // After arrival → no more live updates needed
+  if (arrTime) {
+    const arrDateTime = new Date(`${flightDate}T${arrTime}`);
+    if (now > arrDateTime) return false;
+  }
+
+  // Check if within ~24h before departure
+  const depDateTime = depTime
+    ? new Date(`${flightDate}T${depTime}`)
+    : new Date(flightDate + 'T00:00:00');
+
+  const msUntilDep = depDateTime.getTime() - now.getTime();
+  const hoursUntilDep = msUntilDep / (60 * 60_000);
+
+  // Live window: from 24h before departure until arrival
+  return hoursUntilDep <= 24;
+}
 
 /**
- * Determines if a trip is "trackable" — active or starting within 1 day.
+ * Returns the refresh interval for a flight in the live window.
+ * Closer to departure/in flight = more frequent refreshes.
+ */
+function getLiveRefreshMs(flightDate?: string, depTime?: string, arrTime?: string): number {
+  if (!flightDate || !depTime) return 15 * 60_000; // 15min default
+
+  const now = new Date();
+  const depDateTime = new Date(`${flightDate}T${depTime}`);
+
+  // In the air (after departure, before arrival)
+  if (now >= depDateTime) {
+    return 3 * 60_000; // 3min
+  }
+
+  const msUntilDep = depDateTime.getTime() - now.getTime();
+  const hoursUntilDep = msUntilDep / (60 * 60_000);
+
+  if (hoursUntilDep <= 2) return 5 * 60_000;   // 5min - imminent
+  if (hoursUntilDep <= 6) return 10 * 60_000;  // 10min
+  return 15 * 60_000;                           // 15min - still within 24h
+}
+
+/**
+ * Determines if a trip has any flights worth fetching data for.
+ * Expanded to include any trip that hasn't ended yet (flight data like
+ * route/times is useful even weeks before departure).
  */
 export function isTripTrackable(startDate: string, endDate: string): boolean {
   const now = new Date();
-  const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T23:59:59');
-
-  // Trip is active
-  if (now >= start && now <= end) return true;
-
-  // Trip starts within 1 day
-  const oneDayBefore = new Date(start.getTime() - 24 * 60 * 60 * 1000);
-  if (now >= oneDayBefore && now < start) return true;
-
-  return false;
+  // Trip hasn't ended yet, or ended within 1 day (for final status)
+  const oneDayAfterEnd = new Date(end.getTime() + 24 * 60 * 60_000);
+  return now <= oneDayAfterEnd;
 }
 
 /**
  * Extract flight number from a verified transport activity's category_data.
- * Only returns a flight number if the activity was verified via API (flight_verified=true).
  */
 export function getFlightNumber(activity: Activity): string | null {
   if (activity.category !== 'transport') return null;
   const catData = activity.category_data || {};
   if (catData.transport_type !== 'Flug') return null;
-  if (!catData.flight_verified) return null; // Only track API-verified flights
-  // Prefer stored flight_iata (normalized), fallback to reference_number
+  if (!catData.flight_verified) return null;
   const ref = catData.flight_iata || catData.reference_number;
   if (!ref || typeof ref !== 'string') return null;
   return isValidFlightNumber(ref) ? ref.toUpperCase().replace(/\s/g, '') : null;
@@ -51,9 +88,25 @@ export function isVerifiedFlight(activity: Activity): boolean {
     !!activity.category_data?.flight_verified;
 }
 
+interface FlightEntry {
+  activityId: string;
+  flightIata: string;
+  flightDate?: string;
+  depTime?: string;
+  arrTime?: string;
+}
+
 /**
- * Hook to track live flight status for all flight activities in a trip.
- * Only fetches when trip is trackable (active or within 1 day).
+ * Hook to track flight status for visible flight activities.
+ *
+ * Fetch strategy:
+ * - Initial fetch: always (to get route, times, airline — even for future flights)
+ * - Live refresh: ONLY when flight is within ~24h of departure (AirLabs /flight
+ *   endpoint only returns live data for current/imminent flights)
+ * - After landing: no more refreshes
+ *
+ * The Edge Function returns status="scheduled" for schedule-only data,
+ * and real-time status (delayed/active/landed/etc.) for live data.
  */
 export function useFlightStatus(
   activities: Activity[],
@@ -62,68 +115,101 @@ export function useFlightStatus(
 ): Map<string, FlightInfo> {
   const [statuses, setStatuses] = useState<Map<string, FlightInfo>>(new Map());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initialFetchDone = useRef(false);
+
+  // Extract flight entries with stable key
+  const flightEntries: FlightEntry[] = useMemo(() => {
+    const entries: FlightEntry[] = [];
+    for (const act of activities) {
+      const fn = getFlightNumber(act);
+      if (fn) {
+        const catData = act.category_data || {};
+        entries.push({
+          activityId: act.id,
+          flightIata: fn,
+          flightDate: catData.departure_date || undefined,
+          depTime: catData.departure_time || undefined,
+          arrTime: catData.arrival_time || undefined,
+        });
+      }
+    }
+    return entries;
+  }, [activities]);
+
+  // Stable string key
+  const flightKey = useMemo(
+    () => flightEntries.map(e => `${e.activityId}:${e.flightIata}:${e.flightDate || ''}`).join('|'),
+    [flightEntries],
+  );
+
+  // Check if ANY flight is in the live window (needs refresh)
+  const hasLiveFlights = useMemo(
+    () => flightEntries.some(e => isInLiveWindow(e.flightDate, e.depTime, e.arrTime)),
+    [flightEntries],
+  );
+
+  // Shortest refresh interval among live flights only
+  const liveRefreshMs = useMemo(() => {
+    if (!hasLiveFlights) return null;
+    let shortest = Infinity;
+    for (const entry of flightEntries) {
+      if (isInLiveWindow(entry.flightDate, entry.depTime, entry.arrTime)) {
+        const ms = getLiveRefreshMs(entry.flightDate, entry.depTime, entry.arrTime);
+        if (ms < shortest) shortest = ms;
+      }
+    }
+    return shortest === Infinity ? null : shortest;
+  }, [flightEntries, hasLiveFlights]);
 
   const fetchStatuses = useCallback(async () => {
     if (!isTripTrackable(tripStartDate, tripEndDate)) return;
+    if (flightEntries.length === 0) return;
 
-    // Find all flight activities with valid flight numbers
-    const flightActivities: Array<{ activityId: string; flightIata: string; flightDate?: string }> = [];
-    for (const act of activities) {
-      const fn = getFlightNumber(act);
-      if (fn) flightActivities.push({
-        activityId: act.id,
-        flightIata: fn,
-        flightDate: act.category_data?.departure_date || undefined,
-      });
-    }
-
-    if (flightActivities.length === 0) return;
-
-    const newStatuses = new Map<string, FlightInfo>();
-    const now = Date.now();
-
-    // Fetch in parallel (max 5 concurrent to respect free tier)
     const results = await Promise.allSettled(
-      flightActivities.map(async ({ activityId, flightIata, flightDate }) => {
-        // Check cache first (include date in cache key)
-        const cacheKey = `${flightIata}_${flightDate || ''}`;
-        const cached = flightCache.get(cacheKey);
-        if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
-          return { activityId, data: cached.data };
-        }
-
+      flightEntries.map(async ({ activityId, flightIata, flightDate }) => {
         const data = await lookupFlight(flightIata, flightDate);
         if (data?.found) {
-          flightCache.set(cacheKey, { data, fetchedAt: now });
           return { activityId, data };
         }
         return null;
       }),
     );
 
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value) {
-        newStatuses.set(result.value.activityId, result.value.data);
+    setStatuses(prev => {
+      const merged = new Map(prev);
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          merged.set(result.value.activityId, result.value.data);
+        }
       }
-    }
+      return merged;
+    });
+  }, [flightKey, tripStartDate, tripEndDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (newStatuses.size > 0) {
-      setStatuses(newStatuses);
-    }
-  }, [activities, tripStartDate, tripEndDate]);
-
+  // Initial fetch (once per flight set change)
   useEffect(() => {
-    fetchStatuses();
+    initialFetchDone.current = false;
+    fetchStatuses().then(() => { initialFetchDone.current = true; });
+  }, [fetchStatuses]);
 
-    // Set up periodic refresh
-    if (isTripTrackable(tripStartDate, tripEndDate)) {
-      intervalRef.current = setInterval(fetchStatuses, REFRESH_INTERVAL_MS);
+  // Live refresh interval — only active when flights are in the live window
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    if (liveRefreshMs !== null && isTripTrackable(tripStartDate, tripEndDate)) {
+      intervalRef.current = setInterval(fetchStatuses, liveRefreshMs);
     }
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [fetchStatuses, tripStartDate, tripEndDate]);
+  }, [fetchStatuses, liveRefreshMs, tripStartDate, tripEndDate]);
 
   return statuses;
 }

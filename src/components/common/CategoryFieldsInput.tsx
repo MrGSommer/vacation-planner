@@ -126,7 +126,7 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
             <FlightLookupWidget
               key="flight-lookup"
               flightNumber={data.reference_number || ''}
-              flightDate={data.departure_date || tripStartDate || undefined}
+              flightDate={data.departure_date || undefined}
               onApply={(flight) => {
                 const updates: Record<string, any> = { ...data };
                 // Normalize flight number to uppercase (e.g. "lx1234" → "LX1234")
@@ -180,13 +180,32 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, f
   const [loading, setLoading] = useState(false);
   const [flight, setFlight] = useState<FlightInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLookedUp = useRef('');
 
-  const doLookup = useCallback(async (num: string, date?: string) => {
-    const normalized = num.toUpperCase().replace(/\s/g, '');
-    const cacheKey = `${normalized}_${date || ''}`;
-    if (cacheKey === lastLookedUp.current) return;
+  // Reset flight/error when flightNumber changes (user is editing)
+  useEffect(() => {
+    const normalized = flightNumber.toUpperCase().replace(/\s/g, '');
+    const cacheKey = `${normalized}_${flightDate || ''}`;
+    if (cacheKey !== lastLookedUp.current) {
+      setFlight(null);
+      setError(null);
+    }
+  }, [flightNumber, flightDate]);
+
+  const doLookup = useCallback(async () => {
+    const trimmed = flightNumber.trim();
+    if (!trimmed || !isValidFlightNumber(trimmed)) {
+      setError('Ungültige Flugnummer');
+      return;
+    }
+    if (!flightDate) {
+      setError('Bitte zuerst ein Abfahrtsdatum wählen');
+      return;
+    }
+
+    const normalized = trimmed.toUpperCase().replace(/\s/g, '');
+    const cacheKey = `${normalized}_${flightDate}`;
+    if (cacheKey === lastLookedUp.current && flight) return; // Already have this result
     lastLookedUp.current = cacheKey;
 
     setLoading(true);
@@ -194,7 +213,7 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, f
     setFlight(null);
 
     try {
-      const result = await lookupFlight(normalized, date);
+      const result = await lookupFlight(normalized, flightDate);
       if (result?.found) {
         setFlight(result);
       } else {
@@ -205,39 +224,29 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, f
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // Debounced auto-lookup (re-triggers when date changes)
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    const trimmed = flightNumber.trim();
-    if (trimmed.length < 4 || !isValidFlightNumber(trimmed)) {
-      setFlight(null);
-      setError(null);
-      lastLookedUp.current = '';
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => doLookup(trimmed, flightDate), 800);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [flightNumber, flightDate, doLookup]);
+  }, [flightNumber, flightDate, flight]);
 
   if (!flightNumber.trim() || flightNumber.trim().length < 3) return null;
+
+  // Show search button when no result yet and not loading
+  if (!flight && !loading) {
+    return (
+      <View style={flightStyles.container}>
+        {error && (
+          <Text style={[flightStyles.errorText, { marginBottom: spacing.sm }]}>{error}</Text>
+        )}
+        <TouchableOpacity style={flightStyles.searchBtn} onPress={doLookup} activeOpacity={0.7}>
+          <Text style={flightStyles.searchBtnText}>Flugdaten suchen</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
       <View style={flightStyles.container}>
         <ActivityIndicator size="small" color={colors.primary} />
         <Text style={flightStyles.loadingText}>Flugdaten werden gesucht...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={[flightStyles.container, flightStyles.errorContainer]}>
-        <Text style={flightStyles.errorText}>{error}</Text>
       </View>
     );
   }
@@ -318,6 +327,15 @@ const flightStyles = StyleSheet.create({
   arrow: { alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
   arrowText: { fontSize: 20, color: colors.textLight },
   duration: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  searchBtn: {
+    backgroundColor: colors.primary + '15',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary + '40',
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  searchBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
   applyBtn: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.md,
