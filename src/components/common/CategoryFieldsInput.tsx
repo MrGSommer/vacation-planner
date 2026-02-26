@@ -126,7 +126,7 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
             <FlightLookupWidget
               key="flight-lookup"
               flightNumber={data.reference_number || ''}
-              flightDate={data.departure_date || undefined}
+              flightDate={data.departure_date || tripStartDate || undefined}
               onApply={(flight) => {
                 const updates: Record<string, any> = { ...data };
                 // Normalize flight number to uppercase (e.g. "lx1234" → "LX1234")
@@ -140,11 +140,14 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
                 if (flight.arr_city && flight.arr_airport) {
                   updates.arrival_station_name = `${flight.arr_city} (${flight.arr_airport})`;
                 }
+                // Departure: keep user's departure_date, only update time from API
                 if (flight.dep_time_local) {
                   const depParts = flight.dep_time_local.split(/[T ]/);
-                  if (depParts[0]) updates.departure_date = depParts[0];
                   if (depParts[1]) updates.departure_time = depParts[1].substring(0, 5);
+                  // Only set departure_date if user hasn't entered one yet
+                  if (!data.departure_date && depParts[0]) updates.departure_date = depParts[0];
                 }
+                // Arrival: overwrite both date and time from API
                 if (flight.arr_time_local) {
                   const arrParts = flight.arr_time_local.split(/[T ]/);
                   if (arrParts[0]) updates.arrival_date = arrParts[0];
