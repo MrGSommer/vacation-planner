@@ -67,10 +67,14 @@ export function useFlightStatus(
     if (!isTripTrackable(tripStartDate, tripEndDate)) return;
 
     // Find all flight activities with valid flight numbers
-    const flightActivities: Array<{ activityId: string; flightIata: string }> = [];
+    const flightActivities: Array<{ activityId: string; flightIata: string; flightDate?: string }> = [];
     for (const act of activities) {
       const fn = getFlightNumber(act);
-      if (fn) flightActivities.push({ activityId: act.id, flightIata: fn });
+      if (fn) flightActivities.push({
+        activityId: act.id,
+        flightIata: fn,
+        flightDate: act.category_data?.departure_date || undefined,
+      });
     }
 
     if (flightActivities.length === 0) return;
@@ -80,16 +84,17 @@ export function useFlightStatus(
 
     // Fetch in parallel (max 5 concurrent to respect free tier)
     const results = await Promise.allSettled(
-      flightActivities.map(async ({ activityId, flightIata }) => {
-        // Check cache first
-        const cached = flightCache.get(flightIata);
+      flightActivities.map(async ({ activityId, flightIata, flightDate }) => {
+        // Check cache first (include date in cache key)
+        const cacheKey = `${flightIata}_${flightDate || ''}`;
+        const cached = flightCache.get(cacheKey);
         if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
           return { activityId, data: cached.data };
         }
 
-        const data = await lookupFlight(flightIata);
+        const data = await lookupFlight(flightIata, flightDate);
         if (data?.found) {
-          flightCache.set(flightIata, { data, fetchedAt: now });
+          flightCache.set(cacheKey, { data, fetchedAt: now });
           return { activityId, data };
         }
         return null;

@@ -28,13 +28,17 @@ export function isValidFlightNumber(value: string): boolean {
   return FLIGHT_IATA_REGEX.test(value.toUpperCase().replace(/\s/g, ''));
 }
 
-export async function lookupFlight(flightIata: string): Promise<FlightInfo | null> {
+export async function lookupFlight(flightIata: string, flightDate?: string): Promise<FlightInfo | null> {
   const normalized = flightIata.toUpperCase().replace(/\s/g, '');
   if (!isValidFlightNumber(normalized)) return null;
 
   try {
+    const body: Record<string, string> = { flight_iata: normalized };
+    if (flightDate && /^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
+      body.flight_date = flightDate;
+    }
     const { data, error } = await supabase.functions.invoke('flight-lookup', {
-      body: { flight_iata: normalized },
+      body,
     });
 
     if (error) {

@@ -22,7 +22,7 @@ async function gat(){
   console.log('send-email: token refreshed successfully');
   return cat!;
 }
-async function send(to:string,subj:string,html:string,unsub?:string){
+async function send(to:string,subj:string,html:string,unsub?:string):Promise<{sent:boolean,error?:string}>{
   const at=await gat();
   const lines=[`From: "WayFable" <${GSE}>`,`To: ${to}`,`Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subj)))}?=`,'MIME-Version: 1.0','Content-Type: text/html; charset=UTF-8','Content-Transfer-Encoding: base64'];
   if(unsub){lines.push(`List-Unsubscribe: <${unsub}>`);lines.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');}
@@ -34,10 +34,10 @@ async function send(to:string,subj:string,html:string,unsub?:string){
   if(!r.ok){
     const errText = await r.text();
     console.error(`send-email: Gmail API error ${r.status} for ${to}:`, errText);
-    return false;
+    return {sent:false, error:`Gmail API ${r.status}: ${errText}`};
   }
   console.log(`send-email: sent successfully to ${to}`);
-  return true;
+  return {sent:true};
 }
 Deno.serve(async(req)=>{
   if(req.method==='OPTIONS')return new Response('ok');
@@ -53,8 +53,8 @@ Deno.serve(async(req)=>{
       console.error('send-email: GMAIL_SENDER_EMAIL not set');
       return new Response(JSON.stringify({sent:false,reason:'no_sender_email'}));
     }
-    const s=await send(to,subject,html_body,unsubscribe_url||undefined);
-    return new Response(JSON.stringify({sent:s}));
+    const result=await send(to,subject,html_body,unsubscribe_url||undefined);
+    return new Response(JSON.stringify(result));
   }catch(e){
     console.error('send-email: unhandled error:', e);
     return new Response(JSON.stringify({error:(e as Error).message,sent:false}),{status:500});

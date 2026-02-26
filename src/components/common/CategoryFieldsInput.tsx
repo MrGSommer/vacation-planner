@@ -126,8 +126,13 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
             <FlightLookupWidget
               key="flight-lookup"
               flightNumber={data.reference_number || ''}
+              flightDate={data.departure_date || undefined}
               onApply={(flight) => {
                 const updates: Record<string, any> = { ...data };
+                // Normalize flight number to uppercase (e.g. "lx1234" → "LX1234")
+                if (flight.flight_iata) {
+                  updates.reference_number = flight.flight_iata;
+                }
                 if (flight.airline_name) updates.carrier = flight.airline_name;
                 if (flight.dep_city && flight.dep_airport) {
                   updates.departure_station_name = `${flight.dep_city} (${flight.dep_airport})`;
@@ -164,27 +169,29 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
 
 interface FlightLookupWidgetProps {
   flightNumber: string;
+  flightDate?: string;
   onApply: (flight: FlightInfo) => void;
 }
 
-const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, onApply }) => {
+const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, flightDate, onApply }) => {
   const [loading, setLoading] = useState(false);
   const [flight, setFlight] = useState<FlightInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLookedUp = useRef('');
 
-  const doLookup = useCallback(async (num: string) => {
+  const doLookup = useCallback(async (num: string, date?: string) => {
     const normalized = num.toUpperCase().replace(/\s/g, '');
-    if (normalized === lastLookedUp.current) return;
-    lastLookedUp.current = normalized;
+    const cacheKey = `${normalized}_${date || ''}`;
+    if (cacheKey === lastLookedUp.current) return;
+    lastLookedUp.current = cacheKey;
 
     setLoading(true);
     setError(null);
     setFlight(null);
 
     try {
-      const result = await lookupFlight(normalized);
+      const result = await lookupFlight(normalized, date);
       if (result?.found) {
         setFlight(result);
       } else {
@@ -197,7 +204,7 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, o
     }
   }, []);
 
-  // Debounced auto-lookup
+  // Debounced auto-lookup (re-triggers when date changes)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -209,9 +216,9 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, o
       return;
     }
 
-    debounceRef.current = setTimeout(() => doLookup(trimmed), 800);
+    debounceRef.current = setTimeout(() => doLookup(trimmed, flightDate), 800);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [flightNumber, doLookup]);
+  }, [flightNumber, flightDate, doLookup]);
 
   if (!flightNumber.trim() || flightNumber.trim().length < 3) return null;
 

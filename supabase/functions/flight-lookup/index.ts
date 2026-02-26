@@ -73,8 +73,17 @@ interface FlightResponse {
   aircraft: string | null;
 }
 
+// Combine a flight_date (YYYY-MM-DD) with a time-only or datetime string
+function applyDate(flightDate: string, timeVal: string | null): string | null {
+  if (!timeVal) return null;
+  // Already has a date portion (e.g. "2026-03-15 10:30" or "2026-03-15T10:30:00")
+  if (/^\d{4}-\d{2}-\d{2}/.test(timeVal)) return timeVal;
+  // Time-only (e.g. "10:30") — prepend the flight_date
+  return `${flightDate} ${timeVal}`;
+}
+
 // Normalize AirLabs response to our format
-async function normalizeFlightData(flight: any, flightIata: string): Promise<FlightResponse> {
+async function normalizeFlightData(flight: any, flightIata: string, flightDate?: string): Promise<FlightResponse> {
   // Enrich airport info in parallel
   const depIata = flight.dep_iata || null;
   const arrIata = flight.arr_iata || null;
@@ -83,6 +92,19 @@ async function normalizeFlightData(flight: any, flightIata: string): Promise<Fli
     depIata ? getAirportInfo(depIata) : Promise.resolve({ city: null, name: null }),
     arrIata ? getAirportInfo(arrIata) : Promise.resolve({ city: null, name: null }),
   ]);
+
+  let depTimeLocal = flight.dep_time || null;
+  let arrTimeLocal = flight.arr_time || null;
+  let depTimeUtc = flight.dep_time_utc || flight.dep_time || null;
+  let arrTimeUtc = flight.arr_time_utc || flight.arr_time || null;
+
+  // If flight_date provided and times are time-only (from /schedules), attach the date
+  if (flightDate && /^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
+    depTimeLocal = applyDate(flightDate, depTimeLocal);
+    arrTimeLocal = applyDate(flightDate, arrTimeLocal);
+    depTimeUtc = applyDate(flightDate, depTimeUtc);
+    arrTimeUtc = applyDate(flightDate, arrTimeUtc);
+  }
 
   return {
     found: true,
@@ -97,10 +119,10 @@ async function normalizeFlightData(flight: any, flightIata: string): Promise<Fli
     arr_city: arrInfo.city,
     arr_terminal: flight.arr_terminal || null,
     arr_gate: flight.arr_gate || null,
-    dep_time_utc: flight.dep_time_utc || flight.dep_time || null,
-    arr_time_utc: flight.arr_time_utc || flight.arr_time || null,
-    dep_time_local: flight.dep_time || null,
-    arr_time_local: flight.arr_time || null,
+    dep_time_utc: depTimeUtc,
+    arr_time_utc: arrTimeUtc,
+    dep_time_local: depTimeLocal,
+    arr_time_local: arrTimeLocal,
     duration_min: flight.duration || null,
     status: flight.status || flight.flight_status || null,
     aircraft: flight.aircraft_icao || null,
@@ -133,7 +155,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { flight_iata } = body;
+    const { flight_iata, flight_date } = body;
 
     if (!flight_iata || typeof flight_iata !== 'string') {
       return json({ error: 'flight_iata erforderlich' }, origin, 400);
@@ -144,6 +166,12 @@ Deno.serve(async (req) => {
     if (!/^[A-Z0-9]{2}\d{1,5}$/.test(normalized)) {
       return json({ error: 'Ungültiges Flugnummern-Format (z.B. LX1234)' }, origin, 400);
     }
+
+    // Validate flight_date if provided (YYYY-MM-DD)
+    const dateParam = (typeof flight_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(flight_date))
+      ? flight_date : undefined;
+
+    console.log(`flight-lookup: ${normalized}, date: ${dateParam || 'none'}`);
 
     // Try /flight endpoint first (live/recent flights)
     let flightData: any = null;
@@ -156,7 +184,16 @@ Deno.serve(async (req) => {
       if (flightRes.ok) {
         const data = await flightRes.json();
         if (data?.response) {
-          flightData = data.response;
+          // If date given, only use live data if it matches the requested date
+          if (dateParam) {
+            const depTime = data.response.dep_time || data.response.dep_time_utc || '';
+            if (depTime.startsWith(dateParam)) {
+              flightData = data.response;
+            }
+            // else: live flight is for a different date, skip to schedules
+          } else {
+            flightData = data.response;
+          }
         }
       }
     } catch (e) {
@@ -173,8 +210,18 @@ Deno.serve(async (req) => {
         if (schedRes.ok) {
           const data = await schedRes.json();
           if (data?.response?.length > 0) {
-            // Take the next upcoming flight
-            flightData = data.response[0];
+            if (dateParam) {
+              // Filter by day of week: schedules have 'days' array (1=Mon ... 7=Sun)
+              const requestedDate = new Date(dateParam + 'T00:00:00');
+              const jsDay = requestedDate.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+              const airlabsDay = jsDay === 0 ? 7 : jsDay; // Convert to 1=Mon ... 7=Sun
+              const matching = data.response.find((s: any) =>
+                !s.days || s.days.length === 0 || s.days.includes(String(airlabsDay))
+              );
+              flightData = matching || data.response[0];
+            } else {
+              flightData = data.response[0];
+            }
           }
         }
       } catch (e) {
@@ -190,7 +237,7 @@ Deno.serve(async (req) => {
       }, origin);
     }
 
-    const result = await normalizeFlightData(flightData, normalized);
+    const result = await normalizeFlightData(flightData, normalized, dateParam);
     return json(result, origin);
   } catch (e) {
     console.error('flight-lookup error:', e);
