@@ -22,12 +22,64 @@ async function gat(){
   console.log('send-email: token refreshed successfully');
   return cat!;
 }
+/** Strip HTML to plain text for multipart/alternative */
+function htmlToText(h:string):string{
+  return h
+    .replace(/<br\s*\/?>/gi,'\n')
+    .replace(/<\/p>/gi,'\n\n')
+    .replace(/<\/div>/gi,'\n')
+    .replace(/<\/h[1-6]>/gi,'\n\n')
+    .replace(/<a[^>]+href="([^"]*)"[^>]*>([^<]*)<\/a>/gi,'$2 ($1)')
+    .replace(/<[^>]+>/g,'')
+    .replace(/&middot;/g,'\u00b7').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+    .replace(/&auml;/g,'\u00e4').replace(/&ouml;/g,'\u00f6').replace(/&uuml;/g,'\u00fc')
+    .replace(/&Auml;/g,'\u00c4').replace(/&Ouml;/g,'\u00d6').replace(/&Uuml;/g,'\u00dc')
+    .replace(/\n{3,}/g,'\n\n').trim();
+}
+
+/** Wrap raw HTML body in proper DOCTYPE structure */
+function wrapHtml(body:string):string{
+  // If already has <!DOCTYPE or <html, return as-is
+  if(/<!DOCTYPE/i.test(body)||/^<html/i.test(body.trim())) return body;
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="font-family:sans-serif;padding:20px;margin:0">${body}</body></html>`;
+}
+
 async function send(to:string,subj:string,html:string,unsub?:string):Promise<{sent:boolean,error?:string}>{
   const at=await gat();
-  const lines=[`From: "WayFable" <${GSE}>`,`To: ${to}`,`Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subj)))}?=`,'MIME-Version: 1.0','Content-Type: text/html; charset=UTF-8','Content-Transfer-Encoding: base64'];
-  if(unsub){lines.push(`List-Unsubscribe: <${unsub}>`);lines.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');}
-  lines.push('',btoa(unescape(encodeURIComponent(html))));
-  const mime=lines.join('\r\n');
+  const boundary=`boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const fullHtml=wrapHtml(html);
+  const plainText=htmlToText(html);
+  const date=new Date().toUTCString();
+  const msgId=`<${Date.now()}.${Math.random().toString(36).slice(2)}@wayfable.ch>`;
+
+  const headers=[
+    `From: "WayFable" <${GSE}>`,
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subj)))}?=`,
+    `Date: ${date}`,
+    `Message-ID: ${msgId}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+  ];
+  if(unsub){headers.push(`List-Unsubscribe: <${unsub}>`);headers.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');}
+
+  const textPart=[
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    btoa(unescape(encodeURIComponent(plainText))),
+  ].join('\r\n');
+
+  const htmlPart=[
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    btoa(unescape(encodeURIComponent(fullHtml))),
+  ].join('\r\n');
+
+  const mime=[...headers,'',textPart,htmlPart,`--${boundary}--`].join('\r\n');
   const raw=btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   console.log(`send-email: sending to ${to}, subject: ${subj}`);
   const r=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{'Authorization':`Bearer ${at}`,'Content-Type':'application/json'},body:JSON.stringify({raw})});

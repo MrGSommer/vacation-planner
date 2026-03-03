@@ -398,6 +398,12 @@ interface FlightResponse {
   duration_min: number | null;
   status: string | null;
   aircraft: string | null;
+  dep_delayed: number | null;
+  arr_delayed: number | null;
+  dep_estimated: string | null;
+  arr_estimated: string | null;
+  arr_baggage: string | null;
+  frozen: boolean;
 }
 
 // Replace/set the date portion of a time value, preserving only the time.
@@ -471,6 +477,17 @@ async function normalizeFlightData(flight: any, flightIata: string, flightDate?:
     arrTimeUtc = replaceDate(flightDate, arrTimeUtc, arrDayOffset);
   }
 
+  // Delay fields (only meaningful for live data)
+  const depDelayed = isLive ? (flight.dep_delayed ?? null) : null;
+  const arrDelayed = isLive ? (flight.arr_delayed ?? null) : null;
+  const depEstimated = isLive ? (flight.dep_estimated || null) : null;
+  const arrEstimated = isLive ? (flight.arr_estimated || null) : null;
+  const arrBaggage = isLive ? (flight.arr_baggage || null) : null;
+  const status = isLive ? (flight.status || flight.flight_status || 'scheduled') : 'scheduled';
+
+  // Freeze: flight is past arrival → final status, no more updates needed
+  const frozen = status === 'landed' || status === 'cancelled';
+
   return {
     found: true,
     flight_iata: flight.flight_iata || flightIata,
@@ -489,9 +506,14 @@ async function normalizeFlightData(flight: any, flightIata: string, flightDate?:
     dep_time_local: depTimeLocal,
     arr_time_local: arrTimeLocal,
     duration_min: flight.duration || null,
-    // Live data: use real status. Template data: always "scheduled"
-    status: isLive ? (flight.status || flight.flight_status || 'scheduled') : 'scheduled',
+    status,
     aircraft: flight.aircraft_icao || null,
+    dep_delayed: depDelayed,
+    arr_delayed: arrDelayed,
+    dep_estimated: depEstimated,
+    arr_estimated: arrEstimated,
+    arr_baggage: arrBaggage,
+    frozen,
   };
 }
 

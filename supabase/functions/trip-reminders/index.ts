@@ -55,9 +55,9 @@ const footer = `<hr style="border:none;border-top:1px solid #eee;margin:24px 0 1
 
 function completionEmailHtml(p: any, t: any, stats: { activities: number; stops: number; photos: number; days: number }) {
   const g = p.first_name ? `Hallo ${p.first_name}` : 'Hallo';
-  return `<html><body style="font-family:sans-serif;padding:20px"><div style="max-width:500px;margin:0 auto;background:#FFF;border-radius:16px;padding:32px">
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="font-family:sans-serif;padding:20px;margin:0;background:#f5f5f5"><div style="max-width:500px;margin:0 auto;background:#FFF;border-radius:16px;padding:32px">
     <h2>${g},</h2>
-    <p>Deine Reise <b>${t.name}</b> nach <b>${t.destination}</b> ist vorbei — willkommen zur\u00fcck! \u{1F389}</p>
+    <p>Deine Reise <b>${t.name}</b> nach <b>${t.destination}</b> ist vorbei — willkommen zur\u00fcck!</p>
     <div style="background:#F8F9FA;border-radius:12px;padding:16px;margin:16px 0">
       <p style="margin:4px 0"><b>${stats.days}</b> Tage &middot; <b>${stats.activities}</b> Aktivit\u00e4ten &middot; <b>${stats.stops}</b> Stops &middot; <b>${stats.photos}</b> Fotos</p>
     </div>
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
           if (wantsEmail) {
             const g = p.first_name ? `Hallo ${p.first_name}` : 'Hallo';
             const dt = days === 1 ? 'morgen' : `in ${days} Tagen`;
-            const html = `<html><body style="font-family:sans-serif;padding:20px"><div style="max-width:500px;margin:0 auto;background:#FFF;border-radius:16px;padding:32px"><h2>${g},</h2><p>Deine Reise <b>${t.name}</b> nach <b>${t.destination}</b> startet ${dt}!</p><a href="${SITE}/trip/${t.id}" style="display:inline-block;background:#4F7CFF;color:#FFF;padding:10px 20px;border-radius:8px;text-decoration:none;margin-top:12px">Reise \u00f6ffnen</a>${footer}</div></body></html>`;
+            const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="font-family:sans-serif;padding:20px;margin:0;background:#f5f5f5"><div style="max-width:500px;margin:0 auto;background:#FFF;border-radius:16px;padding:32px"><h2>${g},</h2><p>Deine Reise <b>${t.name}</b> nach <b>${t.destination}</b> startet ${dt}!</p><a href="${SITE}/trip/${t.id}" style="display:inline-block;background:#4F7CFF;color:#FFF;padding:10px 20px;border-radius:8px;text-decoration:none;margin-top:12px">Reise \u00f6ffnen</a>${footer}</div></body></html>`;
             const emailResult = await callFn('send-email', { to: p.email, subject: title, html_body: html, unsubscribe_url: UNSUB });
             if (emailResult.sent === true) {
               await logN(p.id, t.id, ty, 'email');

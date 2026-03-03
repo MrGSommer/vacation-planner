@@ -14,7 +14,14 @@ function isInLiveWindow(flightDate?: string, depTime?: string, arrTime?: string)
 
   // After arrival → no more live updates needed
   if (arrTime) {
-    const arrDateTime = new Date(`${flightDate}T${arrTime}`);
+    // Handle arrival on next day (overnight flights): if arrTime < depTime, arrival is +1 day
+    let arrDateStr = flightDate;
+    if (depTime && arrTime < depTime) {
+      const d = new Date(flightDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      arrDateStr = d.toISOString().split('T')[0];
+    }
+    const arrDateTime = new Date(`${arrDateStr}T${arrTime}`);
     if (now > arrDateTime) return false;
   }
 
@@ -28,6 +35,37 @@ function isInLiveWindow(flightDate?: string, depTime?: string, arrTime?: string)
 
   // Live window: from 24h before departure until arrival
   return hoursUntilDep <= 24;
+}
+
+/**
+ * Checks if a flight is frozen (past arrival date, no more API calls needed).
+ * Returns true if the flight's arrival date+time is in the past.
+ */
+function isFlightFrozen(flightDate?: string, arrTime?: string, depTime?: string, status?: string | null): boolean {
+  // Already marked as frozen by API (landed/cancelled)
+  if (status === 'landed' || status === 'cancelled') return true;
+
+  if (!flightDate) return false;
+
+  const now = new Date();
+
+  // Calculate arrival datetime
+  let arrDateStr = flightDate;
+  if (arrTime) {
+    // Handle overnight flights
+    if (depTime && arrTime < depTime) {
+      const d = new Date(flightDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      arrDateStr = d.toISOString().split('T')[0];
+    }
+    const arrDateTime = new Date(`${arrDateStr}T${arrTime}`);
+    // Add 2h buffer after arrival for final status
+    return now.getTime() > arrDateTime.getTime() + 2 * 60 * 60_000;
+  }
+
+  // No arrival time: freeze if flight date is > 1 day in the past
+  const flightEnd = new Date(flightDate + 'T23:59:59');
+  return now.getTime() > flightEnd.getTime() + 24 * 60 * 60_000;
 }
 
 /**
@@ -166,7 +204,18 @@ export function useFlightStatus(
     if (flightEntries.length === 0) return;
 
     const results = await Promise.allSettled(
-      flightEntries.map(async ({ activityId, flightIata, flightDate }) => {
+      flightEntries.map(async ({ activityId, flightIata, flightDate, depTime, arrTime }) => {
+        // Skip frozen flights — use cached status, don't hit API
+        const existing = statuses.get(activityId);
+        if (existing?.frozen) return null;
+        if (isFlightFrozen(flightDate, arrTime, depTime, existing?.status)) {
+          // Mark as frozen in cache so we never fetch again
+          if (existing) {
+            return { activityId, data: { ...existing, frozen: true } };
+          }
+          return null;
+        }
+
         const data = await lookupFlight(flightIata, flightDate);
         if (data?.found) {
           return { activityId, data };

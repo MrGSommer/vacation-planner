@@ -9,7 +9,9 @@ import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, EmptyState } from '../../components/common';
 import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
+import { extractExifDateFromUri } from '../../utils/exifReader';
 import { getDays } from '../../api/itineraries';
+import { getTrip } from '../../api/trips';
 import { Photo, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
@@ -55,6 +57,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [dayFilter, setDayFilter] = useState<string | null>(null); // null = all, day_id = filter
+  const [tripName, setTripName] = useState<string>('');
 
   // Bulk selection
   const [selectMode, setSelectMode] = useState(false);
@@ -76,9 +79,10 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, fetchedDays] = await Promise.all([getPhotos(tripId), getDays(tripId)]);
+      const [data, fetchedDays, trip] = await Promise.all([getPhotos(tripId), getDays(tripId), getTrip(tripId)]);
       setDays(fetchedDays.sort((a, b) => a.date.localeCompare(b.date)));
       setPhotos(data);
+      if (trip?.name) setTripName(trip.name);
       // Auto-tag photos without day_id
       const untagged = data.filter(p => !p.day_id && p.taken_at);
       if (untagged.length > 0 && fetchedDays.length > 0) {
@@ -140,12 +144,17 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         setUploadProgress({ current: i + 1, total });
         const asset = result.assets[i];
         const fileName = asset.uri.split('/').pop() || 'photo.jpg';
-        // Extract EXIF date
+        // Extract EXIF date — try picker metadata first, then binary EXIF reader
+        // Supports JPEG, HEIC/HEIF, WebP, PNG, TIFF
         const exif = (asset as any).exif;
-        const exifDate = parseExifDate(
+        let exifDate = parseExifDate(
           exif?.DateTimeOriginal || exif?.DateTime || exif?.DateTimeDigitized
         );
-        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate);
+        // Fallback: read EXIF from image binary (handles HEIC, WebP, etc.)
+        if (!exifDate) {
+          exifDate = await extractExifDateFromUri(asset.uri);
+        }
+        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate, tripName);
       }
       await loadPhotos();
     } catch (e) {
@@ -230,8 +239,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
+  // Build share filename: wayfable_{trip}_{datum}.jpg
+  const buildShareName = (photo: Photo, index: number): string => {
+    const trip = tripName
+      ? tripName.replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue')
+          .replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').toLowerCase()
+      : 'trip';
+    const dateStr = photo.taken_at
+      ? photo.taken_at.slice(0, 10).replace(/-/g, '')
+      : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    return `wayfable_${trip}_${dateStr}_${index + 1}.jpg`;
+  };
+
   // Export / Share — uses Web Share API or native share sheet
-  const handleExport = async (photoUrls: string[]) => {
+  const handleExport = async (photoUrls: string[], exportPhotos?: Photo[]) => {
     if (photoUrls.length === 0) return;
 
     if (Platform.OS === 'web') {
@@ -239,26 +260,34 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         // Try Web Share API (works on mobile browsers)
         if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
           const files: File[] = [];
-          for (const url of photoUrls) {
-            const response = await fetch(url);
+          for (let i = 0; i < photoUrls.length; i++) {
+            const response = await fetch(photoUrls[i]);
             const blob = await response.blob();
-            const fileName = url.split('/').pop() || 'photo.jpg';
-            files.push(new File([blob], fileName, { type: 'image/jpeg' }));
+            const cleanName = exportPhotos?.[i]
+              ? buildShareName(exportPhotos[i], i)
+              : `wayfable_foto_${i + 1}.jpg`;
+            // Ensure blob is typed as image/jpeg for proper OS recognition
+            const imageBlob = blob.type.startsWith('image/')
+              ? blob
+              : new Blob([blob], { type: 'image/jpeg' });
+            files.push(new File([imageBlob], cleanName, { type: 'image/jpeg' }));
           }
-          const shareData = { files };
+          const shareData: ShareData = { files };
           if (navigator.canShare(shareData)) {
             await navigator.share(shareData);
             return;
           }
         }
         // Fallback: download via blob
-        for (const url of photoUrls) {
-          const response = await fetch(url);
+        for (let i = 0; i < photoUrls.length; i++) {
+          const response = await fetch(photoUrls[i]);
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = blobUrl;
-          a.download = url.split('/').pop() || 'photo.jpg';
+          a.download = exportPhotos?.[i]
+            ? buildShareName(exportPhotos[i], i)
+            : `wayfable_foto_${i + 1}.jpg`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -289,8 +318,8 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     if (selectedIds.size === 0) return;
     setBulkProcessing(true);
     try {
-      const urls = photos.filter(p => selectedIds.has(p.id)).map(p => p.url);
-      await handleExport(urls);
+      const selected = photos.filter(p => selectedIds.has(p.id));
+      await handleExport(selected.map(p => p.url), selected);
       exitSelectMode();
     } catch (e) {
       Alert.alert('Fehler', 'Export fehlgeschlagen');
@@ -299,7 +328,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const handleSingleExport = (photo: Photo) => handleExport([photo.url]);
+  const handleSingleExport = (photo: Photo) => handleExport([photo.url], [photo]);
 
   // Viewer navigation
   const openViewer = (photo: Photo) => {

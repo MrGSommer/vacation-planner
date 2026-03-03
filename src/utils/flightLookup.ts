@@ -20,6 +20,14 @@ export interface FlightInfo {
   duration_min: number | null;
   status: string | null;
   aircraft: string | null;
+  // Delay fields
+  dep_delayed: number | null;       // Departure delay in minutes
+  arr_delayed: number | null;       // Arrival delay in minutes
+  dep_estimated: string | null;     // Updated departure time (local)
+  arr_estimated: string | null;     // Updated arrival time (local)
+  arr_baggage: string | null;       // Baggage claim belt
+  // Freeze flag: true when flight data is final (landed/past arrival)
+  frozen?: boolean;
 }
 
 export interface RouteFlightInfo {
@@ -141,6 +149,12 @@ async function performFlightLookup(normalized: string, flightDate: string | unde
       duration_min: data.duration_min || null,
       status: data.status || null,
       aircraft: data.aircraft || null,
+      dep_delayed: data.dep_delayed ?? null,
+      arr_delayed: data.arr_delayed ?? null,
+      dep_estimated: data.dep_estimated || null,
+      arr_estimated: data.arr_estimated || null,
+      arr_baggage: data.arr_baggage || null,
+      frozen: data.frozen || false,
     };
 
     if (result.found) {

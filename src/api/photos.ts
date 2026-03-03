@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { Photo, ItineraryDay } from '../types/database';
 
@@ -72,6 +73,60 @@ export const autoTagPhotos = async (tripId: string): Promise<number> => {
   return tagged;
 };
 
+/**
+ * Compress an image on web using Canvas.
+ * Resizes to max 2048px on longest side, JPEG quality 0.82.
+ * Good balance for smartphone photos (~1-2MB instead of 5-10MB).
+ * Handles JPEG, PNG, WebP, HEIC (Safari/iOS), AVIF, and TIFF.
+ * Canvas.toBlob always outputs JPEG — automatic format conversion.
+ */
+const compressImageWeb = (uri: string, maxSize = 2048, quality = 0.82): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      let { width, height } = img;
+
+      // Only downscale, never upscale
+      if (width > maxSize || height > maxSize) {
+        const ratio = Math.min(maxSize / width, maxSize / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => blob ? resolve(blob) : reject(new Error('Compression failed')),
+        'image/jpeg',
+        quality,
+      );
+    };
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = uri;
+  });
+};
+
+/** Sanitize a string for use in filenames (remove special chars, spaces → underscores) */
+const sanitizeForFilename = (s: string): string =>
+  s.replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue')
+    .replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+
+/** Build a standardized photo filename: wayfable_{trip}_{datum}.jpg */
+const buildPhotoName = (tripName: string | undefined, exifDate: string | null | undefined, index?: number): string => {
+  const trip = tripName ? sanitizeForFilename(tripName) : 'trip';
+  const dateStr = exifDate
+    ? exifDate.slice(0, 10).replace(/-/g, '') // "20260315"
+    : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const suffix = index !== undefined ? `_${index}` : '';
+  return `wayfable_${trip}_${dateStr}${suffix}.jpg`;
+};
+
 export const uploadPhoto = async (
   tripId: string,
   userId: string,
@@ -79,11 +134,26 @@ export const uploadPhoto = async (
   fileName: string,
   dayId?: string,
   exifDate?: string | null,
+  tripName?: string,
 ): Promise<Photo> => {
-  const path = `${tripId}/${Date.now()}_${fileName}`;
+  const cleanName = buildPhotoName(tripName, exifDate);
+  const path = `${tripId}/${Date.now()}_${cleanName}`;
 
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  let blob: Blob;
+  if (Platform.OS === 'web') {
+    // Web: compress via Canvas (resize + JPEG re-encode)
+    try {
+      blob = await compressImageWeb(uri);
+    } catch {
+      // Fallback to original if compression fails
+      const response = await fetch(uri);
+      blob = await response.blob();
+    }
+  } else {
+    // Native: expo-image-picker already applies quality: 0.7
+    const response = await fetch(uri);
+    blob = await response.blob();
+  }
 
   const { error: uploadError } = await supabase.storage
     .from('trip-photos')

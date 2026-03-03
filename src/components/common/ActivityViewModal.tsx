@@ -114,23 +114,50 @@ export const ActivityViewModal: React.FC<Props> = ({
                 : { label: 'Geplant', color: '#3498DB' };
               const depTime = flightStatus?.dep_time_local?.split(/[T ]/)[1]?.substring(0, 5);
               const arrTime = flightStatus?.arr_time_local?.split(/[T ]/)[1]?.substring(0, 5);
+              const depEstimated = flightStatus?.dep_estimated?.split(/[T ]/)[1]?.substring(0, 5);
+              const arrEstimated = flightStatus?.arr_estimated?.split(/[T ]/)[1]?.substring(0, 5);
+              const depDelayed = flightStatus?.dep_delayed;
+              const arrDelayed = flightStatus?.arr_delayed;
+              const hasDelay = (depDelayed && depDelayed > 0) || (arrDelayed && arrDelayed > 0);
               return (
                 <View style={styles.flightSection}>
                   <View style={styles.flightSectionHeader}>
-                    <Text style={styles.sectionLabel}>{hasLive ? 'Flugstatus (Live)' : 'Flugstatus'}</Text>
+                    <Text style={styles.sectionLabel}>
+                      {hasLive ? (flightStatus!.frozen ? 'Flugstatus (Final)' : 'Flugstatus (Live)') : 'Flugstatus'}
+                    </Text>
                     {statusLabel ? (
                       <View style={[styles.flightBadge, { backgroundColor: statusColor + '20' }]}>
                         <Text style={[styles.flightBadgeText, { color: statusColor }]}>{statusLabel}</Text>
                       </View>
                     ) : null}
                   </View>
+                  {/* Delay banner */}
+                  {hasLive && hasDelay && (
+                    <View style={[styles.delayBanner, { backgroundColor: '#E67E22' + '15' }]}>
+                      {depDelayed && depDelayed > 0 ? (
+                        <Text style={styles.delayText}>
+                          Abflug +{depDelayed} Min.{depEstimated ? ` (neu: ${depEstimated})` : ''}
+                        </Text>
+                      ) : null}
+                      {arrDelayed && arrDelayed > 0 ? (
+                        <Text style={styles.delayText}>
+                          Ankunft +{arrDelayed} Min.{arrEstimated ? ` (neu: ${arrEstimated})` : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
                   {hasLive && (
                     <>
                       <View style={styles.flightRoute}>
                         <View style={styles.flightAirport}>
                           <Text style={styles.flightCode}>{flightStatus!.dep_airport || '—'}</Text>
                           <Text style={styles.flightCity}>{flightStatus!.dep_city || ''}</Text>
-                          {depTime ? <Text style={styles.flightTime}>{depTime}</Text> : null}
+                          {depTime ? (
+                            <Text style={[styles.flightTime, depEstimated ? styles.flightTimeStrike : undefined]}>
+                              {depTime}
+                            </Text>
+                          ) : null}
+                          {depEstimated ? <Text style={[styles.flightTime, { color: '#E67E22' }]}>{depEstimated}</Text> : null}
                           {flightStatus!.dep_terminal && (
                             <Text style={styles.flightTerminal}>T{flightStatus!.dep_terminal}{flightStatus!.dep_gate ? ` Gate ${flightStatus!.dep_gate}` : ''}</Text>
                           )}
@@ -146,9 +173,17 @@ export const ActivityViewModal: React.FC<Props> = ({
                         <View style={styles.flightAirport}>
                           <Text style={styles.flightCode}>{flightStatus!.arr_airport || '—'}</Text>
                           <Text style={styles.flightCity}>{flightStatus!.arr_city || ''}</Text>
-                          {arrTime ? <Text style={styles.flightTime}>{arrTime}</Text> : null}
+                          {arrTime ? (
+                            <Text style={[styles.flightTime, arrEstimated ? styles.flightTimeStrike : undefined]}>
+                              {arrTime}
+                            </Text>
+                          ) : null}
+                          {arrEstimated ? <Text style={[styles.flightTime, { color: '#E67E22' }]}>{arrEstimated}</Text> : null}
                           {flightStatus!.arr_terminal && (
                             <Text style={styles.flightTerminal}>T{flightStatus!.arr_terminal}{flightStatus!.arr_gate ? ` Gate ${flightStatus!.arr_gate}` : ''}</Text>
+                          )}
+                          {flightStatus!.arr_baggage && (
+                            <Text style={styles.flightTerminal}>Band {flightStatus!.arr_baggage}</Text>
                           )}
                         </View>
                       </View>
@@ -276,6 +311,9 @@ const styles = StyleSheet.create({
   flightArrow: { alignItems: 'center', justifyContent: 'center', paddingTop: 4, paddingHorizontal: spacing.sm },
   flightArrowIcon: { fontSize: 18, color: colors.textLight },
   flightDuration: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  flightTimeStrike: { textDecorationLine: 'line-through', color: colors.textLight },
+  delayBanner: { borderRadius: borderRadius.md, padding: spacing.sm, marginBottom: spacing.sm },
+  delayText: { ...typography.bodySmall, color: '#E67E22', fontWeight: '600' },
   flightMeta: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md },
   flightMetaText: { ...typography.caption, color: colors.textLight },
   documentsSection: {},
