@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal, Animated,
-  Dimensions, Alert, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Animated,
+  Dimensions, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
@@ -16,6 +17,7 @@ import { Photo, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useToast } from '../../contexts/ToastContext';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { formatDateShort, formatDateMedium } from '../../utils/dateHelpers';
@@ -36,6 +38,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  const { showToast } = useToast();
   const creatorName = profile ? getDisplayName(profile) : undefined;
 
   if (!isFeatureAllowed('photos')) {
@@ -151,14 +154,15 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             // Create blob URL for Canvas compression
             const blobUrl = URL.createObjectURL(file);
             try {
-              await uploadPhoto(tripId, user.id, blobUrl, file.name, undefined, exifDate, tripName, creatorName);
+              const newPhoto = await uploadPhoto(tripId, user.id, blobUrl, file.name, undefined, exifDate, tripName, creatorName);
+              setPhotos(prev => [newPhoto, ...prev]);
             } finally {
               URL.revokeObjectURL(blobUrl);
             }
           }
           await loadPhotos();
         } catch (e) {
-          Alert.alert('Fehler', 'Foto konnte nicht hochgeladen werden');
+          showToast('Foto konnte nicht hochgeladen werden', 'error');
         } finally {
           setUploading(false);
           setUploadProgress({ current: 0, total: 0 });
@@ -194,11 +198,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         if (!exifDate) {
           exifDate = await extractExifDateFromUri(asset.uri);
         }
-        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate, tripName, creatorName);
+        const newPhoto = await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate, tripName, creatorName);
+        setPhotos(prev => [newPhoto, ...prev]);
       }
       await loadPhotos();
     } catch (e) {
-      Alert.alert('Fehler', 'Foto konnte nicht hochgeladen werden');
+      showToast('Foto konnte nicht hochgeladen werden', 'error');
     } finally {
       setUploading(false);
       setUploadProgress({ current: 0, total: 0 });
@@ -206,27 +211,27 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   // Single delete
-  const handleDelete = (photo: Photo) => {
-    Alert.alert('Foto löschen', 'Möchtest du dieses Foto wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Löschen', style: 'destructive', onPress: async () => {
-        try {
-          await deletePhoto(photo);
-          if (flatPhotos.length <= 1) {
-            setSelectedPhoto(null);
-          } else if (viewerIndex >= flatPhotos.length - 1) {
-            setViewerIndex(viewerIndex - 1);
-            setSelectedPhoto(flatPhotos[viewerIndex - 1]);
-          } else {
-            // Middle of list: show next photo (shifts into deleted position)
-            setSelectedPhoto(flatPhotos[viewerIndex + 1]);
-          }
-          await loadPhotos();
-        } catch (e) {
-          Alert.alert('Fehler', 'Foto konnte nicht gelöscht werden');
-        }
-      }},
-    ]);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (photo: Photo) => {
+    if (!window.confirm('Möchtest du dieses Foto wirklich löschen?')) return;
+    setDeleting(true);
+    try {
+      await deletePhoto(photo);
+      if (flatPhotos.length <= 1) {
+        setSelectedPhoto(null);
+      } else if (viewerIndex >= flatPhotos.length - 1) {
+        setViewerIndex(viewerIndex - 1);
+        setSelectedPhoto(flatPhotos[viewerIndex - 1]);
+      } else {
+        setSelectedPhoto(flatPhotos[viewerIndex + 1]);
+      }
+      await loadPhotos();
+    } catch (e) {
+      showToast('Foto konnte nicht gelöscht werden', 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Caption
@@ -244,7 +249,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       setPhotos(prev => prev.map(p => p.id === selectedPhoto.id ? { ...p, caption: newCaption } : p));
       setSelectedPhoto(prev => prev ? { ...prev, caption: newCaption } : null);
     } catch (e) {
-      Alert.alert('Fehler', 'Beschreibung konnte nicht gespeichert werden');
+      showToast('Beschreibung konnte nicht gespeichert werden', 'error');
     }
     setEditingCaption(false);
   };
@@ -262,28 +267,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const selectAll = () => setSelectedIds(new Set(photos.map(p => p.id)));
 
   // Bulk delete
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     const count = selectedIds.size;
     if (count === 0) return;
-    Alert.alert(
-      `${count} Foto${count > 1 ? 's' : ''} löschen`,
-      `Möchtest du ${count} Foto${count > 1 ? 's' : ''} unwiderruflich löschen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Löschen', style: 'destructive', onPress: async () => {
-          setBulkProcessing(true);
-          try {
-            await deletePhotos(photos.filter(p => selectedIds.has(p.id)));
-            exitSelectMode();
-            await loadPhotos();
-          } catch (e) {
-            Alert.alert('Fehler', 'Einige Fotos konnten nicht gelöscht werden');
-          } finally {
-            setBulkProcessing(false);
-          }
-        }},
-      ]
-    );
+    if (!window.confirm(`${count} Foto${count > 1 ? 's' : ''} unwiderruflich löschen?`)) return;
+    setBulkProcessing(true);
+    try {
+      await deletePhotos(photos.filter(p => selectedIds.has(p.id)));
+      exitSelectMode();
+      await loadPhotos();
+    } catch (e) {
+      showToast('Einige Fotos konnten nicht gelöscht werden', 'error');
+    } finally {
+      setBulkProcessing(false);
+    }
   };
 
   // Build share filename: wayfable_{trip}_{datum}.jpg
@@ -341,7 +338,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           URL.revokeObjectURL(blobUrl);
         }
       } catch (e) {
-        Alert.alert('Fehler', 'Fotos konnten nicht geteilt werden');
+        showToast('Fotos konnten nicht geteilt werden', 'error');
       }
       return;
     }
@@ -350,14 +347,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) {
-        Alert.alert('Nicht verfügbar', 'Teilen ist auf diesem Gerät nicht verfügbar');
+        showToast('Teilen ist auf diesem Gerät nicht verfügbar', 'error');
         return;
       }
       for (const url of photoUrls) {
         await Sharing.shareAsync(url, { mimeType: 'image/jpeg', dialogTitle: 'Foto speichern oder teilen' });
       }
     } catch (e) {
-      Alert.alert('Fehler', 'Fotos konnten nicht geteilt werden');
+      showToast('Fotos konnten nicht geteilt werden', 'error');
     }
   };
 
@@ -369,7 +366,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       await handleExport(selected.map(p => p.url), selected);
       exitSelectMode();
     } catch (e) {
-      Alert.alert('Fehler', 'Export fehlgeschlagen');
+      showToast('Export fehlgeschlagen', 'error');
     } finally {
       setBulkProcessing(false);
     }
@@ -478,7 +475,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         activeOpacity={0.85}
         style={styles.photoCell}
       >
-        <Image source={{ uri: item.thumbnail_url || item.url }} style={styles.photo} />
+        <Image
+          source={item.thumbnail_url || item.url}
+          style={styles.photo}
+          contentFit="cover"
+          transition={200}
+          recyclingKey={item.id}
+          cachePolicy="memory-disk"
+        />
         {!selectMode && (
           <View style={styles.photoOverlays}>
             {dayLabel && (
@@ -607,15 +611,19 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       )}
 
       {/* Upload progress */}
-      {uploading && uploadProgress.total > 1 && (
+      {uploading && (
         <View style={styles.uploadBanner}>
           <ActivityIndicator size="small" color={colors.accent} />
           <Text style={styles.uploadBannerText}>
-            Lade hoch {uploadProgress.current}/{uploadProgress.total}...
+            {uploadProgress.total > 1
+              ? `Lade hoch ${uploadProgress.current}/${uploadProgress.total}...`
+              : 'Lade Foto hoch...'}
           </Text>
-          <View style={styles.uploadProgressBar}>
-            <View style={[styles.uploadProgressFill, { width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }]} />
-          </View>
+          {uploadProgress.total > 1 && (
+            <View style={styles.uploadProgressBar}>
+              <View style={[styles.uploadProgressFill, { width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }]} />
+            </View>
+          )}
         </View>
       )}
 
@@ -692,7 +700,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Text style={styles.viewerNavText}>‹</Text>
                 </TouchableOpacity>
               )}
-              <Image source={{ uri: selectedPhoto.url }} style={styles.viewerImage} resizeMode="contain" />
+              <Image
+                source={selectedPhoto.url}
+                style={styles.viewerImage}
+                contentFit="contain"
+                transition={300}
+                placeholder={selectedPhoto.thumbnail_url || undefined}
+                cachePolicy="memory-disk"
+              />
               {viewerIndex < flatPhotos.length - 1 && !slideshowActive && (
                 <TouchableOpacity style={[styles.viewerNav, styles.viewerNavRight]} onPress={() => viewerGo(1)}>
                   <Text style={styles.viewerNavText}>›</Text>
@@ -733,8 +748,10 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                   </TouchableOpacity>
                 )}
               </View>
-              <TouchableOpacity style={styles.viewerDeleteBtn} onPress={() => handleDelete(selectedPhoto)}>
-                <Text style={styles.viewerDeleteText}>Löschen</Text>
+              <TouchableOpacity style={styles.viewerDeleteBtn} onPress={() => handleDelete(selectedPhoto)} disabled={deleting}>
+                {deleting
+                  ? <ActivityIndicator size="small" color={colors.error} />
+                  : <Text style={styles.viewerDeleteText}>Löschen</Text>}
               </TouchableOpacity>
             </View>
           )}

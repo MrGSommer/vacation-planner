@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Image, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getSharedTrip, ShareTripData } from '../../api/invitations';
 import { RootStackParamList } from '../../types/navigation';
@@ -51,7 +52,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {trip.cover_image_url && (
-        <Image source={{ uri: trip.cover_image_url }} style={styles.coverImage} />
+        <Image source={trip.cover_image_url} style={styles.coverImage} contentFit="cover" transition={300} cachePolicy="memory-disk" />
       )}
 
       <View style={styles.header}>
@@ -115,7 +116,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
           <View style={styles.photoGrid}>
             {photos.map((photo) => (
               <View key={photo.id} style={styles.photoItem}>
-                <Image source={{ uri: photo.thumbnail_url || photo.url }} style={styles.photoImage} />
+                <Image source={photo.thumbnail_url || photo.url} style={styles.photoImage} contentFit="cover" transition={200} cachePolicy="memory-disk" />
                 {photo.caption && (
                   <Text style={styles.photoCaption} numberOfLines={1}>{photo.caption}</Text>
                 )}
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   loadingText: { ...typography.body, color: colors.textSecondary, marginTop: spacing.md },
   errorIcon: { fontSize: 48, marginBottom: spacing.md },
   errorText: { ...typography.body, color: colors.error, textAlign: 'center' },
-  coverImage: { width: '100%', height: 220, resizeMode: 'cover' },
+  coverImage: { width: '100%', height: 220 },
   header: { padding: spacing.xl, alignItems: 'center' },
   title: { ...typography.h1, textAlign: 'center', marginBottom: spacing.xs },
   destination: { ...typography.h3, color: colors.primary, textAlign: 'center' },

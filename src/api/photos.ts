@@ -79,7 +79,7 @@ export const autoTagPhotos = async (tripId: string): Promise<number> => {
  * Handles JPEG, PNG, WebP, HEIC (Safari/iOS), AVIF, and TIFF.
  * Canvas.toBlob always outputs JPEG — automatic format conversion.
  */
-const compressImageWeb = (uri: string, maxSize = 2048, quality = 0.82): Promise<Blob> => {
+const compressImageWeb = (uri: string, maxSize = 1600, quality = 0.75): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -113,7 +113,7 @@ const compressImageWeb = (uri: string, maxSize = 2048, quality = 0.82): Promise<
 
 /** Generate a small thumbnail (300px, quality 0.5) for fast grid loading */
 const generateThumbnailWeb = (uri: string): Promise<Blob> =>
-  compressImageWeb(uri, 300, 0.5);
+  compressImageWeb(uri, 200, 0.4);
 
 /** Sanitize a string for use in filenames (remove special chars, spaces → underscores) */
 const sanitizeForFilename = (s: string): string =>
