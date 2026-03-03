@@ -275,6 +275,14 @@ export interface TripStop {
   created_at: string;
 }
 
+export interface ShareConfig {
+  activities: boolean;
+  stops: boolean;
+  photos: boolean;
+  budget: boolean;
+  packing: boolean;
+}
+
 export interface TripInvitation {
   id: string;
   trip_id: string;
@@ -286,6 +294,7 @@ export interface TripInvitation {
   type: 'info' | 'collaborate';
   is_active: boolean;
   accepted_count: number;
+  share_config: ShareConfig | null;
   created_at: string;
 }
 

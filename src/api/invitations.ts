@@ -1,8 +1,16 @@
 import { supabase } from './supabase';
-import { TripInvitation, TripCollaborator, Profile } from '../types/database';
+import { TripInvitation, TripCollaborator, Profile, ShareConfig } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 const BASE_URL = 'https://wayfable.ch';
+
+export const DEFAULT_SHARE_CONFIG: ShareConfig = {
+  activities: true,
+  stops: true,
+  photos: false,
+  budget: false,
+  packing: false,
+};
 
 export interface CollaboratorWithProfile extends TripCollaborator {
   profile: Pick<Profile, 'id' | 'email' | 'first_name' | 'last_name' | 'avatar_url'>;
@@ -61,22 +69,26 @@ const createInviteLinkInternal = async (
   invitedBy: string,
   type: 'info' | 'collaborate',
   role: 'editor' | 'viewer' = 'viewer',
-): Promise<{ token: string; url: string }> => {
+): Promise<{ token: string; url: string; share_config: ShareConfig | null }> => {
+  const insertData: Record<string, unknown> = {
+    trip_id: tripId,
+    invited_by: invitedBy,
+    type,
+    role,
+    status: 'pending',
+    is_active: true,
+  };
+  if (type === 'info') {
+    insertData.share_config = DEFAULT_SHARE_CONFIG;
+  }
   const { data, error } = await supabase
     .from('trip_invitations')
-    .insert({
-      trip_id: tripId,
-      invited_by: invitedBy,
-      type,
-      role,
-      status: 'pending',
-      is_active: true,
-    })
+    .insert(insertData)
     .select()
     .single();
   if (error) throw error;
   const prefix = type === 'info' ? 'share' : 'invite';
-  return { token: data.token, url: `${BASE_URL}/${prefix}/${data.token}` };
+  return { token: data.token, url: `${BASE_URL}/${prefix}/${data.token}`, share_config: data.share_config ?? null };
 };
 
 // Get existing active link or create a new one
@@ -85,11 +97,11 @@ export const getOrCreateInviteLink = async (
   invitedBy: string,
   type: 'info' | 'collaborate',
   role: 'editor' | 'viewer' = 'viewer',
-): Promise<{ token: string; url: string }> => {
+): Promise<{ token: string; url: string; share_config: ShareConfig | null }> => {
   // Look for existing active link for this trip+type
   const { data: existing } = await supabase
     .from('trip_invitations')
-    .select('token, type')
+    .select('token, type, share_config')
     .eq('trip_id', tripId)
     .eq('type', type)
     .eq('is_active', true)
@@ -97,7 +109,7 @@ export const getOrCreateInviteLink = async (
 
   if (existing) {
     const prefix = type === 'info' ? 'share' : 'invite';
-    return { token: existing.token, url: `${BASE_URL}/${prefix}/${existing.token}` };
+    return { token: existing.token, url: `${BASE_URL}/${prefix}/${existing.token}`, share_config: existing.share_config ?? null };
   }
 
   return createInviteLinkInternal(tripId, invitedBy, type, role);
@@ -119,6 +131,20 @@ export const resetInviteLink = async (
     .eq('is_active', true);
 
   return createInviteLinkInternal(tripId, invitedBy, type, role);
+};
+
+// Update share config for an active info link
+export const updateShareConfig = async (
+  tripId: string,
+  config: ShareConfig,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('trip_invitations')
+    .update({ share_config: config })
+    .eq('trip_id', tripId)
+    .eq('type', 'info')
+    .eq('is_active', true);
+  if (error) throw error;
 };
 
 // Keep backward compatible export
@@ -174,6 +200,11 @@ export interface ShareTripData {
   trip: { id: string; name: string; destination: string; start_date: string; end_date: string; cover_image_url: string | null };
   stops: Array<{ id: string; name: string; latitude: number; longitude: number; order_index: number; arrival_date: string | null; departure_date: string | null }>;
   activities: Array<{ id: string; title: string; description: string | null; category: string; date: string; start_time: string | null; end_time: string | null; location_name: string | null; latitude: number | null; longitude: number | null; stop_id: string | null; is_checked_in: boolean }>;
+  photos: Array<{ id: string; url: string; caption: string | null; taken_at: string | null }>;
+  budget: { total: number; currency: string; expenses: Array<{ description: string; amount: number; date: string; category_name: string; category_color: string }> } | null;
+  packing: Array<{ name: string; items: Array<{ name: string; category: string; is_packed: boolean }> }>;
+  shared_sections: ShareConfig;
+  is_authenticated: boolean;
 }
 
 export const getSharedTrip = async (token: string): Promise<ShareTripData> => {

@@ -9,11 +9,14 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
   getOrCreateInviteLink,
   resetInviteLink,
+  updateShareConfig,
+  DEFAULT_SHARE_CONFIG,
   getCollaborators,
   removeCollaborator,
   updateCollaboratorRole,
@@ -21,6 +24,7 @@ import {
   transferOwnership,
   CollaboratorWithProfile,
 } from '../../api/invitations';
+import { ShareConfig } from '../../types/database';
 import { deleteTrip } from '../../api/trips';
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -53,7 +57,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   userId,
 }) => {
   const { showToast } = useToast();
-  const { canAddCollaborator } = useSubscription();
+  const { canAddCollaborator, isFeatureAllowed } = useSubscription();
   const [tab, setTab] = useState<Tab>('share');
   const [type, setType] = useState<'info' | 'collaborate'>('collaborate');
   const [role, setRole] = useState<'editor' | 'viewer'>('viewer');
@@ -61,6 +65,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<CollaboratorWithProfile[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [shareConfig, setShareConfig] = useState<ShareConfig>(DEFAULT_SHARE_CONFIG);
 
   // Transfer ownership modal
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -97,8 +102,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const loadExistingLink = async () => {
     setLoading(true);
     try {
-      const { url } = await getOrCreateInviteLink(tripId, userId, type, role);
+      const { url, share_config } = await getOrCreateInviteLink(tripId, userId, type, role);
       setGeneratedUrl(url);
+      if (share_config) setShareConfig(share_config);
     } catch {
       // No existing link yet, that's fine
       setGeneratedUrl(null);
@@ -147,6 +153,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
     await Clipboard.setStringAsync(generatedUrl);
     showToast('Link kopiert!', 'success');
+  };
+
+  const handleToggleShareConfig = async (key: keyof ShareConfig, value: boolean) => {
+    const updated = { ...shareConfig, [key]: value };
+    setShareConfig(updated);
+    try {
+      await updateShareConfig(tripId, updated);
+    } catch {
+      // Revert on error
+      setShareConfig(shareConfig);
+      showToast('Fehler beim Speichern', 'error');
+    }
   };
 
   const handleClose = () => {
@@ -369,6 +387,62 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   <TouchableOpacity onPress={handleResetLink} style={styles.resetLink}>
                     <Text style={styles.resetLinkText}>Link zurücksetzen</Text>
                   </TouchableOpacity>
+
+                  {type === 'info' && (
+                    <View style={styles.configSection}>
+                      <Text style={styles.configTitle}>Sichtbare Bereiche</Text>
+                      <Text style={styles.configHint}>Eingeloggte Nutzer sehen die aktivierten Bereiche.</Text>
+
+                      <View style={styles.configRow}>
+                        <Text style={styles.configLabel}>Aktivitäten</Text>
+                        <Switch
+                          value={shareConfig.activities}
+                          onValueChange={(v) => handleToggleShareConfig('activities', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                      <View style={styles.configRow}>
+                        <Text style={styles.configLabel}>Stopps</Text>
+                        <Switch
+                          value={shareConfig.stops}
+                          onValueChange={(v) => handleToggleShareConfig('stops', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                      <View style={styles.configRow}>
+                        <Text style={[styles.configLabel, !isFeatureAllowed('photos') && styles.configLabelDisabled]}>
+                          Fotos{!isFeatureAllowed('photos') ? ' (Premium)' : ''}
+                        </Text>
+                        <Switch
+                          value={shareConfig.photos}
+                          onValueChange={(v) => handleToggleShareConfig('photos', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                          disabled={!isFeatureAllowed('photos')}
+                        />
+                      </View>
+                      <View style={styles.configRow}>
+                        <Text style={styles.configLabel}>Budget</Text>
+                        <Switch
+                          value={shareConfig.budget}
+                          onValueChange={(v) => handleToggleShareConfig('budget', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                      <View style={styles.configRow}>
+                        <Text style={styles.configLabel}>Packliste</Text>
+                        <Switch
+                          value={shareConfig.packing}
+                          onValueChange={(v) => handleToggleShareConfig('packing', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                    </View>
+                  )}
                 </>
               ) : null}
             </>
@@ -610,6 +684,12 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   leaveBtnText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },
+  configSection: { marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md },
+  configTitle: { ...typography.bodySmall, fontWeight: '600', marginBottom: 2 },
+  configHint: { ...typography.caption, color: colors.textLight, marginBottom: spacing.sm },
+  configRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.xs },
+  configLabel: { ...typography.bodySmall },
+  configLabelDisabled: { color: colors.textLight },
   closeBtn: { marginTop: spacing.md, alignItems: 'center' },
   closeText: { ...typography.body, color: colors.textSecondary },
   // Transfer modal

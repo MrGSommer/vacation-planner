@@ -94,32 +94,53 @@ const linking = {
 };
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
+  const { session, loading, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   const [currentRoute, setCurrentRoute] = useState('');
 
-  // Extract invite token from URL when user is not logged in
+  // Extract invite token or deep link path from URL when user is not logged in
   useEffect(() => {
     if (Platform.OS !== 'web' || session) return;
     const path = window.location.pathname;
-    const match = path.match(/^\/invite\/(.+)$/);
-    if (match) {
-      setPendingInviteToken(match[1]);
+    const inviteMatch = path.match(/^\/invite\/(.+)$/);
+    if (inviteMatch) {
+      setPendingInviteToken(inviteMatch[1]);
+    } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
+      // Save any deep link path for redirect after login
+      setPendingRedirectPath(path);
+    } else {
+      // Check for ?redirect= query param (e.g. /login?redirect=/share/token)
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect');
+      if (redirect && redirect.startsWith('/')) {
+        setPendingRedirectPath(redirect);
+      }
     }
-  }, [session, setPendingInviteToken]);
+  }, [session, setPendingInviteToken, setPendingRedirectPath]);
 
-  // After login: if pendingInviteToken exists, navigate to AcceptInvite
+  // After login: redirect to pending destination
   useEffect(() => {
-    if (!prevSessionRef.current && session && pendingInviteToken) {
-      // Small delay to let navigator mount
+    if (!prevSessionRef.current && session) {
       setTimeout(() => {
-        navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
-        setPendingInviteToken(null);
+        if (pendingInviteToken) {
+          navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
+          setPendingInviteToken(null);
+        } else if (pendingRedirectPath) {
+          // Use the linking config to resolve the path to a route
+          const path = pendingRedirectPath;
+          setPendingRedirectPath(null);
+          // Navigate via URL change — React Navigation's linking config will pick it up
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', path);
+            // Force re-evaluation of the linking config
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
+        }
       }, 100);
     }
     prevSessionRef.current = session;
-  }, [session, pendingInviteToken, setPendingInviteToken]);
+  }, [session, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath]);
 
   // PASSWORD_RECOVERY event → navigate to ResetPassword screen
   useEffect(() => {
