@@ -127,14 +127,20 @@ export const AppNavigator: React.FC = () => {
           navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
           setPendingInviteToken(null);
         } else if (pendingRedirectPath) {
-          // Use the linking config to resolve the path to a route
           const path = pendingRedirectPath;
           setPendingRedirectPath(null);
-          // Navigate via URL change — React Navigation's linking config will pick it up
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', path);
-            // Force re-evaluation of the linking config
-            window.dispatchEvent(new PopStateEvent('popstate'));
+            // Wait until navigation state is fully initialized before triggering
+            const attemptRedirect = (retries = 0) => {
+              if (retries > 20) return;
+              if (!navigationRef.current?.getRootState()?.routes) {
+                setTimeout(() => attemptRedirect(retries + 1), 100);
+                return;
+              }
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            };
+            attemptRedirect();
           }
         }
       }, 100);
