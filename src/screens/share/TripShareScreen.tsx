@@ -115,7 +115,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
           <View style={styles.photoGrid}>
             {photos.map((photo) => (
               <View key={photo.id} style={styles.photoItem}>
-                <Image source={{ uri: photo.url }} style={styles.photoImage} />
+                <Image source={{ uri: photo.thumbnail_url || photo.url }} style={styles.photoImage} />
                 {photo.caption && (
                   <Text style={styles.photoCaption} numberOfLines={1}>{photo.caption}</Text>
                 )}

@@ -200,7 +200,7 @@ export interface ShareTripData {
   trip: { id: string; name: string; destination: string; start_date: string; end_date: string; cover_image_url: string | null };
   stops: Array<{ id: string; name: string; latitude: number; longitude: number; order_index: number; arrival_date: string | null; departure_date: string | null }>;
   activities: Array<{ id: string; title: string; description: string | null; category: string; date: string; start_time: string | null; end_time: string | null; location_name: string | null; latitude: number | null; longitude: number | null; stop_id: string | null; is_checked_in: boolean }>;
-  photos: Array<{ id: string; url: string; caption: string | null; taken_at: string | null }>;
+  photos: Array<{ id: string; url: string; thumbnail_url: string | null; caption: string | null; taken_at: string | null }>;
   budget: { total: number; currency: string; expenses: Array<{ description: string; amount: number; date: string; category_name: string; category_color: string }> } | null;
   packing: Array<{ name: string; items: Array<{ name: string; category: string; is_packed: boolean }> }>;
   shared_sections: ShareConfig;

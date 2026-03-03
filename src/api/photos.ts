@@ -75,8 +75,7 @@ export const autoTagPhotos = async (tripId: string): Promise<number> => {
 
 /**
  * Compress an image on web using Canvas.
- * Resizes to max 2048px on longest side, JPEG quality 0.82.
- * Good balance for smartphone photos (~1-2MB instead of 5-10MB).
+ * Resizes to max dimension on longest side with given JPEG quality.
  * Handles JPEG, PNG, WebP, HEIC (Safari/iOS), AVIF, and TIFF.
  * Canvas.toBlob always outputs JPEG — automatic format conversion.
  */
@@ -112,6 +111,10 @@ const compressImageWeb = (uri: string, maxSize = 2048, quality = 0.82): Promise<
   });
 };
 
+/** Generate a small thumbnail (300px, quality 0.5) for fast grid loading */
+const generateThumbnailWeb = (uri: string): Promise<Blob> =>
+  compressImageWeb(uri, 300, 0.5);
+
 /** Sanitize a string for use in filenames (remove special chars, spaces → underscores) */
 const sanitizeForFilename = (s: string): string =>
   s.replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue')
@@ -135,20 +138,27 @@ export const uploadPhoto = async (
   dayId?: string,
   exifDate?: string | null,
   tripName?: string,
+  creatorName?: string,
 ): Promise<Photo> => {
   const cleanName = buildPhotoName(tripName, exifDate);
-  const path = `${tripId}/${Date.now()}_${cleanName}`;
+  const ts = Date.now();
+  const path = `${tripId}/${ts}_${cleanName}`;
+  const thumbPath = `${tripId}/thumb_${ts}_${cleanName}`;
 
   let blob: Blob;
+  let thumbBlob: Blob | null = null;
   if (Platform.OS === 'web') {
     // Web: compress via Canvas (resize + JPEG re-encode)
     try {
       blob = await compressImageWeb(uri);
     } catch {
-      // Fallback to original if compression fails
       const response = await fetch(uri);
       blob = await response.blob();
     }
+    // Generate thumbnail for fast grid loading (300px, quality 0.5)
+    try {
+      thumbBlob = await generateThumbnailWeb(uri);
+    } catch { /* grid will fall back to full image */ }
   } else {
     // Native: expo-image-picker already applies quality: 0.7
     const response = await fetch(uri);
@@ -159,6 +169,17 @@ export const uploadPhoto = async (
     .from('trip-photos')
     .upload(path, blob, { contentType: 'image/jpeg' });
   if (uploadError) throw uploadError;
+
+  // Upload thumbnail (non-blocking — if it fails, grid uses full image)
+  let thumbnailUrl: string | null = null;
+  if (thumbBlob) {
+    const { error: thumbError } = await supabase.storage
+      .from('trip-photos')
+      .upload(thumbPath, thumbBlob, { contentType: 'image/jpeg' });
+    if (!thumbError) {
+      thumbnailUrl = supabase.storage.from('trip-photos').getPublicUrl(thumbPath).data.publicUrl;
+    }
+  }
 
   const { data: { publicUrl } } = supabase.storage
     .from('trip-photos')
@@ -179,8 +200,10 @@ export const uploadPhoto = async (
       user_id: userId,
       storage_path: path,
       url: publicUrl,
+      thumbnail_url: thumbnailUrl,
       day_id: resolvedDayId,
       taken_at: takenAt,
+      creator_name: creatorName || null,
     })
     .select()
     .single();
@@ -193,17 +216,26 @@ export const updatePhotoCaption = async (photoId: string, caption: string | null
   if (error) throw error;
 };
 
+/** Derive thumbnail storage path from the full-size path */
+const thumbPathFromFull = (storagePath: string): string => {
+  const parts = storagePath.split('/');
+  const file = parts.pop() || '';
+  return [...parts, `thumb_${file}`].join('/');
+};
+
 export const deletePhoto = async (photo: Photo): Promise<void> => {
-  await supabase.storage.from('trip-photos').remove([photo.storage_path]);
+  // Clean up storage files (non-blocking — DB delete is the important part)
+  const paths = [photo.storage_path, thumbPathFromFull(photo.storage_path)];
+  try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
   const { error } = await supabase.from('photos').delete().eq('id', photo.id);
   if (error) throw error;
 };
 
 export const deletePhotos = async (photos: Photo[]): Promise<void> => {
   if (photos.length === 0) return;
-  const paths = photos.map(p => p.storage_path);
+  const paths = photos.flatMap(p => [p.storage_path, thumbPathFromFull(p.storage_path)]);
   const ids = photos.map(p => p.id);
-  await supabase.storage.from('trip-photos').remove(paths);
+  try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
   const { error } = await supabase.from('photos').delete().in('id', ids);
   if (error) throw error;
 };

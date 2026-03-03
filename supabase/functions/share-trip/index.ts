@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
     if (shareConfig.photos) {
       const { data } = await supabase
         .from('photos')
-        .select('id, url, caption, taken_at')
+        .select('id, url, thumbnail_url, caption, taken_at')
         .eq('trip_id', tripId)
         .order('taken_at', { ascending: false });
       photos = data || [];

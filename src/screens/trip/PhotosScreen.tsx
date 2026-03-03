@@ -9,13 +9,14 @@ import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, EmptyState } from '../../components/common';
 import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
-import { extractExifDateFromUri } from '../../utils/exifReader';
+import { extractExifDateFromUri, extractExifDateFromBuffer } from '../../utils/exifReader';
 import { getDays } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { Photo, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { getDisplayName } from '../../utils/profileHelpers';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { formatDateShort, formatDateMedium } from '../../utils/dateHelpers';
 import { parseISO } from 'date-fns';
@@ -33,8 +34,9 @@ type SortOrder = 'newest' | 'oldest';
 
 export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  const creatorName = profile ? getDisplayName(profile) : undefined;
 
   if (!isFeatureAllowed('photos')) {
     return (
@@ -127,6 +129,46 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Upload with progress + EXIF extraction
   const handleUpload = async () => {
+    if (Platform.OS === 'web') {
+      // Web: use native file input to access ORIGINAL files with EXIF intact
+      // (expo-image-picker recompresses via Canvas, stripping EXIF)
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.onchange = async () => {
+        const files = Array.from(input.files || []);
+        if (files.length === 0 || !user) return;
+        setUploading(true);
+        setUploadProgress({ current: 0, total: files.length });
+        try {
+          for (let i = 0; i < files.length; i++) {
+            setUploadProgress({ current: i + 1, total: files.length });
+            const file = files[i];
+            // Read EXIF from ORIGINAL file bytes (before any compression)
+            const buffer = await file.arrayBuffer();
+            const exifDate = extractExifDateFromBuffer(buffer);
+            // Create blob URL for Canvas compression
+            const blobUrl = URL.createObjectURL(file);
+            try {
+              await uploadPhoto(tripId, user.id, blobUrl, file.name, undefined, exifDate, tripName, creatorName);
+            } finally {
+              URL.revokeObjectURL(blobUrl);
+            }
+          }
+          await loadPhotos();
+        } catch (e) {
+          Alert.alert('Fehler', 'Foto konnte nicht hochgeladen werden');
+        } finally {
+          setUploading(false);
+          setUploadProgress({ current: 0, total: 0 });
+        }
+      };
+      input.click();
+      return;
+    }
+
+    // Native: use expo-image-picker
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.7,
@@ -145,16 +187,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         const asset = result.assets[i];
         const fileName = asset.uri.split('/').pop() || 'photo.jpg';
         // Extract EXIF date — try picker metadata first, then binary EXIF reader
-        // Supports JPEG, HEIC/HEIF, WebP, PNG, TIFF
         const exif = (asset as any).exif;
         let exifDate = parseExifDate(
           exif?.DateTimeOriginal || exif?.DateTime || exif?.DateTimeDigitized
         );
-        // Fallback: read EXIF from image binary (handles HEIC, WebP, etc.)
         if (!exifDate) {
           exifDate = await extractExifDateFromUri(asset.uri);
         }
-        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate, tripName);
+        await uploadPhoto(tripId, user.id, asset.uri, fileName, undefined, exifDate, tripName, creatorName);
       }
       await loadPhotos();
     } catch (e) {
@@ -170,14 +210,21 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     Alert.alert('Foto löschen', 'Möchtest du dieses Foto wirklich löschen?', [
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Löschen', style: 'destructive', onPress: async () => {
-        await deletePhoto(photo);
-        if (flatPhotos.length <= 1) {
-          setSelectedPhoto(null);
-        } else if (viewerIndex >= flatPhotos.length - 1) {
-          setViewerIndex(viewerIndex - 1);
-          setSelectedPhoto(flatPhotos[viewerIndex - 1]);
+        try {
+          await deletePhoto(photo);
+          if (flatPhotos.length <= 1) {
+            setSelectedPhoto(null);
+          } else if (viewerIndex >= flatPhotos.length - 1) {
+            setViewerIndex(viewerIndex - 1);
+            setSelectedPhoto(flatPhotos[viewerIndex - 1]);
+          } else {
+            // Middle of list: show next photo (shifts into deleted position)
+            setSelectedPhoto(flatPhotos[viewerIndex + 1]);
+          }
+          await loadPhotos();
+        } catch (e) {
+          Alert.alert('Fehler', 'Foto konnte nicht gelöscht werden');
         }
-        await loadPhotos();
       }},
     ]);
   };
@@ -431,7 +478,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         activeOpacity={0.85}
         style={styles.photoCell}
       >
-        <Image source={{ uri: item.url }} style={styles.photo} />
+        <Image source={{ uri: item.thumbnail_url || item.url }} style={styles.photo} />
         {!selectMode && (
           <View style={styles.photoOverlays}>
             {dayLabel && (

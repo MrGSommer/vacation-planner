@@ -18,6 +18,15 @@ export async function extractExifDateFromUri(uri: string): Promise<string | null
   try {
     const response = await fetch(uri);
     const buffer = await response.arrayBuffer();
+    return extractExifDateFromBuffer(buffer);
+  } catch {
+    return null;
+  }
+}
+
+/** Extract EXIF date directly from an ArrayBuffer (avoids fetch round-trip). */
+export function extractExifDateFromBuffer(buffer: ArrayBuffer): string | null {
+  try {
     const data = new Uint8Array(buffer);
     return extractExifDateAuto(data);
   } catch {
