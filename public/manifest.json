@@ -1,7 +1,9 @@
 {
+  "id": "/",
   "name": "WayFable",
   "short_name": "WayFable",
   "description": "Plane und verwalte deine Reisen gemeinsam — Routen, Budgets, Unterkünfte und mehr.",
+  "lang": "de",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

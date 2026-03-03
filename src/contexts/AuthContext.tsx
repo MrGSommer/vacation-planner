@@ -15,6 +15,8 @@ interface AuthContextType {
   updateCreditsBalance: (newBalance: number) => void;
   pendingInviteToken: string | null;
   setPendingInviteToken: (token: string | null) => void;
+  pendingRedirectPath: string | null;
+  setPendingRedirectPath: (path: string | null) => void;
   passwordRecovery: boolean;
   clearPasswordRecovery: () => void;
   pendingSetPassword: boolean;
@@ -30,6 +32,8 @@ const AuthContext = createContext<AuthContextType>({
   updateCreditsBalance: () => {},
   pendingInviteToken: null,
   setPendingInviteToken: () => {},
+  pendingRedirectPath: null,
+  setPendingRedirectPath: () => {},
   passwordRecovery: false,
   clearPasswordRecovery: () => {},
   pendingSetPassword: false,
@@ -76,6 +80,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         if (token) sessionStorage.setItem('pendingInviteToken', token);
         else sessionStorage.removeItem('pendingInviteToken');
+      } catch {}
+    }
+  }, []);
+
+  // Pending redirect path: preserve deep link destination through login
+  const [pendingRedirectPath, setPendingRedirectPathState] = useState<string | null>(() => {
+    if (Platform.OS === 'web') {
+      try { return sessionStorage.getItem('pendingRedirectPath'); } catch { return null; }
+    }
+    return null;
+  });
+
+  const setPendingRedirectPath = useCallback((path: string | null) => {
+    setPendingRedirectPathState(path);
+    if (Platform.OS === 'web') {
+      try {
+        if (path) sessionStorage.setItem('pendingRedirectPath', path);
+        else sessionStorage.removeItem('pendingRedirectPath');
       } catch {}
     }
   }, []);
@@ -174,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword }}>
       {children}
     </AuthContext.Provider>
   );
