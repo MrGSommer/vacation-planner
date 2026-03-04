@@ -7,6 +7,7 @@ import { getTrip } from '../../api/trips';
 import { getActivitiesForTrip } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getTripExpenseTotal } from '../../api/budgets';
+import { getPhotos } from '../../api/photos';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
@@ -60,6 +61,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activityCount, setActivityCount] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
+  const [photoCount, setPhotoCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [collaborators, setCollaborators] = useState<CollaboratorWithProfile[]>([]);
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -80,17 +82,19 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const loadData = async () => {
     try {
-      const [t, activities, spent, collabs] = await Promise.all([
+      const [t, activities, spent, collabs, photos] = await Promise.all([
         getTrip(tripId),
         getActivitiesForTrip(tripId),
         getTripExpenseTotal(tripId),
         getCollaborators(tripId).catch(() => []),
+        getPhotos(tripId).catch(() => []),
       ]);
       setTrip(t);
       activitiesRef.current = activities;
       setActivityCount(activities.length);
       setTotalSpent(spent);
       setCollaborators(collabs);
+      setPhotoCount(photos.length);
     } catch (e) {
       console.error(e);
     } finally {
@@ -483,12 +487,13 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={styles.gridRow}>
             {isFeatureAllowed('photos') ? (
               <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: rawThemeColor + '15' }]}
+                style={[styles.gridCard, { backgroundColor: themeTint }]}
                 onPress={() => navigation.navigate('Photos', { tripId })}
                 activeOpacity={0.7}
               >
-                <Icon name="images-outline" size={22} color={colors.primary} />
+                <Icon name="images" size={22} color={colors.primary} />
                 <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
+                {photoCount > 0 && <Text style={[styles.gridCardInfo, { color: themeColor }]}>{photoCount}</Text>}
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -504,7 +509,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
             {isFeatureAllowed('ai') ? (
               <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: rawThemeColor + '12' }]}
+                style={[styles.gridCard, { backgroundColor: themeTint }]}
                 onPress={() => setShowAiModal(true)}
                 activeOpacity={0.7}
               >

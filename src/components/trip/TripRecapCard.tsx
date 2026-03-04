@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Trip } from '../../types/database';
 import { getPhotos } from '../../api/photos';
 import { getStops } from '../../api/stops';
 import { updateTrip } from '../../api/trips';
 import { sendAiMessage, AiMessage } from '../../api/aiChat';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
-import { Icon, IconName } from '../../utils/icons';
+import { Icon } from '../../utils/icons';
 import { getDayCount } from '../../utils/dateHelpers';
 
 interface Props {
@@ -17,7 +16,6 @@ interface Props {
 }
 
 export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent }) => {
-  const navigation = useNavigation<any>();
   const [photoCount, setPhotoCount] = useState(0);
   const [stopCount, setStopCount] = useState(0);
   const [recap, setRecap] = useState<string | null>(trip.fable_recap || null);
@@ -47,16 +45,24 @@ export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent
       const messages: AiMessage[] = [
         {
           role: 'user',
-          content: `Erstelle einen kurzen, persönlichen Reise-Rückblick (2-3 Sätze) für folgende Reise:
+          content: `Du bist Fable, der charmante Reisebegleiter von WayFable. Schreibe einen witzigen, überraschenden Reise-Rückblick (3-4 Sätze) auf Deutsch.
+
+Reise-Daten:
 - Reise: ${trip.name}
 - Destination: ${trip.destination}
 - Dauer: ${days} Tage
 - Aktivitäten: ${activityCount}
 - Stopps: ${stopCount}
 - Fotos: ${photoCount}
-- Budget ausgegeben: ${totalSpent.toFixed(0)} ${trip.currency}
+- Budget: ${totalSpent.toFixed(0)} ${trip.currency}
 
-Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise besonders gemacht haben könnte.`,
+Regeln:
+- Sei witzig, warm und überraschend — kein generisches "Was für eine tolle Reise!"
+- Erfinde lustige Insights basierend auf den Zahlen (z.B. "Bei ${photoCount} Fotos hast du quasi jede Strassenlaterene dokumentiert" oder "Pro Tag ${(totalSpent / Math.max(days, 1)).toFixed(0)} ${trip.currency} — da hat sich jemand was gegönnt")
+- Spiele mit der Destination (lokale Klischees, Eigenheiten, Fun Facts)
+- Mach den User zum Helden der Story — übertreibe ruhig
+- Kein Emoji, keine Aufzählungen, fliessender Text
+- Duze den User`,
         },
       ];
       const response = await sendAiMessage('recap', messages, {
@@ -84,47 +90,12 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
     }
   };
 
-  const stats: { icon: IconName; value: number; label: string; screen: string; params: { tripId: string } }[] = [
-    { icon: 'calendar-outline', value: days, label: 'Tage', screen: 'Itinerary', params: { tripId: trip.id } },
-    { icon: 'list-outline', value: activityCount, label: 'Aktivitäten', screen: 'Itinerary', params: { tripId: trip.id } },
-    { icon: 'pin-outline', value: stopCount, label: 'Stopps', screen: 'Stops', params: { tripId: trip.id } },
-    { icon: 'images-outline', value: photoCount, label: 'Fotos', screen: 'Photos', params: { tripId: trip.id } },
-  ];
-
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Reise-Rückblick</Text>
-
-      <View style={styles.statsGrid}>
-        {stats.map(s => (
-          <TouchableOpacity
-            key={s.label}
-            style={styles.statItem}
-            onPress={() => navigation.navigate(s.screen, s.params)}
-            activeOpacity={0.7}
-          >
-            <Icon name={s.icon} size={iconSize.md} color={colors.primary} />
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {totalSpent > 0 && (
-        <TouchableOpacity
-          style={styles.budgetRow}
-          onPress={() => navigation.navigate('Budget', { tripId: trip.id })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.budgetLabel}>Gesamtausgaben</Text>
-          <Text style={styles.budgetValue}>{totalSpent.toFixed(0)} {trip.currency}</Text>
-        </TouchableOpacity>
-      )}
-
-      {recap ? (
-        <View style={styles.recapBox}>
-          <Icon name="sparkles" size={iconSize.md} color={colors.accent} />
-          <Text style={styles.recapText}>{recap}</Text>
+      <View style={styles.titleRow}>
+        <Icon name="sparkles-outline" size={iconSize.md} color={colors.accent} />
+        <Text style={styles.title}>Reise-Rückblick</Text>
+        {recap && (
           <TouchableOpacity
             style={styles.redoBtn}
             onPress={generateRecap}
@@ -137,6 +108,12 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
               <Icon name="refresh-outline" size={iconSize.sm} color={colors.textSecondary} />
             )}
           </TouchableOpacity>
+        )}
+      </View>
+
+      {recap ? (
+        <View style={styles.recapBox}>
+          <Text style={styles.recapText}>{recap}</Text>
         </View>
       ) : (
         <TouchableOpacity
@@ -149,7 +126,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
             <ActivityIndicator size="small" color={colors.accent} />
           ) : (
             <>
-              <Icon name="sparkles" size={iconSize.md} color={colors.accent} />
+              <Icon name="sparkles-outline" size={iconSize.md} color={colors.accent} />
               <View>
                 <Text style={styles.fableBtnText}>Fable Rückblick</Text>
                 <Text style={styles.fableBtnHint}>1 Inspiration</Text>
@@ -174,63 +151,24 @@ const styles = StyleSheet.create({
     ...shadows.md,
     marginBottom: spacing.lg,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   title: {
     ...typography.h3,
-    marginBottom: spacing.md,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  statItem: {
-    alignItems: 'center',
     flex: 1,
-  },
-  statIcon: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  statValue: {
-    ...typography.h3,
-    color: colors.primary,
-  },
-  statLabel: {
-    ...typography.caption,
-    marginTop: 2,
-  },
-  budgetRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  budgetLabel: {
-    ...typography.bodySmall,
-  },
-  budgetValue: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.primary,
   },
   recapBox: {
     backgroundColor: colors.accent + '10',
     borderRadius: borderRadius.md,
     padding: spacing.md,
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  recapIconText: {
-    fontSize: 18,
-    marginTop: 2,
   },
   recapText: {
     ...typography.body,
     color: colors.text,
-    flex: 1,
     lineHeight: 22,
   },
   redoBtn: {
@@ -242,11 +180,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-start',
   },
-  redoIcon: {
-    fontSize: 18,
-    color: colors.accent,
-    fontWeight: '600',
-  },
   fableBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,9 +187,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent + '10',
     borderRadius: borderRadius.md,
     padding: spacing.md,
-  },
-  fableBtnIcon: {
-    fontSize: 20,
   },
   fableBtnText: {
     ...typography.body,
