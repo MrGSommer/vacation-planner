@@ -508,7 +508,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => setShowAiModal(true)}
                 activeOpacity={0.7}
               >
-                <Icon name="sparkles-outline" size={22} color={colors.accent} />
+                <Icon name="sparkles" size={22} color={colors.accent} />
                 <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
                 <Text style={[styles.gridCardInfo, { color: colors.accent }]}>{aiCredits} Inspirationen</Text>
               </TouchableOpacity>
@@ -518,7 +518,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => navigation.navigate('Subscription')}
                 activeOpacity={0.7}
               >
-                <Icon name="sparkles-outline" size={22} color={colors.accent} />
+                <Icon name="sparkles" size={22} color={colors.accent} />
                 <Text style={styles.gridCardTitle}>Fable</Text>
                 <Text style={styles.gridCardInfo}>Inspirationen kaufen</Text>
               </TouchableOpacity>

@@ -115,8 +115,9 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({ visible, tripI
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.modal} onStartShouldSetResponder={() => true}>
+      <View style={styles.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
+        <View style={styles.modal}>
           <Text style={styles.modalTitle}>Neue Abstimmung</Text>
 
           <Text style={styles.label}>Frage</Text>
@@ -166,7 +167,7 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({ visible, tripI
             />
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };
