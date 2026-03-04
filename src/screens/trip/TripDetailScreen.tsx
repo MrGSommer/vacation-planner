@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground, Linking, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -311,7 +311,13 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         }
 
         const hasPoints = stops.length > 0 || activities.some((a: Activity) => a.location_lat);
-        if (hasPoints) map.fitBounds(bounds, 60);
+        if (hasPoints) {
+          map.fitBounds(bounds, 30);
+          // Prevent over-zoom on single point
+          google.maps.event.addListenerOnce(map, 'bounds_changed', () => {
+            if ((map.getZoom() || 0) > 15) map.setZoom(15);
+          });
+        }
         mapInitializedRef.current = true;
         setMapReady(true);
       } catch (e) {
@@ -440,7 +446,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scroll} refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={colors.primary} />}>
+      <View style={styles.dashboardLayout}>
+        {/* Header */}
         {trip.cover_image_url ? (
           <ImageBackground source={{ uri: trip.cover_image_url }} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
             <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.65)']} style={StyleSheet.absoluteFillObject} />
@@ -535,21 +542,24 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} />
           )}
 
-          {/* Map */}
+          {/* Map — fills remaining space */}
           {Platform.OS === 'web' && (
-            <Card style={[styles.mapCard, { backgroundColor: rawThemeColor + '10' }]}>
+            <Card style={[styles.mapCard, { flex: 1, backgroundColor: themeTint }]}>
               <View style={styles.mapHeader}>
-                <Text style={styles.mapTitle}>Karte</Text>
+                <View style={styles.mapTitleRow}>
+                  <Icon name="map-outline" size={18} color={themeColor} />
+                  <Text style={[styles.mapTitle, { color: themeColor }]}>Karte</Text>
+                </View>
                 {mapReady && (
                   <View style={styles.mapHeaderActions}>
-                    <TouchableOpacity onPress={handleExportToMaps} style={styles.fullscreenBtn}>
-                      <Icon name="share-outline" size={20} color={colors.primary} />
+                    <TouchableOpacity onPress={handleExportToMaps} style={styles.mapActionBtn}>
+                      <Icon name="download-outline" size={18} color={themeColor} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.fullscreenBtn}>
-                      <Icon name="search-outline" size={20} color={colors.primary} />
+                    <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.mapActionBtn}>
+                      <Icon name="search-outline" size={18} color={themeColor} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.fullscreenBtn}>
-                      <Icon name="expand-outline" size={20} color={colors.primary} />
+                    <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.mapActionBtn}>
+                      <Icon name="expand-outline" size={18} color={themeColor} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -562,18 +572,26 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                   />
                 </View>
               )}
-              <div ref={mapRef} style={{ width: '100%', height: 300, borderRadius: 12 }} />
+              <View style={{ flex: 1, position: 'relative', minHeight: 200 }}>
+                {!mapReady && (
+                  <View style={styles.mapPlaceholder}>
+                    <Icon name="map-outline" size={32} color={colors.textLight} />
+                    <Text style={styles.mapPlaceholderText}>Karte wird geladen...</Text>
+                  </View>
+                )}
+                <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+              </View>
             </Card>
           )}
 
           {!mapFullscreen && trip.notes && (
-            <Card style={[styles.notesCard, { backgroundColor: rawThemeColor + '10' }]}>
+            <Card style={[styles.notesCard, { backgroundColor: themeTint }]}>
               <Text style={styles.notesTitle}>Notizen</Text>
               <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
             </Card>
           )}
         </View>
-      </ScrollView>
+      </View>
 
       <TripBottomNav tripId={tripId} activeTab="TripDetail" />
 
@@ -692,6 +710,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  dashboardLayout: { flex: 1 },
   scroll: { flex: 1 },
   header: { padding: spacing.xl, paddingBottom: spacing.xxl },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
@@ -717,7 +736,7 @@ const styles = StyleSheet.create({
   dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   attribution: { ...typography.caption, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: spacing.xs },
   attributionLink: { textDecorationLine: 'underline' },
-  content: { padding: spacing.md, marginTop: -spacing.lg },
+  content: { flex: 1, padding: spacing.md, marginTop: -spacing.lg },
   statsRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md, ...shadows.md, marginBottom: spacing.lg },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { ...typography.h2 },
@@ -729,8 +748,12 @@ const styles = StyleSheet.create({
   gridCardInfo: { ...typography.caption, color: colors.textLight },
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
   mapHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  mapTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   mapTitle: { ...typography.h3 },
-  mapHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  mapHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  mapActionBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  mapPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, zIndex: 1, backgroundColor: colors.background },
+  mapPlaceholderText: { ...typography.bodySmall, color: colors.textLight },
   fullscreenBtn: { padding: spacing.xs },
   fullscreenBtnText: { color: colors.primary },
   mapSearchOverlay: { marginBottom: spacing.sm, zIndex: 100 },

@@ -142,6 +142,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   shopping: '#E84393',    // Pink
   relaxation: '#4ECDC4',  // WayFable Turquoise
   stop: '#6C5CE7',        // Purple
+  poll: '#F39C12',         // warmes Gelb
   other: '#95A5A6',       // sanftes Grau
 };
 

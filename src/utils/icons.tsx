@@ -28,6 +28,7 @@ export const ACTIVITY_CATEGORY_ICONS: Record<string, IconName> = {
   shopping: 'bag-outline',
   relaxation: 'leaf-outline',
   stop: 'pin-outline',
+  poll: 'bar-chart-outline',
   other: 'ellipsis-horizontal-circle-outline',
 };
 

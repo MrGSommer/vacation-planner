@@ -768,10 +768,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Quick-add bar */}
       <View style={styles.quickAddBar}>
         {([
-          { label: 'Essen', category: 'food', icon: 'restaurant-outline' as const },
-          { label: 'Transport', category: 'transport', icon: 'car-outline' as const },
-          { label: 'Besuch', category: 'sightseeing', icon: 'camera-outline' as const },
           { label: 'Aktivität', category: 'activity', icon: 'bicycle-outline' as const },
+          { label: 'Essen', category: 'food', icon: 'restaurant-outline' as const },
         ]).map((item) => (
           <TouchableOpacity
             key={item.category}
@@ -788,14 +786,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={[styles.quickAddLabel, { color: CATEGORY_COLORS[item.category] || colors.primary }]}>{item.label}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity
-          style={styles.quickAddBtn}
-          onPress={() => setShowPollModal(true)}
-          activeOpacity={0.7}
-        >
-          <Icon name="bar-chart-outline" size={iconSize.xs} color={colors.secondary} />
-          <Text style={styles.quickAddLabel}>Abstimmung</Text>
-        </TouchableOpacity>
       </View>
 
       {/* FAB */}
