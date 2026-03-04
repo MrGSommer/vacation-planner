@@ -368,6 +368,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     persistTemplates(updated);
     setEditingTemplate(null);
     setEditTemplateName('');
+    setShowTemplatePicker(true);
     showToast('Vorlage aktualisiert', 'success');
   };
 
@@ -749,7 +750,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Edit Template Modal */}
       <Modal visible={!!editingTemplate} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }} />
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setEditingTemplate(null); setEditTemplateName(''); setShowTemplatePicker(true); }} />
           <View style={[styles.modalContent, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>Vorlage bearbeiten</Text>
             <Input
@@ -781,7 +782,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={[styles.modalButtons, { marginTop: spacing.md }]}>
               <Button
                 title="Abbrechen"
-                onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }}
+                onPress={() => { setEditingTemplate(null); setEditTemplateName(''); setShowTemplatePicker(true); }}
                 variant="ghost"
                 style={styles.modalBtn}
               />
