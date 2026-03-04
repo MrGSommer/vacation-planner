@@ -606,8 +606,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Add Item Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setShowModal(false); setNewQuantity(1); }}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setShowModal(false); setNewQuantity(1); }} />
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Gegenstand hinzufügen</Text>
             <Input label="Name" placeholder="z.B. Sonnencreme" value={newName} onChangeText={setNewName} />
             <Text style={styles.fieldLabel}>Kategorie</Text>
@@ -644,13 +645,14 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               <Button title="Hinzufügen" onPress={handleAdd} disabled={!newName.trim()} style={styles.modalBtn} />
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Template Picker Modal */}
       <Modal visible={showTemplatePicker} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowTemplatePicker(false)}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]} onStartShouldSetResponder={() => true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setShowTemplatePicker(false)} />
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>Vorlage wählen</Text>
             <Text style={styles.templateSubtitle}>Wähle einen Reisetyp oder eine eigene Vorlage</Text>
             <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false}>
@@ -718,13 +720,14 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
             </ScrollView>
             <Button title="Schliessen" onPress={() => setShowTemplatePicker(false)} variant="ghost" />
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Save as Template Modal */}
       <Modal visible={showSaveTemplate} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setShowSaveTemplate(false); setNewTemplateName(''); }}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setShowSaveTemplate(false); setNewTemplateName(''); }} />
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Vorlage speichern</Text>
             <Text style={styles.templateSubtitle}>
               Speichere die aktuelle Packliste ({items.length} Gegenstände) als wiederverwendbare Vorlage
@@ -740,13 +743,14 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               <Button title="Speichern" onPress={handleSaveAsTemplate} disabled={!newTemplateName.trim() || items.length === 0} style={styles.modalBtn} />
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Edit Template Modal */}
       <Modal visible={!!editingTemplate} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]} onStartShouldSetResponder={() => true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setEditingTemplate(null); setEditTemplateName(''); }} />
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>Vorlage bearbeiten</Text>
             <Input
               label="Name"
@@ -789,13 +793,14 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Edit Item Modal */}
       <Modal visible={!!editingItem} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditingItem(null)}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setEditingItem(null)} />
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Gegenstand bearbeiten</Text>
             <Input label="Name" placeholder="z.B. Sonnencreme" value={editItemName} onChangeText={setEditItemName} />
             <Text style={styles.fieldLabel}>Kategorie</Text>
@@ -839,7 +844,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               <Button title="Speichern" onPress={handleSaveEditItem} disabled={!editItemName.trim()} style={styles.modalBtn} />
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Category Picker (long press move) */}

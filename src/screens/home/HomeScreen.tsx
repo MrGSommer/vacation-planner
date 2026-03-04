@@ -522,12 +522,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
       {/* Delete / Transfer Modal */}
       <Modal visible={!!deleteTrip} animationType="fade" transparent>
-        <TouchableOpacity
-          style={styles.deleteOverlay}
-          activeOpacity={1}
-          onPress={() => !deleteLoading && setDeleteTrip(null)}
-        >
-          <View style={styles.deleteModal} onStartShouldSetResponder={() => true}>
+        <View style={styles.deleteOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => !deleteLoading && setDeleteTrip(null)} />
+          <View style={styles.deleteModal}>
             <Text style={styles.deleteModalTitle}>Reise löschen</Text>
             <Text style={styles.deleteModalInfo}>
               {deleteTrip ? `"${deleteTrip.name}"` : ''} wirklich löschen?
@@ -569,7 +566,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               </>
             )}
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       <TouchableOpacity

@@ -66,8 +66,9 @@ export const ChangeLog: React.FC<Props> = ({ tripId, visible, onClose }) => {
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.modal} onStartShouldSetResponder={() => true}>
+      <View style={styles.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
+        <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.title}>Änderungsverlauf</Text>
             <TouchableOpacity onPress={onClose}>
@@ -111,7 +112,7 @@ export const ChangeLog: React.FC<Props> = ({ tripId, visible, onClose }) => {
             </ScrollView>
           )}
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };

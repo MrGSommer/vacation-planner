@@ -617,6 +617,15 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Activities Timeline with swipe */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
         <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent} keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={loading} onRefresh={loadTripData} tintColor={colors.primary} />}>
+          {/* Active polls */}
+          {polls.filter(p => !p.is_closed).length > 0 && (
+            <View style={styles.pollsSection}>
+              {polls.filter(p => !p.is_closed).map(poll => (
+                <PollCard key={poll.id} poll={poll} onUpdate={() => getPolls(tripId).then(setPolls).catch(() => {})} />
+              ))}
+            </View>
+          )}
+
           {/* Weather summary for selected day */}
           {selectedDate && weather.get(selectedDate) && (() => {
             const w = weather.get(selectedDate)!;
@@ -755,15 +764,6 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           {isLastDay && renderTravelCard('departure', departureTransport)}
         </ScrollView>
       </View>
-
-      {/* Active polls */}
-      {polls.filter(p => !p.is_closed).length > 0 && (
-        <View style={styles.pollsSection}>
-          {polls.filter(p => !p.is_closed).map(poll => (
-            <PollCard key={poll.id} poll={poll} onUpdate={() => getPolls(tripId).then(setPolls).catch(() => {})} />
-          ))}
-        </View>
-      )}
 
       {/* Quick-add bar */}
       <View style={styles.quickAddBar}>
