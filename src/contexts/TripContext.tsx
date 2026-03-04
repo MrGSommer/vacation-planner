@@ -28,13 +28,14 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { user } = useAuthContext();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  const userId = user?.id;
   const fetchTrips = useCallback(async () => {
-    if (!user) return;
+    if (!userId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const data = await getTrips(user.id);
+      const data = await getTrips(userId);
 
       // Auto-update trip statuses based on dates
       const today = new Date();
@@ -75,7 +76,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   const refreshCurrentTrip = useCallback(async () => {
     if (!currentTrip) return;

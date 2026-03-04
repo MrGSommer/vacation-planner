@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Animated,
   Dimensions, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
+  PanResponder,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -80,6 +81,26 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideshowProgress = useRef(new Animated.Value(0)).current;
+
+  // Swipe gesture for viewer
+  const viewerGoRef = useRef<(dir: -1 | 1) => void>(() => {});
+  const slideshowActiveRef = useRef(false);
+  slideshowActiveRef.current = slideshowActive;
+
+  const SWIPE_THRESHOLD = 50;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => {
+        if (slideshowActiveRef.current) return false;
+        return Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx > SWIPE_THRESHOLD) viewerGoRef.current(-1);
+        else if (gs.dx < -SWIPE_THRESHOLD) viewerGoRef.current(1);
+      },
+    })
+  ).current;
 
   const loadPhotos = useCallback(async () => {
     setLoading(true);
@@ -391,6 +412,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       setEditingCaption(false);
     }
   };
+  viewerGoRef.current = viewerGo;
 
   // Slideshow
   const startSlideshow = () => {
@@ -694,7 +716,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Image + navigation */}
           {selectedPhoto && (
-            <Animated.View style={[styles.viewerContent, { opacity: fadeAnim }]}>
+            <Animated.View style={[styles.viewerContent, { opacity: fadeAnim }]} {...panResponder.panHandlers}>
               {viewerIndex > 0 && !slideshowActive && (
                 <TouchableOpacity style={[styles.viewerNav, styles.viewerNavLeft]} onPress={() => viewerGo(-1)}>
                   <Text style={styles.viewerNavText}>‹</Text>
