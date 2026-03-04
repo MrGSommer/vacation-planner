@@ -94,30 +94,37 @@ export async function fetchWeatherData(
 
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+  const today = format(now, 'yyyy-MM-dd');
+  // Open-Meteo provides 16 days of forecast (today + 15)
   const maxForecast = format(addDays(now, 15), 'yyyy-MM-dd');
   const minArchive = format(addDays(now, -90), 'yyyy-MM-dd');
 
   for (const [, group] of groups) {
     const sortedDates = [...group.dates].sort();
-    const today = format(now, 'yyyy-MM-dd');
 
+    // Live forecast: today through +15 days (16-day window)
     const forecastDates = sortedDates.filter(d => d >= today && d <= maxForecast);
+    // Past dates: archive API (up to 90 days back)
     const archiveDates = sortedDates.filter(d => d < today && d >= minArchive);
+    // Far future (>16 days): use last year's archive data as climate proxy
     const futureDates = sortedDates.filter(d => d > maxForecast);
 
     const fetches: Promise<void>[] = [];
 
     const parseWeatherResponse = (data: any, dateMapping?: Map<string, string>) => {
       if (!data.daily) return;
-      const { time, temperature_2m_max, temperature_2m_min, weathercode } = data.daily;
+      const { time, temperature_2m_max, temperature_2m_min } = data.daily;
+      // Open-Meteo renamed weathercode → weather_code; support both
+      const codes = data.daily.weather_code || data.daily.weathercode;
       for (let i = 0; i < time.length; i++) {
         const originalDate = dateMapping ? dateMapping.get(time[i]) : time[i];
         if (originalDate && group.dates.includes(originalDate)) {
+          const code = codes?.[i] ?? 3;
           result.set(originalDate, {
             tempMax: Math.round(temperature_2m_max[i]),
             tempMin: Math.round(temperature_2m_min[i]),
-            weatherCode: weathercode[i],
-            icon: getWeatherIcon(weathercode[i]),
+            weatherCode: code,
+            icon: getWeatherIcon(code),
           });
         }
       }
@@ -127,7 +134,7 @@ export async function fetchWeatherData(
       const fStart = forecastDates[0];
       const fEnd = forecastDates[forecastDates.length - 1];
       fetches.push(
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&start_date=${fStart}&end_date=${fEnd}&timezone=auto`)
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${fStart}&end_date=${fEnd}&timezone=auto`)
           .then(r => r.json())
           .then(data => parseWeatherResponse(data))
       );
@@ -137,7 +144,7 @@ export async function fetchWeatherData(
       const aStart = archiveDates[0];
       const aEnd = archiveDates[archiveDates.length - 1];
       fetches.push(
-        fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&start_date=${aStart}&end_date=${aEnd}&timezone=auto`)
+        fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${aStart}&end_date=${aEnd}&timezone=auto`)
           .then(r => r.json())
           .then(data => parseWeatherResponse(data))
       );
@@ -154,7 +161,7 @@ export async function fetchWeatherData(
       const lyStart = lastYearDates[0];
       const lyEnd = lastYearDates[lastYearDates.length - 1];
       fetches.push(
-        fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&start_date=${lyStart}&end_date=${lyEnd}&timezone=auto`)
+        fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${lyStart}&end_date=${lyEnd}&timezone=auto`)
           .then(r => r.json())
           .then(data => parseWeatherResponse(data, dateMapping))
       );
