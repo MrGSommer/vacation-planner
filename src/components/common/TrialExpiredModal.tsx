@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, gradients } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 import { RootStackParamList } from '../../types/navigation';
 
 export const TrialExpiredModal: React.FC = () => {
@@ -19,7 +20,9 @@ export const TrialExpiredModal: React.FC = () => {
       <View style={styles.overlay}>
         <View style={styles.card}>
           <LinearGradient colors={[...gradients.ocean]} style={styles.gradient}>
-            <Text style={styles.icon}>{'~'}</Text>
+            <View style={styles.icon}>
+              <Icon name="sparkles" size={40} color="#FFFFFF" />
+            </View>
             <Text style={styles.title}>Testzeitraum abgelaufen</Text>
             <Text style={styles.message}>
               Dein Premium-Testzeitraum ist leider abgelaufen. Abonniere WayFable Premium, um weiterhin alle Funktionen zu nutzen.
@@ -72,8 +75,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   icon: {
-    fontSize: 48,
     marginBottom: spacing.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   title: {
     ...typography.h2,

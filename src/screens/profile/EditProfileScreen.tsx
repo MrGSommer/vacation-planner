@@ -16,6 +16,7 @@ import { updateProfile } from '../../api/auth';
 import { supabase } from '../../api/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -108,7 +109,10 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtn}>← Zurück</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon name="chevron-back" size={18} color={colors.primary} />
+            <Text style={styles.backBtn}>Zurück</Text>
+          </View>
         </TouchableOpacity>
         <Text style={styles.title}>Profil bearbeiten</Text>
         <View style={{ width: 60 }} />
@@ -118,7 +122,7 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity onPress={pickImage}>
           <Avatar uri={avatarUrl} name={`${firstName} ${lastName}`.trim() || user?.email || ''} size={100} />
           <View style={styles.cameraOverlay}>
-            <Text style={styles.cameraIcon}>📷</Text>
+            <Icon name="camera-outline" size={22} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
         <Text style={styles.changePhotoText}>Foto ändern</Text>

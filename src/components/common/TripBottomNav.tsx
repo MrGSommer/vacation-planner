@@ -4,14 +4,15 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
-import { colors, spacing, typography, shadows } from '../../utils/theme';
+import { colors, spacing, typography, shadows, iconSize } from '../../utils/theme';
+import { Icon, TRIP_TAB_ICONS } from '../../utils/icons';
 
 const TABS = [
-  { key: 'TripDetail' as const, icon: '🏠', label: 'Dashboard' },
-  { key: 'Itinerary' as const, icon: '📋', label: 'Programm' },
-  { key: 'Stops' as const, icon: '🛣️', label: 'Route' },
-  { key: 'Budget' as const, icon: '💰', label: 'Budget' },
-  { key: 'Packing' as const, icon: '🧳', label: 'Packliste' },
+  { key: 'TripDetail' as const, label: 'Dashboard' },
+  { key: 'Itinerary' as const, label: 'Programm' },
+  { key: 'Stops' as const, label: 'Route' },
+  { key: 'Budget' as const, label: 'Budget' },
+  { key: 'Packing' as const, label: 'Packliste' },
 ];
 
 interface Props {
@@ -29,6 +30,7 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
     <View style={[styles.container, { paddingBottom: insets.bottom, height: BOTTOM_NAV_HEIGHT + insets.bottom }]}>
       {TABS.map(tab => {
         const active = tab.key === activeTab;
+        const icons = TRIP_TAB_ICONS[tab.key];
         return (
           <TouchableOpacity
             key={tab.key}
@@ -40,7 +42,11 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.icon}>{tab.icon}</Text>
+            <Icon
+              name={active ? icons.filled : icons.outline}
+              size={iconSize.md}
+              color={active ? colors.secondary : colors.textSecondary}
+            />
             <Text style={[styles.label, active && styles.labelActive]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -65,11 +71,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tabActive: {
-    backgroundColor: colors.primary + '12',
+    backgroundColor: colors.secondary + '12',
     borderTopWidth: 2,
-    borderTopColor: colors.primary,
+    borderTopColor: colors.secondary,
   },
-  icon: { fontSize: 22 },
-  label: { ...typography.caption, fontSize: 12, marginTop: 2, color: colors.textSecondary },
-  labelActive: { color: colors.primary, fontWeight: '600' },
+  label: { ...typography.caption, fontSize: 11, marginTop: 2, color: colors.textSecondary },
+  labelActive: { color: colors.secondary, fontWeight: '600' },
 });

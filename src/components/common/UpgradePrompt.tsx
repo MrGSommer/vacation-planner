@@ -4,23 +4,32 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
-import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, gradients, iconSize } from '../../utils/theme';
+import { Icon, IconName } from '../../utils/icons';
+
+interface FeatureHighlight {
+  icon: IconName;
+  text: string;
+}
 
 interface UpgradePromptProps {
-  icon?: string;
+  iconName?: IconName;
   title: string;
   message: string;
   inline?: boolean;
   /** Show "Inspirationen kaufen" instead of upgrade button */
   buyInspirations?: boolean;
+  /** Feature highlights shown as benefit list */
+  highlights?: FeatureHighlight[];
 }
 
 export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
-  icon = '🔒',
+  iconName = 'lock-closed-outline',
   title,
   message,
   inline = false,
   buyInspirations = false,
+  highlights,
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -45,7 +54,9 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
           end={{ x: 1, y: 0 }}
           style={styles.inlineGradient}
         >
-          <Text style={styles.inlineIcon}>{icon}</Text>
+          <View style={styles.inlineIcon}>
+            <Icon name={iconName} size={iconSize.md} color="#FFFFFF" />
+          </View>
           <View style={styles.inlineInfo}>
             <Text style={styles.inlineTitle}>{title}</Text>
             <Text style={styles.inlineMessage}>{message}</Text>
@@ -58,9 +69,21 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.icon}>{icon}</Text>
+      <View style={styles.icon}>
+        <Icon name={iconName} size={48} color={colors.primary} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
+      {highlights && highlights.length > 0 && (
+        <View style={styles.highlights}>
+          {highlights.map((h, i) => (
+            <View key={i} style={styles.highlightRow}>
+              <Icon name={h.icon} size={iconSize.sm} color={colors.secondary} />
+              <Text style={styles.highlightText}>{h.text}</Text>
+            </View>
+          ))}
+        </View>
+      )}
       <TouchableOpacity
         style={styles.upgradeButton}
         onPress={handlePress}
@@ -88,9 +111,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.xl,
   },
-  icon: { fontSize: 48, marginBottom: spacing.md },
+  icon: { marginBottom: spacing.md, alignItems: 'center' as const },
   title: { ...typography.h2, textAlign: 'center', marginBottom: spacing.sm },
-  message: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl },
+  message: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg },
+  highlights: { marginBottom: spacing.xl, width: '100%', maxWidth: 280 },
+  highlightRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+  highlightText: { ...typography.bodySmall, color: colors.text, flex: 1 },
   upgradeButton: { borderRadius: borderRadius.lg, overflow: 'hidden', ...shadows.sm },
   upgradeGradient: {
     paddingHorizontal: spacing.xl,
@@ -104,7 +130,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.md,
   },
-  inlineIcon: { fontSize: 24, marginRight: spacing.md },
+  inlineIcon: { marginRight: spacing.md, justifyContent: 'center' as const },
   inlineInfo: { flex: 1 },
   inlineTitle: { ...typography.body, fontWeight: '600', color: '#FFFFFF' },
   inlineMessage: { ...typography.caption, color: 'rgba(255,255,255,0.85)', marginTop: 2 },

@@ -11,12 +11,12 @@ export interface TripType {
 }
 
 export const TRIP_TYPES: TripType[] = [
-  { id: 'beach', label: 'Strandurlaub', icon: '🏖️' },
-  { id: 'city', label: 'Städtereise', icon: '🏙️' },
-  { id: 'backpacking', label: 'Backpacking', icon: '🎒' },
-  { id: 'roadtrip', label: 'Roadtrip', icon: '🚗' },
-  { id: 'ski', label: 'Skiurlaub', icon: '⛷️' },
-  { id: 'hiking', label: 'Wanderurlaub', icon: '🥾' },
+  { id: 'beach', label: 'Strandurlaub', icon: 'sunny-outline' },
+  { id: 'city', label: 'Städtereise', icon: 'business-outline' },
+  { id: 'backpacking', label: 'Backpacking', icon: 'bag-outline' },
+  { id: 'roadtrip', label: 'Roadtrip', icon: 'car-outline' },
+  { id: 'ski', label: 'Skiurlaub', icon: 'snow-outline' },
+  { id: 'hiking', label: 'Wanderurlaub', icon: 'footsteps-outline' },
 ];
 
 export const PACKING_TEMPLATES: Record<string, TemplateItem[]> = {

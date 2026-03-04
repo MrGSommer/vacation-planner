@@ -10,6 +10,7 @@ import { getTrip } from '../../api/trips';
 import { Activity, TripStop, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
+import { Icon, getActivityIconName } from '../../utils/icons';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
@@ -201,12 +202,12 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           <React.Fragment key={`route-${tr.id}`}>
             <Marker coordinate={tr.dep} title={tr.depName} onPress={() => { setSelected(tr.activity); setSelectedStop(null); }}>
               <View style={[styles.transportMarker, { backgroundColor: CATEGORY_COLORS.transport }]}>
-                <Text style={styles.transportMarkerText}>🛫</Text>
+                <Icon name="airplane-outline" size={14} color="#FFFFFF" />
               </View>
             </Marker>
             <Marker coordinate={tr.arr} title={tr.arrName} onPress={() => { setSelected(tr.activity); setSelectedStop(null); }}>
               <View style={[styles.transportMarker, { backgroundColor: CATEGORY_COLORS.transport }]}>
-                <Text style={styles.transportMarkerText}>🛬</Text>
+                <Icon name="airplane" size={14} color="#FFFFFF" />
               </View>
             </Marker>
             <Polyline
@@ -221,17 +222,17 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
-        <Text style={styles.fabText}>+</Text>
+        <Icon name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* Selected activity bottom sheet */}
       {selected && (
         <Card style={styles.bottomSheet}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => setSelected(null)}>
-            <Text style={styles.closeText}>✕</Text>
+            <Icon name="close" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
           <View style={styles.sheetContent}>
-            <Text style={styles.sheetIcon}>{getCategoryIcon(selected.category, selected.category_data)}</Text>
+            <Icon name={getActivityIconName(selected.category, selected.category_data)} size={22} color={CATEGORY_COLORS[selected.category] || colors.primary} />
             <View style={styles.sheetInfo}>
               <Text style={styles.sheetTitle}>{selected.title}</Text>
               {(() => {
@@ -242,8 +243,8 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
                 }
                 return null;
               })()}
-              {selected.location_name && <Text style={styles.sheetLocation}>📍 {selected.location_name}</Text>}
-              {selected.start_time && <Text style={styles.sheetTime}>🕐 {selected.start_time}</Text>}
+              {selected.location_name && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="location-outline" size={14} color={colors.textSecondary} /><Text style={styles.sheetLocation}>{selected.location_name}</Text></View>}
+              {selected.start_time && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="time-outline" size={14} color={colors.textSecondary} /><Text style={styles.sheetTime}>{selected.start_time}</Text></View>}
               {(() => {
                 const detail = formatCategoryDetail(selected.category, selected.category_data || {});
                 return detail ? <Text style={[styles.sheetTime, { color: CATEGORY_COLORS[selected.category] }]}>{linkifyText(detail)}</Text> : null;
@@ -258,7 +259,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       {selectedStop && (
         <Card style={styles.bottomSheet}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedStop(null)}>
-            <Text style={styles.closeText}>✕</Text>
+            <Icon name="close" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
           <View style={styles.sheetContent}>
             <View style={[styles.stopMarkerSmall, { backgroundColor: selectedStop.type === 'overnight' ? colors.primary : colors.secondary }]}>
@@ -267,7 +268,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.sheetInfo}>
               <Text style={styles.sheetTitle}>{selectedStop.name}</Text>
               <Text style={styles.sheetLocation}>
-                {selectedStop.type === 'overnight' ? '🏠 Übernachtung' : '📍 Zwischenstopp'}
+                {selectedStop.type === 'overnight' ? 'Übernachtung' : 'Zwischenstopp'}
                 {selectedStop.nights ? ` · ${selectedStop.nights} Nacht/Nächte` : ''}
               </Text>
               {selectedStop.arrival_date && selectedStop.departure_date && (

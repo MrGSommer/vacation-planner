@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const colors = {
   primary: '#FF6B6B',
   primaryLight: '#FF8B94',
@@ -32,6 +34,7 @@ export const spacing = {
 } as const;
 
 export const borderRadius = {
+  xs: 4,
   sm: 8,
   md: 12,
   lg: 16,
@@ -39,14 +42,33 @@ export const borderRadius = {
   full: 999,
 } as const;
 
+// Font family — loaded via expo-google-fonts in App.tsx
+const FONT_FAMILY = Platform.select({
+  web: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  default: 'PlusJakartaSans',
+});
+
+export const fontFamily = {
+  regular: FONT_FAMILY,
+  medium: FONT_FAMILY,
+  semiBold: FONT_FAMILY,
+  bold: FONT_FAMILY,
+} as const;
+
+// Platform-safe fontWeight — on web we use fontFamily variant, on native fontWeight
+const weight = (w: '400' | '500' | '600' | '700') => ({
+  fontWeight: w as '400' | '500' | '600' | '700',
+  fontFamily: FONT_FAMILY,
+});
+
 export const typography = {
-  h1: { fontSize: 28, fontWeight: '700' as const, color: colors.text },
-  h2: { fontSize: 22, fontWeight: '700' as const, color: colors.text },
-  h3: { fontSize: 18, fontWeight: '600' as const, color: colors.text },
-  body: { fontSize: 16, fontWeight: '400' as const, color: colors.text },
-  bodySmall: { fontSize: 14, fontWeight: '400' as const, color: colors.textSecondary },
-  caption: { fontSize: 12, fontWeight: '400' as const, color: colors.textLight },
-  button: { fontSize: 16, fontWeight: '600' as const },
+  h1: { fontSize: 28, ...weight('700'), color: colors.text },
+  h2: { fontSize: 22, ...weight('700'), color: colors.text },
+  h3: { fontSize: 18, ...weight('600'), color: colors.text },
+  body: { fontSize: 16, ...weight('400'), color: colors.text },
+  bodySmall: { fontSize: 14, ...weight('400'), color: colors.textSecondary },
+  caption: { fontSize: 12, ...weight('400'), color: colors.textLight },
+  button: { fontSize: 16, ...weight('600') },
 } as const;
 
 export const shadows = {
@@ -71,4 +93,13 @@ export const shadows = {
     shadowRadius: 12,
     elevation: 8,
   },
+} as const;
+
+// Icon sizes for consistent Ionicons usage
+export const iconSize = {
+  xs: 16,
+  sm: 20,
+  md: 24,
+  lg: 28,
+  xl: 32,
 } as const;

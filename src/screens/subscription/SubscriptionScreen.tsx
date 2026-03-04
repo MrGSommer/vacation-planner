@@ -7,6 +7,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../hooks/useAuth';
 import { getSubscriptionUrl, getInspirationsUrl } from '../../api/stripe';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { Icon, IconName } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -27,7 +28,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.container}>
         <Header title="Abonnement" onBack={() => navigation.goBack()} />
         <View style={styles.activeContainer}>
-          <Text style={styles.activeIcon}>{'✅'}</Text>
+          <Icon name="checkmark-circle" size={48} color={colors.secondary} />
           <Text style={styles.activeTitle}>Du bist Premium!</Text>
           <Text style={styles.activeMessage}>Du hast Zugriff auf alle Features</Text>
         </View>
@@ -51,15 +52,15 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Features */}
         <View style={styles.features}>
-          {[
-            { icon: '✈️', title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst' },
-            { icon: '👥', title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
-            { icon: '📸', title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
-            { icon: '🗺️', title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
-            { icon: '✨', title: 'Reisebegleiter Fable', desc: '30 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
-          ].map((f, i) => (
+          {([
+            { icon: 'airplane-outline' as IconName, title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst' },
+            { icon: 'people-outline' as IconName, title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
+            { icon: 'images-outline' as IconName, title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
+            { icon: 'map-outline' as IconName, title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
+            { icon: 'sparkles-outline' as IconName, title: 'Reisebegleiter Fable', desc: '30 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
+          ]).map((f, i) => (
             <View key={i} style={styles.featureRow}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
+              <Icon name={f.icon} size={24} color={colors.secondary} />
               <View style={styles.featureInfo}>
                 <Text style={styles.featureTitle}>{f.title}</Text>
                 <Text style={styles.featureDesc}>{f.desc}</Text>
@@ -134,7 +135,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.inspirationButtonText}>{'✨ Inspirationen kaufen'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={16} color="#FFFFFF" /><Text style={styles.inspirationButtonText}>Inspirationen kaufen</Text></View>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   heroSubtitle: { ...typography.body, color: 'rgba(255,255,255,0.9)', textAlign: 'center' },
   features: { marginBottom: spacing.xl },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
-  featureIcon: { fontSize: 24, marginRight: spacing.md },
+  featureIcon: { marginRight: spacing.md },
   featureInfo: { flex: 1 },
   featureTitle: { ...typography.body, fontWeight: '600' },
   featureDesc: { ...typography.caption, color: colors.textSecondary },
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
   ctaText: { ...typography.button, color: '#FFFFFF', fontSize: 18 },
   terms: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.md },
   activeContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  activeIcon: { fontSize: 48, marginBottom: spacing.md },
+  activeIcon: { marginBottom: spacing.md },
   activeTitle: { ...typography.h2, marginBottom: spacing.sm },
   activeMessage: { ...typography.body, color: colors.textSecondary },
   inspirationSection: {

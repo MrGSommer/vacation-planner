@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, TripBottomNav } from '../../components/common';
@@ -18,9 +18,11 @@ import { getTrip } from '../../api/trips';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip, Expense, BudgetCategory } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 import { SettlementCard } from '../../components/budget/SettlementCard';
 import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
+import { SwipeableRow } from '../../components/common/SwipeableRow';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Budget'>;
 
@@ -43,7 +45,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const {
     categories, expenses, loading, total, totalBudget, byCategory,
     addCategory, updateCategory, removeCategory,
-    addExpense, updateExpense, removeExpense, upgradeExpenseToGroup,
+    addExpense, updateExpense, removeExpense, upgradeExpenseToGroup, refresh,
   } = useBudget(tripId, scope);
 
   const currency = trip?.currency || 'CHF';
@@ -146,7 +148,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         rightAction={
           isFeatureAllowed('ai') ? (
             <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ fontSize: 22 }}>✨</Text>
+              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
             </TouchableOpacity>
           ) : undefined
         }
@@ -155,7 +157,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
       {loading && !trip ? (
         <BudgetSkeleton />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.primary} />}>
           {/* Scope Toggle */}
           <ScopeToggle scope={scope} onChange={setScope} />
 
@@ -184,6 +186,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 totalBudget={totalBudget}
                 totalSpent={total}
                 currency={currency}
+                categories={byCategory.map(c => ({ name: c.name, color: c.color, spent: c.spent }))}
               />
 
               {scope === 'group' && expenses.length > 0 && (
@@ -223,15 +226,23 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 <Text style={styles.emptyText}>Noch keine Ausgaben erfasst</Text>
               ) : (
                 expenses.map(exp => (
-                  <ExpenseItem
+                  <SwipeableRow
                     key={exp.id}
-                    expense={exp}
-                    currency={currency}
-                    showPaidBy={scope === 'group'}
-                    collaborators={collaborators}
-                    onPress={() => setEditingExpense(exp)}
-                    onLongPress={() => handleDeleteExpense(exp.id)}
-                  />
+                    actions={[
+                      { icon: 'create-outline', color: colors.primary, onPress: () => setEditingExpense(exp) },
+                      { icon: 'trash-outline', color: colors.error, onPress: () => removeExpense(exp.id) },
+                    ]}
+                    disabled={Platform.OS === 'web'}
+                  >
+                    <ExpenseItem
+                      expense={exp}
+                      currency={currency}
+                      showPaidBy={scope === 'group'}
+                      collaborators={collaborators}
+                      onPress={() => setEditingExpense(exp)}
+                      onLongPress={() => handleDeleteExpense(exp.id)}
+                    />
+                  </SwipeableRow>
                 ))
               )}
             </>
@@ -323,13 +334,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: borderRadius.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     overflow: 'hidden',
     ...shadows.sm,
   },
   tab: {
     flex: 1,
-    paddingVertical: spacing.sm + 4,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',

@@ -135,6 +135,110 @@ export const clearTripData = async (tripId: string, options: ClearTripOptions): 
   invalidateCache('trips:');
 };
 
+export const duplicateTrip = async (tripId: string, userId: string): Promise<Trip> => {
+  // 1. Fetch original trip
+  const original = await getTrip(tripId);
+
+  // 2. Create new trip (copy)
+  const newTrip = await createTrip({
+    owner_id: userId,
+    name: `${original.name} (Kopie)`,
+    destination: original.destination,
+    destination_lat: original.destination_lat,
+    destination_lng: original.destination_lng,
+    cover_image_url: original.cover_image_url,
+    cover_image_attribution: original.cover_image_attribution,
+    theme_color: original.theme_color,
+    start_date: original.start_date,
+    end_date: original.end_date,
+    status: 'planning',
+    currency: original.currency,
+    travelers_count: original.travelers_count,
+    group_type: original.group_type,
+    notes: original.notes,
+    fable_enabled: original.fable_enabled,
+    fable_budget_visible: original.fable_budget_visible,
+    fable_packing_visible: original.fable_packing_visible,
+    fable_stops_visible: original.fable_stops_visible,
+    fable_personality: original.fable_personality,
+    fable_detail_level: original.fable_detail_level,
+    fable_creativity: original.fable_creativity,
+    fable_language: original.fable_language,
+  } as any);
+
+  // 3. Copy days + activities
+  const { data: days } = await supabase.from('itinerary_days').select('*').eq('trip_id', tripId).order('date');
+  if (days) {
+    for (const day of days) {
+      const { data: newDay } = await supabase.from('itinerary_days')
+        .insert({ trip_id: newTrip.id, date: day.date })
+        .select().single();
+      if (!newDay) continue;
+
+      const { data: acts } = await supabase.from('activities').select('*').eq('day_id', day.id).order('sort_order');
+      if (acts && acts.length > 0) {
+        await supabase.from('activities').insert(
+          acts.map(a => ({
+            day_id: newDay.id,
+            trip_id: newTrip.id,
+            title: a.title,
+            description: a.description,
+            category: a.category,
+            start_time: a.start_time,
+            end_time: a.end_time,
+            location_name: a.location_name,
+            location_lat: a.location_lat,
+            location_lng: a.location_lng,
+            location_address: a.location_address,
+            cost: a.cost,
+            currency: a.currency,
+            sort_order: a.sort_order,
+            check_in_date: a.check_in_date,
+            check_out_date: a.check_out_date,
+            category_data: a.category_data,
+          })),
+        );
+      }
+    }
+  }
+
+  // 4. Copy stops
+  const { data: stops } = await supabase.from('trip_stops').select('*').eq('trip_id', tripId).order('sort_order');
+  if (stops && stops.length > 0) {
+    await supabase.from('trip_stops').insert(
+      stops.map(s => ({
+        trip_id: newTrip.id,
+        name: s.name,
+        lat: s.lat,
+        lng: s.lng,
+        address: s.address,
+        type: s.type,
+        nights: s.nights,
+        arrival_date: s.arrival_date,
+        departure_date: s.departure_date,
+        sort_order: s.sort_order,
+        notes: s.notes,
+      })),
+    );
+  }
+
+  // 5. Copy budget categories
+  const { data: cats } = await supabase.from('budget_categories').select('*').eq('trip_id', tripId);
+  if (cats && cats.length > 0) {
+    await supabase.from('budget_categories').insert(
+      cats.map(c => ({
+        trip_id: newTrip.id,
+        name: c.name,
+        color: c.color,
+        budget_limit: c.budget_limit,
+      })),
+    );
+  }
+
+  invalidateCache('trips:');
+  return newTrip;
+};
+
 export const uploadCoverImage = async (tripId: string, uri: string): Promise<string> => {
   const path = `covers/${tripId}_${Date.now()}.jpg`;
   const response = await fetch(uri);

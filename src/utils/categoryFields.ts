@@ -134,15 +134,15 @@ export function detectCategoryFromTypes(types?: string[]): string {
 }
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  transport: '#3498DB',
-  hotel: '#8E44AD',
-  food: '#E67E22',
-  activity: '#27AE60',
-  sightseeing: '#E74C3C',
-  shopping: '#E84393',
-  relaxation: '#00CEC9',
-  stop: '#2D3436',
-  other: '#636E72',
+  transport: '#4A90D9',   // freundliches Blau
+  hotel: '#6C5CE7',       // WayFable Purple/Accent
+  food: '#FF6B6B',        // WayFable Coral
+  activity: '#00B894',    // WayFable Success-Grün
+  sightseeing: '#E17055', // warmes Orange-Rot
+  shopping: '#E84393',    // Pink
+  relaxation: '#4ECDC4',  // WayFable Turquoise
+  stop: '#6C5CE7',        // Purple
+  other: '#95A5A6',       // sanftes Grau
 };
 
 export function formatCategoryDetail(category: string, data: Record<string, any>): string | null {

@@ -13,7 +13,8 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { createPortalSession } from '../../api/stripe';
 import { deleteAccount } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
-import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { Icon, SETTINGS_ICONS, NAV_ICONS } from '../../utils/icons';
 import appJson from '../../../app.json';
 import { BUILD_NUMBER, BUILD_STAMP } from '../../utils/buildInfo';
 
@@ -113,21 +114,21 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <Card style={styles.settingsCard}>
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('EditProfile')}>
-          <Text style={styles.settingsIcon}>👤</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.editProfile} size={iconSize.sm} color={colors.secondary} /></View>
           <Text style={styles.settingsText}>Profil bearbeiten</Text>
-          <Text style={styles.arrow}>›</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.settingsIcon}>🔔</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.notifications} size={iconSize.sm} color={colors.primary} /></View>
           <Text style={styles.settingsText}>Benachrichtigungen</Text>
-          <Text style={styles.arrow}>›</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('LanguageCurrency')}>
-          <Text style={styles.settingsIcon}>🌐</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.language} size={iconSize.sm} color={colors.accent} /></View>
           <Text style={styles.settingsText}>Sprache & Währung</Text>
-          <Text style={styles.arrow}>›</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
       </Card>
 
@@ -201,12 +202,12 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       {isFeatureAllowed('ai') && (
         <Card style={styles.settingsCard} onPress={() => navigation.navigate('FableSettings')}>
           <View style={styles.settingsRow}>
-            <Text style={styles.settingsIcon}>{'✨'}</Text>
+            <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.fable} size={iconSize.sm} color={colors.secondary} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.settingsText}>Fable & KI</Text>
               <Text style={styles.settingsDesc}>Anweisungen, Memory, Kontext</Text>
             </View>
-            <Text style={styles.arrow}>{'›'}</Text>
+            <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
           </View>
         </Card>
       )}
@@ -215,16 +216,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <>
           <Card style={styles.settingsCard} onPress={() => navigation.navigate('AdminDashboard')}>
             <View style={styles.settingsRow}>
-              <Text style={styles.settingsIcon}>&#x2699;&#xFE0F;</Text>
+              <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.admin} size={iconSize.sm} color={colors.error} /></View>
               <Text style={styles.settingsText}>Admin Dashboard</Text>
-              <Text style={styles.arrow}>{'>'}</Text>
+              <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
             </View>
           </Card>
           <Card style={styles.settingsCard} onPress={() => navigation.navigate('BetaDashboard')}>
             <View style={styles.settingsRow}>
-              <Text style={styles.settingsIcon}>{'🧪'}</Text>
+              <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.beta} size={iconSize.sm} color={colors.accent} /></View>
               <Text style={styles.settingsText}>Beta-Dashboard</Text>
-              <Text style={styles.arrow}>{'›'}</Text>
+              <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
             </View>
           </Card>
         </>
@@ -233,21 +234,21 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       {/* Legal */}
       <Card style={styles.settingsCard}>
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Datenschutz')}>
-          <Text style={styles.settingsIcon}>🔒</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.privacy} size={iconSize.sm} color={colors.accent} /></View>
           <Text style={styles.settingsText}>Datenschutz</Text>
-          <Text style={styles.arrow}>{'›'}</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('AGB')}>
-          <Text style={styles.settingsIcon}>📄</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.terms} size={iconSize.sm} color={colors.accent} /></View>
           <Text style={styles.settingsText}>AGB</Text>
-          <Text style={styles.arrow}>{'›'}</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('Impressum')}>
-          <Text style={styles.settingsIcon}>ℹ️</Text>
+          <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.impressum} size={iconSize.sm} color={colors.accent} /></View>
           <Text style={styles.settingsText}>Impressum</Text>
-          <Text style={styles.arrow}>{'›'}</Text>
+          <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
         </TouchableOpacity>
       </Card>
 
@@ -378,10 +379,10 @@ const styles = StyleSheet.create({
   statLabel: { ...typography.caption, marginTop: 2 },
   settingsCard: { marginBottom: spacing.xl },
   settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
-  settingsIcon: { fontSize: 20, marginRight: spacing.md },
+  settingsIconWrap: { width: 32, height: 32, borderRadius: 8, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   settingsText: { ...typography.body, flex: 1 },
   settingsDesc: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  arrow: { fontSize: 20, color: colors.textLight },
+  arrow: { color: colors.textLight },
   divider: { height: 1, backgroundColor: colors.border },
   aiSettingsCard: { marginBottom: spacing.xl },
   aiSettingsTitle: { ...typography.h3, marginBottom: spacing.md },

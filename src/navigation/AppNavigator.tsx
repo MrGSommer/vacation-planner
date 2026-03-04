@@ -41,6 +41,8 @@ import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
 import { AnnouncementModal } from '../components/common/AnnouncementModal';
 import { PlanGenerationBar } from '../components/common/PlanGenerationBar';
+import { CommandPalette } from '../components/common/CommandPalette';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -98,6 +100,12 @@ export const AppNavigator: React.FC = () => {
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   const [currentRoute, setCurrentRoute] = useState('');
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+
+  // Global keyboard shortcuts (web only)
+  useKeyboardShortcuts([
+    { key: 'k', cmdOrCtrl: true, handler: () => setShowCommandPalette(v => !v) },
+  ]);
 
   // Extract invite token or deep link path from URL when user is not logged in
   useEffect(() => {
@@ -182,10 +190,10 @@ export const AppNavigator: React.FC = () => {
     >
       <View style={{ flex: 1 }}>
         {session && <PlanGenerationBar />}
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 250 }}>
           {session ? (
             <>
-              <Stack.Screen name="Main" component={MainNavigator} />
+              <Stack.Screen name="Main" component={MainNavigator} options={{ animation: 'none' }} />
               <Stack.Screen name="CreateTrip" component={CreateTripScreen} />
               <Stack.Screen name="EditTrip" component={EditTripScreen} />
               <Stack.Screen name="TripDetail" component={TripDetailScreen} />
@@ -225,6 +233,7 @@ export const AppNavigator: React.FC = () => {
         {showFab && <FloatingFeedbackButton />}
         {session && <AnnouncementModal />}
         {session && <TrialExpiredModal />}
+        {session && <CommandPalette visible={showCommandPalette} onClose={() => setShowCommandPalette(false)} />}
       </View>
     </NavigationContainer>
   );

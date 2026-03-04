@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ImageBackground, Linking, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,6 @@ import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations
 import { Trip, Activity, TripStop } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateHelpers';
-import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
@@ -32,20 +31,21 @@ import { createActivity, createDay, getDays } from '../../api/itineraries';
 import { exportKML } from '../../utils/geoImport';
 import { ensureContrast, tintWithWhite } from '../../utils/colorExtraction';
 import { TripRecapCard } from '../../components/trip/TripRecapCard';
+import { ChangeLog } from '../../components/common/ChangeLog';
+import { PresenceAvatars } from '../../components/common/PresenceAvatars';
+import { usePresence } from '../../hooks/usePresence';
+import { Icon } from '../../utils/icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
-
-const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
 
 interface DayInfo { date: string; dayNumber: number; }
 
 function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
-  const icon = getCategoryIcon(act.category, act.category_data);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
-  let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
+  let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${act.title}</strong>`;
   if (dayInfo) html += `<br/><span style="color:${colors.primary};font-size:12px;font-weight:600">Tag ${dayInfo.dayNumber} · ${formatDateShort(dayInfo.date)}</span>`;
-  if (act.location_name) html += `<br/><small>📍 ${act.location_name}</small>`;
+  if (act.location_name) html += `<br/><small>${act.location_name}</small>`;
   if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${detail}</span>`;
   if (act.description) html += `<br/><small style="color:#636E72">${act.description}</small>`;
   html += '</div>';
@@ -69,6 +69,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showAiModal, setShowAiModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [showChangeLog, setShowChangeLog] = useState(false);
+  const presenceUsers = usePresence(tripId, 'TripDetail');
   const mapInstanceRef = useRef<any>(null);
   const mapInitializedRef = useRef(false);
   const activitiesRef = useRef<Activity[]>([]);
@@ -262,7 +264,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             gmpClickable: true,
           });
           const iw = new google.maps.InfoWindow({
-            content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.nights} Nacht/Nächte` : '📍 Zwischenstopp'}</div>`,
+            content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `${stop.nights} Nacht/Nächte` : 'Zwischenstopp'}</div>`,
           });
           marker.addEventListener('gmp-click', () => openInfo(iw, marker));
         });
@@ -360,7 +362,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     <>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => navigation.navigate('Main' as any, { screen: 'Home' })} style={styles.backBtn}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerRight}>
           {nonOwnerCollabs.length > 0 && (
@@ -384,7 +386,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={() => setShowMenu(v => !v)} style={styles.menuBtn}>
-            <Text style={styles.menuText}>⋯</Text>
+            <Icon name="ellipsis-horizontal" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -393,17 +395,22 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1} />
           <View style={styles.menuDropdown}>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
-              <Text style={styles.menuIcon}>✏️</Text>
+              <Icon name="create-outline" size={18} color={colors.text} />
               <Text style={styles.menuLabel}>Bearbeiten</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowShareModal(true); }}>
-              <Text style={styles.menuIcon}>🔗</Text>
+              <Icon name="share-outline" size={18} color={colors.text} />
               <Text style={styles.menuLabel}>Teilen & Drucken</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowChangeLog(true); }}>
+              <Icon name="time-outline" size={18} color={colors.text} />
+              <Text style={styles.menuLabel}>Verlauf</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
-              <Text style={styles.menuIcon}>🗑️</Text>
+              <Icon name="trash-outline" size={18} color={colors.error} />
               <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
             </TouchableOpacity>
           </View>
@@ -419,12 +426,17 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
       <Text style={styles.destination}>{trip.destination}</Text>
       <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+      {presenceUsers.length > 0 && (
+        <View style={{ marginTop: spacing.sm }}>
+          <PresenceAvatars users={presenceUsers} />
+        </View>
+      )}
     </>
   );
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scroll} bounces={false}>
+      <ScrollView style={styles.scroll} refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={colors.primary} />}>
         {trip.cover_image_url ? (
           <ImageBackground source={{ uri: trip.cover_image_url }} style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
             <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.65)']} style={StyleSheet.absoluteFillObject} />
@@ -475,7 +487,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => navigation.navigate('Photos', { tripId })}
                 activeOpacity={0.7}
               >
-                <Text style={styles.gridCardIcon}>📸</Text>
+                <Icon name="images-outline" size={22} color={colors.primary} />
                 <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
               </TouchableOpacity>
             ) : (
@@ -484,7 +496,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => navigation.navigate('Subscription')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.gridCardIcon}>📸</Text>
+                <Icon name="images-outline" size={22} color={colors.primary} />
                 <Text style={styles.gridCardTitle}>Fotos</Text>
                 <Text style={styles.gridCardInfo}>Premium</Text>
               </TouchableOpacity>
@@ -496,7 +508,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => setShowAiModal(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.gridCardIcon}>✨</Text>
+                <Icon name="sparkles-outline" size={22} color={colors.accent} />
                 <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
                 <Text style={[styles.gridCardInfo, { color: colors.accent }]}>{aiCredits} Inspirationen</Text>
               </TouchableOpacity>
@@ -506,7 +518,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => navigation.navigate('Subscription')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.gridCardIcon}>✨</Text>
+                <Icon name="sparkles-outline" size={22} color={colors.accent} />
                 <Text style={styles.gridCardTitle}>Fable</Text>
                 <Text style={styles.gridCardInfo}>Inspirationen kaufen</Text>
               </TouchableOpacity>
@@ -526,13 +538,13 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 {mapReady && (
                   <View style={styles.mapHeaderActions}>
                     <TouchableOpacity onPress={handleExportToMaps} style={styles.fullscreenBtn}>
-                      <Text style={styles.fullscreenBtnText}>{'📤'}</Text>
+                      <Icon name="share-outline" size={20} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.fullscreenBtn}>
-                      <Text style={styles.fullscreenBtnText}>{'🔍'}</Text>
+                      <Icon name="search-outline" size={20} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.fullscreenBtn}>
-                      <Text style={styles.fullscreenBtnText}>⛶</Text>
+                      <Icon name="expand-outline" size={20} color={colors.primary} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -566,7 +578,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             onPress={() => setMapFullscreen(false)}
             style={[styles.fullscreenCloseBtn, { top: insets.top + spacing.sm }]}
           >
-            <Text style={styles.fullscreenCloseText}>← Schliessen</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="chevron-back" size={18} color={colors.primary} /><Text style={styles.fullscreenCloseText}>Schliessen</Text></View>
           </TouchableOpacity>
           <View style={[styles.fullscreenSearchBar, { top: insets.top + spacing.sm }]}>
             <PlaceAutocomplete
@@ -578,7 +590,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             onPress={handleExportToMaps}
             style={[styles.fullscreenExportBtn, { top: insets.top + spacing.sm }]}
           >
-            <Text style={styles.fullscreenExportText}>{'📤 KML'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="share-outline" size={16} color={colors.primary} /><Text style={styles.fullscreenExportText}>KML</Text></View>
           </TouchableOpacity>
         </>
       )}
@@ -610,6 +622,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           }}
         />
       )}
+
+      <ChangeLog tripId={tripId} visible={showChangeLog} onClose={() => setShowChangeLog(false)} />
 
       {showAiModal && trip && user && (
         <AiTripModal
@@ -677,19 +691,18 @@ const styles = StyleSheet.create({
   header: { padding: spacing.xl, paddingBottom: spacing.xxl },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   backBtn: {},
-  backText: { fontSize: 24, color: '#FFFFFF' },
+  backText: { color: '#FFFFFF' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   avatarRow: { flexDirection: 'row', alignItems: 'center' },
   avatarWrap: { borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', borderRadius: 16, overflow: 'hidden' },
   avatarOverflow: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   avatarOverflowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
-  menuText: { fontSize: 20, color: '#FFFFFF', fontWeight: '700', marginTop: -4 },
+  menuText: { color: '#FFFFFF' },
   menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
   menuDropdown: { position: 'absolute', top: 52, right: spacing.xl, backgroundColor: colors.card, borderRadius: borderRadius.md, ...shadows.lg, zIndex: 11, minWidth: 190, overflow: 'hidden' },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
-  menuIcon: { fontSize: 18, marginRight: spacing.sm, width: 24 },
-  menuLabel: { ...typography.body, fontWeight: '500' },
+  menuLabel: { ...typography.body, fontWeight: '500', marginLeft: spacing.sm },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   tripNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
   erlebtBadge: { backgroundColor: '#D4A017', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
@@ -706,7 +719,7 @@ const styles = StyleSheet.create({
   statLabel: { ...typography.caption, marginTop: 2 },
   gridRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   gridCard: { flex: 1, backgroundColor: colors.card, borderRadius: borderRadius.lg, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 48, ...shadows.sm },
-  gridCardIcon: { fontSize: 22 },
+  gridCardIcon: {},
   gridCardTitle: { ...typography.body, fontWeight: '600' },
   gridCardInfo: { ...typography.caption, color: colors.textLight },
   mapCard: { marginBottom: spacing.lg, overflow: 'hidden' },
@@ -714,7 +727,7 @@ const styles = StyleSheet.create({
   mapTitle: { ...typography.h3 },
   mapHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   fullscreenBtn: { padding: spacing.xs },
-  fullscreenBtnText: { fontSize: 20, color: colors.primary },
+  fullscreenBtnText: { color: colors.primary },
   mapSearchOverlay: { marginBottom: spacing.sm, zIndex: 100 },
   fullscreenCloseBtn: { position: 'fixed' as any, left: spacing.md, zIndex: 10000, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.lg, ...shadows.md },
   fullscreenCloseText: { ...typography.body, fontWeight: '600' as const, color: colors.primary },

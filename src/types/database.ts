@@ -208,6 +208,8 @@ export interface Photo {
   taken_at: string | null;
   day_id: string | null;
   creator_name: string | null;
+  lat: number | null;
+  lng: number | null;
   created_at: string;
 }
 
@@ -272,6 +274,24 @@ export interface TripStop {
   sort_order: number;
   travel_duration_from_prev: number | null;
   travel_distance_from_prev: number | null;
+  created_at: string;
+}
+
+export interface ActivityComment {
+  id: string;
+  activity_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  // Joined
+  profile?: { first_name: string | null; last_name: string | null; avatar_url: string | null };
+}
+
+export interface ActivityReaction {
+  id: string;
+  activity_id: string;
+  user_id: string;
+  emoji: string;
   created_at: string;
 }
 

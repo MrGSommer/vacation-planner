@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { isPushSupported, getPushPermission, subscribeToPush } from '../../utils/pushManager';
-import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface Props {
   userId: string;
@@ -37,7 +38,7 @@ export const NotificationPrompt: React.FC<Props> = ({ userId }) => {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.icon}>🔔</Text>
+        <Icon name="notifications-outline" size={iconSize.md} color={colors.primary} />
         <View style={styles.textWrap}>
           <Text style={styles.title}>Benachrichtigungen aktivieren</Text>
           <Text style={styles.subtitle}>Erhalte Erinnerungen vor deinen Reisen</Text>
@@ -73,7 +74,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  icon: { fontSize: 24 },
   textWrap: { flex: 1 },
   title: { ...typography.body, fontWeight: '600' },
   subtitle: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },

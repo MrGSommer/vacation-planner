@@ -32,8 +32,17 @@ export const formatDateLong = (date: string | Date): string => {
 };
 
 export const formatTime = (date: string | Date): string => {
-  const d = typeof date === 'string' ? parseISO(date) : date;
-  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (typeof date === 'string') {
+    // Plain time string like "14:30" or "14:30:00" — return HH:MM directly
+    const timeMatch = date.match(/^(\d{1,2}):(\d{2})/);
+    if (timeMatch) {
+      return `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+    }
+    // Full ISO date string
+    const d = parseISO(date);
+    return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
 export const getDayCount = (startDate: string, endDate: string): number => {

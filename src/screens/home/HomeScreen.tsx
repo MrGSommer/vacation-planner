@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground, ScrollView, Platform, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground, ScrollView, Modal, ActivityIndicator, Platform } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,13 +10,16 @@ import { useToast } from '../../contexts/ToastContext';
 import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTrip, CollaboratorWithProfile } from '../../api/invitations';
 import { getRecentCreateModeJob, PlanJob } from '../../api/aiPlanJobs';
 import { Trip } from '../../types/database';
+import { duplicateTrip } from '../../api/trips';
 import { formatDateRange, getDayCount, isTripActive, getTripCountdownText, getDaysUntil, getCurrentTripDay } from '../../utils/dateHelpers';
-import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, gradients, iconSize } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/common';
 import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
 import { NotificationPrompt } from '../../components/common/NotificationPrompt';
 import { ShareModal } from './ShareModal';
+import { Icon, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
+import { SwipeableRow } from '../../components/common/SwipeableRow';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -43,8 +46,11 @@ const TripCard: React.FC<{
   onPress: () => void;
   onShare: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
+  onEdit: () => void;
   isPast?: boolean;
-}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, isPast }) => {
+}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const others = collaborators.filter(c => c.user_id !== currentUserId);
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
@@ -88,7 +94,7 @@ const TripCard: React.FC<{
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.shareIcon}>↗</Text>
+              <Icon name={NAV_ICONS.share} size={iconSize.sm} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -104,11 +110,11 @@ const TripCard: React.FC<{
             )}
           </View>
           <TouchableOpacity
-            onPress={onDelete}
+            onPress={(e: any) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.deleteBtn}
           >
-            <Text style={styles.deleteIcon}>🗑️</Text>
+            <Icon name="ellipsis-vertical" size={iconSize.sm} color="rgba(255,255,255,0.85)" />
           </TouchableOpacity>
         </View>
       </View>
@@ -116,15 +122,41 @@ const TripCard: React.FC<{
   );
 
   return (
-    <TouchableOpacity style={[styles.card, isPast && styles.cardPast]} onPress={onPress} activeOpacity={0.85}>
-      {trip.cover_image_url ? (
-        <ImageBackground source={{ uri: trip.cover_image_url }} style={styles.cardGradient}>
-          {cardInner}
-        </ImageBackground>
-      ) : (
-        cardInner
+    <View style={{ position: 'relative' }}>
+      <TouchableOpacity style={[styles.card, isPast && styles.cardPast]} onPress={onPress} activeOpacity={0.85}>
+        {trip.cover_image_url ? (
+          <ImageBackground source={{ uri: trip.cover_image_url }} style={styles.cardGradient}>
+            {cardInner}
+          </ImageBackground>
+        ) : (
+          cardInner
+        )}
+      </TouchableOpacity>
+      {menuOpen && (
+        <>
+          <TouchableOpacity style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} activeOpacity={1} />
+          <View style={styles.cardMenu}>
+            <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onEdit(); }}>
+              <Icon name="create-outline" size={iconSize.sm} color={colors.accent} />
+              <Text style={styles.cardMenuLabel}>Bearbeiten</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onShare(); }}>
+              <Icon name="share-outline" size={iconSize.sm} color={colors.secondary} />
+              <Text style={styles.cardMenuLabel}>Teilen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onDuplicate(); }}>
+              <Icon name="copy-outline" size={iconSize.sm} color={colors.primary} />
+              <Text style={styles.cardMenuLabel}>Kopieren</Text>
+            </TouchableOpacity>
+            <View style={styles.cardMenuDivider} />
+            <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onDelete(); }}>
+              <Icon name="trash-outline" size={iconSize.sm} color={colors.error} />
+              <Text style={[styles.cardMenuLabel, { color: colors.error }]}>Löschen</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
-    </TouchableOpacity>
+    </View>
   );
 });
 
@@ -220,36 +252,20 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, [loadCollaborators]);
 
   const handleDeleteTrip = useCallback(async (trip: Trip) => {
+    // Show modal immediately, load collaborators in background
+    setDeleteTrip(trip);
+    setDeleteCollabs([]);
+    setDeleteLoading(true);
     try {
       const collabs = await getCollaborators(trip.id);
       const others = collabs.filter(c => c.user_id !== user?.id);
-      if (others.length === 0) {
-        // No collaborators — simple confirm & delete
-        const doDelete = async () => {
-          try {
-            await remove(trip.id);
-            showToast('Reise gelöscht', 'success');
-          } catch {
-            showToast('Fehler beim Löschen', 'error');
-          }
-        };
-        if (Platform.OS === 'web') {
-          if (window.confirm(`"${trip.name}" wirklich löschen?`)) doDelete();
-        } else {
-          Alert.alert('Reise löschen', `"${trip.name}" wirklich löschen?`, [
-            { text: 'Abbrechen', style: 'cancel' },
-            { text: 'Löschen', style: 'destructive', onPress: doDelete },
-          ]);
-        }
-      } else {
-        // Has collaborators — show transfer modal
-        setDeleteCollabs(others);
-        setDeleteTrip(trip);
-      }
+      setDeleteCollabs(others);
     } catch {
-      showToast('Fehler beim Laden der Teilnehmer', 'error');
+      // If collabs fail to load, still allow deletion
+    } finally {
+      setDeleteLoading(false);
     }
-  }, [user?.id, remove, showToast]);
+  }, [user?.id]);
 
   const handleForceDelete = useCallback(async () => {
     if (!deleteTrip) return;
@@ -280,6 +296,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       setDeleteLoading(false);
     }
   }, [deleteTrip, fetchTrips, showToast]);
+
+  const handleDuplicateTrip = useCallback(async (trip: Trip) => {
+    try {
+      showToast('Trip wird kopiert...', 'info');
+      await duplicateTrip(trip.id, user!.id);
+      await fetchTrips();
+      showToast(`"${trip.name}" kopiert`, 'success');
+    } catch {
+      showToast('Fehler beim Kopieren', 'error');
+    }
+  }, [user, fetchTrips, showToast]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -317,20 +344,20 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             const seed = nextTrip.id.charCodeAt(0) + nextTrip.id.charCodeAt(1);
             let mainText: string;
             let subText: string;
-            let emoji: string;
+            let countdownIcon: typeof MISC_ICONS.globe;
 
             if (active && tripDay) {
               mainText = `Tag ${tripDay.day}/${tripDay.total}`;
               subText = ACTIVE[seed % ACTIVE.length];
-              emoji = '\uD83C\uDF0D';
+              countdownIcon = MISC_ICONS.globe;
             } else if (daysUntil === 1) {
               mainText = 'Morgen!';
               subText = 'Es geht los!';
-              emoji = '\uD83D\uDE80';
+              countdownIcon = MISC_ICONS.rocket;
             } else {
               mainText = `${daysUntil} Tage`;
               subText = HYPE[seed % HYPE.length];
-              emoji = daysUntil <= 7 ? '\uD83D\uDD25' : '\u2708\uFE0F';
+              countdownIcon = daysUntil <= 7 ? MISC_ICONS.fire : 'airplane-outline';
             }
 
             return (
@@ -339,7 +366,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 onPress={() => handleTripPress(nextTrip)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.countdownEmoji}>{emoji}</Text>
+                <Icon name={countdownIcon} size={iconSize.lg} color={colors.accent} />
                 <View style={styles.countdownTextWrap}>
                   <Text style={styles.countdownMain}>{mainText}</Text>
                   <Text style={styles.countdownTripName} numberOfLines={1}>{nextTrip.name}</Text>
@@ -358,7 +385,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <HomeScreenSkeleton />
       ) : trips.length === 0 && !loading ? (
         <EmptyState
-          icon="🌍"
+          iconName="earth-outline"
           title="Noch keine Reisen"
           message="Erstelle deine erste Reise und beginne mit der Planung!"
           actionLabel="Reise erstellen"
@@ -380,14 +407,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.fableBannerIcon}>✨</Text>
+              <Icon name={MISC_ICONS.sparkles} size={iconSize.md} color={colors.secondary} />
               <View style={styles.fableBannerContent}>
                 <Text style={styles.fableBannerTitle}>Dein Reiseplan ist fertig!</Text>
                 <Text style={styles.fableBannerText}>
                   Fable hat deinen Plan{fableJob.context?.destination ? ` für ${fableJob.context.destination}` : ''} erstellt
                 </Text>
               </View>
-              <Text style={styles.fableBannerArrow}>›</Text>
+              <Icon name={NAV_ICONS.forward} size={iconSize.sm} color={colors.secondary} />
             </TouchableOpacity>
           )}
 
@@ -401,7 +428,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.recapBannerIcon}>{'\uD83C\uDF89'}</Text>
+              <Icon name={MISC_ICONS.confetti} size={iconSize.md} color={colors.success} />
               <View style={styles.recapBannerContent}>
                 <Text style={styles.recapBannerTitle}>Reise erlebt!</Text>
                 <Text style={styles.recapBannerText}>Schau dir den Rückblick von "{trip.name}" an</Text>
@@ -410,7 +437,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 onPress={(e: any) => { e.stopPropagation(); dismissRecap(trip.id); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.recapBannerClose}>{'\u2715'}</Text>
+                <Icon name={NAV_ICONS.close} size={iconSize.xs} color={colors.textSecondary} />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
@@ -418,14 +445,25 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           {activeTrips.map((trip, index) => (
             <React.Fragment key={trip.id}>
               {index > 0 && <Separator />}
-              <TripCard
-                trip={trip}
-                collaborators={collabMap[trip.id] || []}
-                currentUserId={user?.id || ''}
-                onPress={() => handleTripPress(trip)}
-                onShare={() => setShareTrip(trip)}
-                onDelete={() => handleDeleteTrip(trip)}
-              />
+              <SwipeableRow
+                actions={[
+                  { icon: 'copy-outline', color: colors.primary, onPress: () => handleDuplicateTrip(trip) },
+                  { icon: 'share-outline', color: colors.secondary, onPress: () => setShareTrip(trip) },
+                  { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteTrip(trip) },
+                ]}
+                disabled={Platform.OS === 'web'}
+              >
+                <TripCard
+                  trip={trip}
+                  collaborators={collabMap[trip.id] || []}
+                  currentUserId={user?.id || ''}
+                  onPress={() => handleTripPress(trip)}
+                  onShare={() => setShareTrip(trip)}
+                  onDelete={() => handleDeleteTrip(trip)}
+                  onDuplicate={() => handleDuplicateTrip(trip)}
+                  onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
+                />
+              </SwipeableRow>
             </React.Fragment>
           ))}
 
@@ -439,23 +477,32 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.pastHeaderText}>
                   Vergangene Reisen ({pastTrips.length})
                 </Text>
-                <Text style={styles.pastHeaderChevron}>
-                  {pastExpanded ? '▲' : '▼'}
-                </Text>
+                <Icon name={pastExpanded ? MISC_ICONS.collapse : MISC_ICONS.expand} size={iconSize.xs} color={colors.accent} />
               </TouchableOpacity>
 
               {pastExpanded && pastTrips.map((trip, index) => (
                 <React.Fragment key={trip.id}>
                   {index > 0 && <Separator />}
-                  <TripCard
-                    trip={trip}
-                    collaborators={collabMap[trip.id] || []}
-                    currentUserId={user?.id || ''}
-                    onPress={() => handleTripPress(trip)}
-                    onShare={() => setShareTrip(trip)}
-                    onDelete={() => handleDeleteTrip(trip)}
-                    isPast
-                  />
+                  <SwipeableRow
+                    actions={[
+                      { icon: 'copy-outline', color: colors.primary, onPress: () => handleDuplicateTrip(trip) },
+                      { icon: 'share-outline', color: colors.secondary, onPress: () => setShareTrip(trip) },
+                      { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteTrip(trip) },
+                    ]}
+                    disabled={Platform.OS === 'web'}
+                  >
+                    <TripCard
+                      trip={trip}
+                      collaborators={collabMap[trip.id] || []}
+                      currentUserId={user?.id || ''}
+                      onPress={() => handleTripPress(trip)}
+                      onShare={() => setShareTrip(trip)}
+                      onDelete={() => handleDeleteTrip(trip)}
+                      onDuplicate={() => handleDuplicateTrip(trip)}
+                      onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
+                      isPast
+                    />
+                  </SwipeableRow>
                 </React.Fragment>
               ))}
             </>
@@ -483,31 +530,37 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.deleteModal} onStartShouldSetResponder={() => true}>
             <Text style={styles.deleteModalTitle}>Reise löschen</Text>
             <Text style={styles.deleteModalInfo}>
-              Diese Reise hat {deleteCollabs.length} {deleteCollabs.length === 1 ? 'Teilnehmer' : 'Teilnehmer'}.
+              {deleteTrip ? `"${deleteTrip.name}"` : ''} wirklich löschen?
             </Text>
 
             {deleteLoading ? (
               <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
             ) : (
               <>
-                <Text style={styles.deleteModalSectionTitle}>Besitz übertragen an:</Text>
-                {deleteCollabs.map(collab => (
-                  <TouchableOpacity
-                    key={collab.user_id}
-                    style={styles.transferOption}
-                    onPress={() => handleTransferOwnership(collab)}
-                  >
-                    <Avatar uri={collab.profile.avatar_url} name={getDisplayName(collab.profile)} size={36} />
-                    <Text style={styles.transferName}>{getDisplayName(collab.profile)}</Text>
-                    <Text style={styles.transferArrow}>{'›'}</Text>
-                  </TouchableOpacity>
-                ))}
-
-                <View style={styles.deleteModalDivider} />
+                {deleteCollabs.length > 0 && (
+                  <>
+                    <Text style={styles.deleteModalSectionTitle}>Oder Besitz übertragen an:</Text>
+                    {deleteCollabs.map(collab => (
+                      <TouchableOpacity
+                        key={collab.user_id}
+                        style={styles.transferOption}
+                        onPress={() => handleTransferOwnership(collab)}
+                      >
+                        <Avatar uri={collab.profile.avatar_url} name={getDisplayName(collab.profile)} size={36} />
+                        <Text style={styles.transferName}>{getDisplayName(collab.profile)}</Text>
+                        <Icon name={NAV_ICONS.forward} size={iconSize.sm} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    ))}
+                    <View style={styles.deleteModalDivider} />
+                  </>
+                )}
 
                 <TouchableOpacity style={styles.forceDeleteBtn} onPress={handleForceDelete}>
-                  <Text style={styles.forceDeleteText}>Endgültig löschen</Text>
-                  <Text style={styles.forceDeleteHint}>Alle Teilnehmer verlieren Zugriff</Text>
+                  <Icon name="trash-outline" size={iconSize.sm} color={colors.error} />
+                  <View>
+                    <Text style={styles.forceDeleteText}>Endgültig löschen</Text>
+                    {deleteCollabs.length > 0 && <Text style={styles.forceDeleteHint}>Alle Teilnehmer verlieren Zugriff</Text>}
+                  </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setDeleteTrip(null)}>
@@ -525,7 +578,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         activeOpacity={0.8}
       >
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.fabText}>+</Text>
+          <Icon name={NAV_ICONS.add} size={iconSize.xl} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -577,7 +630,17 @@ const styles = StyleSheet.create({
   cardDates: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
   cardCountdown: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' as const, marginTop: 2 },
   deleteBtn: { padding: spacing.xs },
-  deleteIcon: { fontSize: 16, opacity: 0.7 },
+  menuBackdrop: { position: 'absolute', top: -200, left: -200, right: -200, bottom: -200, zIndex: 998 },
+  cardMenu: {
+    position: 'absolute', right: spacing.md, bottom: spacing.md + 24,
+    backgroundColor: '#FFFFFF', borderRadius: borderRadius.lg,
+    paddingVertical: spacing.xs, minWidth: 180,
+    ...shadows.lg, zIndex: 999,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  cardMenuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
+  cardMenuLabel: { ...typography.bodySmall, fontWeight: '500' },
+  cardMenuDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
   pastHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -602,7 +665,7 @@ const styles = StyleSheet.create({
   transferName: { ...typography.body, flex: 1, fontWeight: '500' },
   transferArrow: { fontSize: 20, color: colors.textLight },
   deleteModalDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  forceDeleteBtn: { paddingVertical: spacing.md },
+  forceDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   forceDeleteText: { ...typography.body, color: colors.error, fontWeight: '600' },
   forceDeleteHint: { ...typography.caption, color: colors.textLight, marginTop: 2 },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },

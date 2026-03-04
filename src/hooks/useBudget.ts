@@ -36,7 +36,8 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     // Only handle events matching our current scope
     if (record?.scope !== scope) return;
     if (eventType === 'INSERT' && payload.new) {
-      setExpenses(prev => [payload.new as unknown as Expense, ...prev]);
+      const newExp = payload.new as unknown as Expense;
+      setExpenses(prev => prev.some(e => e.id === newExp.id) ? prev : [newExp, ...prev]);
     } else if (eventType === 'UPDATE' && payload.new) {
       const updated = payload.new as unknown as Expense;
       setExpenses(prev => prev.map(e => e.id === updated.id ? updated : e));
@@ -57,7 +58,8 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     const record = (payload.new || payload.old) as any;
     if (record?.scope !== scope) return;
     if (eventType === 'INSERT' && payload.new) {
-      setCategories(prev => [...prev, payload.new as unknown as BudgetCategory]);
+      const newCat = payload.new as unknown as BudgetCategory;
+      setCategories(prev => prev.some(c => c.id === newCat.id) ? prev : [...prev, newCat]);
     } else if (eventType === 'UPDATE' && payload.new) {
       const updated = payload.new as unknown as BudgetCategory;
       setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));

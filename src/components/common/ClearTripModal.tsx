@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { clearTripData, ClearTripOptions } from '../../api/trips';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
+import { Icon, IconName } from '../../utils/icons';
 
 interface Props {
   visible: boolean;
@@ -13,16 +14,16 @@ interface Props {
 interface ClearOption {
   key: keyof ClearTripOptions;
   label: string;
-  icon: string;
+  icon: IconName;
   description: string;
 }
 
 const OPTIONS: ClearOption[] = [
-  { key: 'activities', label: 'Aktivitäten & Tage', icon: '📋', description: 'Alle Tagesplaene und Aktivitaeten' },
-  { key: 'stops', label: 'Stops', icon: '📍', description: 'Alle Reise-Stops' },
-  { key: 'budget', label: 'Budget & Ausgaben', icon: '💰', description: 'Kategorien und erfasste Ausgaben' },
-  { key: 'packing', label: 'Checkliste', icon: '✅', description: 'Alle Packlisten und Eintraege' },
-  { key: 'photos', label: 'Fotos', icon: '📸', description: 'Alle hochgeladenen Fotos' },
+  { key: 'activities', label: 'Aktivitäten & Tage', icon: 'calendar-outline', description: 'Alle Tagesplaene und Aktivitaeten' },
+  { key: 'stops', label: 'Stops', icon: 'pin-outline', description: 'Alle Reise-Stops' },
+  { key: 'budget', label: 'Budget & Ausgaben', icon: 'wallet-outline', description: 'Kategorien und erfasste Ausgaben' },
+  { key: 'packing', label: 'Checkliste', icon: 'checkmark-circle-outline', description: 'Alle Packlisten und Eintraege' },
+  { key: 'photos', label: 'Fotos', icon: 'images-outline', description: 'Alle hochgeladenen Fotos' },
 ];
 
 export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCleared }) => {
@@ -95,7 +96,9 @@ export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCl
               <View style={[styles.checkbox, selected[opt.key] && styles.checkboxChecked]}>
                 {selected[opt.key] && <Text style={styles.checkmark}>✓</Text>}
               </View>
-              <Text style={styles.optionIcon}>{opt.icon}</Text>
+              <View style={styles.optionIcon}>
+                <Icon name={opt.icon} size={iconSize.sm} color={colors.textSecondary} />
+              </View>
               <View style={styles.optionText}>
                 <Text style={styles.optionLabel}>{opt.label}</Text>
                 <Text style={styles.optionDesc}>{opt.description}</Text>
@@ -173,7 +176,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   checkmark: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  optionIcon: { fontSize: 20, marginRight: spacing.sm, width: 28 },
+  optionIcon: { marginRight: spacing.sm, width: 28, alignItems: 'center' as const, justifyContent: 'center' as const },
   optionText: { flex: 1 },
   optionLabel: { ...typography.body, fontWeight: '600' },
   optionDesc: { ...typography.caption, color: colors.textLight },

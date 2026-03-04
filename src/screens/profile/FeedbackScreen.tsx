@@ -11,6 +11,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { submitFeedback, getMyFeedback, BetaFeedback } from '../../api/feedback';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = {};
@@ -102,7 +103,10 @@ export const FeedbackScreen: React.FC<Props> = () => {
       {/* Back button (when opened as modal/stack screen) */}
       {navigation.canGoBack() && (
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>{'← Zurück'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon name="chevron-back" size={18} color={colors.primary} />
+            <Text style={styles.backBtnText}>Zurück</Text>
+          </View>
         </TouchableOpacity>
       )}
 

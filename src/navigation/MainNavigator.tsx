@@ -1,13 +1,13 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { Avatar } from '../components/common';
 import { useAuthContext } from '../contexts/AuthContext';
 import { getDisplayName } from '../utils/profileHelpers';
-import { colors } from '../utils/theme';
+import { colors, iconSize } from '../utils/theme';
+import { Icon, TAB_ICONS } from '../utils/icons';
 
 const Tab = createBottomTabNavigator();
 
@@ -19,7 +19,7 @@ export const MainNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.secondary,
         tabBarInactiveTintColor: colors.textLight,
         tabBarStyle: { borderTopColor: colors.border, paddingBottom: insets.bottom > 0 ? insets.bottom : 4, height: 65 + (insets.bottom > 0 ? insets.bottom : 4) },
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
@@ -30,7 +30,9 @@ export const MainNavigator: React.FC = () => {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Reisen',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 25, color }}>🌍</Text>,
+          tabBarIcon: ({ color, focused }) => (
+            <Icon name={focused ? TAB_ICONS.homeFilled : TAB_ICONS.home} size={iconSize.md} color={color} />
+          ),
         }}
       />
       <Tab.Screen

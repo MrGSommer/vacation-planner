@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView } from 'react-native';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface TimePickerInputProps {
   label?: string;
@@ -40,7 +41,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({ label, value, 
         <Text style={[styles.inputText, !value && styles.placeholder]}>
           {value || placeholder || 'Uhrzeit wählen'}
         </Text>
-        <Text style={styles.icon}>🕐</Text>
+        <Icon name="time-outline" size={18} color={colors.textLight} />
       </TouchableOpacity>
       <Modal visible={visible} transparent animationType="fade">
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setVisible(false)}>

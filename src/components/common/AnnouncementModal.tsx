@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { getActiveAnnouncements, getDismissedAnnouncementIds, dismissAnnouncement } from '../../api/announcements';
 import { colors, spacing, borderRadius, typography, gradients } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 import { Announcement } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 
@@ -104,7 +105,9 @@ export const AnnouncementModal: React.FC = () => {
             {announcement.image_url ? (
               <Image source={{ uri: announcement.image_url }} style={styles.image} resizeMode="contain" />
             ) : (
-              <Text style={styles.icon}>{'📢'}</Text>
+              <View style={styles.icon}>
+                <Icon name="megaphone-outline" size={40} color={colors.primary} />
+              </View>
             )}
             <Text style={styles.title}>{announcement.title}</Text>
             <Text style={styles.message}>{announcement.body}</Text>
@@ -152,8 +155,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   icon: {
-    fontSize: 48,
     marginBottom: spacing.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   image: {
     width: 200,

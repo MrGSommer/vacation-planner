@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform } from 'react-native';
 import { StripeBuyButton } from './StripeBuyButton';
-import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface BuyInspirationenModalProps {
   visible: boolean;
@@ -23,7 +24,7 @@ export const BuyInspirationenModal: React.FC<BuyInspirationenModalProps> = ({
           <View style={styles.header}>
             <Text style={styles.title}>Inspirationen kaufen</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.close}>{'✕'}</Text>
+              <Icon name="close" size={iconSize.md} color={colors.primary} />
             </TouchableOpacity>
           </View>
           <Text style={styles.desc}>20 Inspirationen für CHF 5 — kein Abo nötig.</Text>
@@ -46,6 +47,6 @@ const styles = StyleSheet.create({
   content: { backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.xl, width: '100%', maxWidth: 480 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   title: { ...typography.h3 },
-  close: { fontSize: 20, color: colors.textSecondary, padding: spacing.xs },
+  close: { padding: spacing.xs },
   desc: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.lg },
 });

@@ -2,16 +2,17 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Animated,
   Dimensions, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
-  PanResponder,
+  PanResponder, RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
+import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
 import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
-import { extractExifDateFromUri, extractExifDateFromBuffer } from '../../utils/exifReader';
+import { extractExifDateFromUri, extractExifDateFromBuffer, extractExifDataFromBuffer } from '../../utils/exifReader';
 import { getDays } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
 import { Photo, ItineraryDay } from '../../types/database';
@@ -23,6 +24,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { formatDateShort, formatDateMedium } from '../../utils/dateHelpers';
 import { parseISO } from 'date-fns';
+import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 
@@ -47,14 +49,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.container}>
         <Header title="Fotos" onBack={() => navigation.navigate('TripDetail', { tripId })} />
         <UpgradePrompt
-          icon="📸"
+          iconName="images-outline"
           title="Foto-Galerie"
-          message="Lade Fotos hoch und teile Reiseerinnerungen mit Premium"
+          message="Halte deine schönsten Reisemomente fest"
+          highlights={[
+            { icon: 'cloud-upload-outline', text: 'Unbegrenzt Fotos hochladen' },
+            { icon: 'people-outline', text: 'Fotos mit Reisepartnern teilen' },
+            { icon: 'location-outline', text: 'Fotos auf der Karte anzeigen' },
+          ]}
         />
       </View>
     );
   }
 
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,6 +150,9 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const flatPhotos = sortedPhotos;
 
+  // Photos with GPS coordinates
+  const geoPhotos = useMemo(() => photos.filter(p => p.lat != null && p.lng != null), [photos]);
+
   // Day counts for filter chips
   const dayCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -171,11 +182,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             const file = files[i];
             // Read EXIF from ORIGINAL file bytes (before any compression)
             const buffer = await file.arrayBuffer();
-            const exifDate = extractExifDateFromBuffer(buffer);
+            const exifData = extractExifDataFromBuffer(buffer);
             // Create blob URL for Canvas compression
             const blobUrl = URL.createObjectURL(file);
             try {
-              const newPhoto = await uploadPhoto(tripId, user.id, blobUrl, file.name, undefined, exifDate, tripName, creatorName);
+              const newPhoto = await uploadPhoto(tripId, user.id, blobUrl, file.name, undefined, exifData.date, tripName, creatorName, exifData.lat, exifData.lng);
               setPhotos(prev => [newPhoto, ...prev]);
             } finally {
               URL.revokeObjectURL(blobUrl);
@@ -522,7 +533,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         {selectMode && (
           <View style={[styles.selectOverlay, isSelected && styles.selectOverlayActive]}>
             <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
-              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+              {isSelected && <Icon name="checkmark" size={16} color="#FFFFFF" />}
             </View>
           </View>
         )}
@@ -567,11 +578,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
               {selectedIds.size > 0 && (
                 <>
                   <TouchableOpacity style={styles.bulkAction} onPress={handleBulkExport} disabled={bulkProcessing}>
-                    <Text style={styles.bulkIcon}>↗</Text>
+                    <Icon name="share-outline" size={16} color={colors.secondary} />
                     <Text style={styles.bulkText}>Teilen</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.bulkAction, styles.bulkDelete]} onPress={handleBulkDelete} disabled={bulkProcessing}>
-                    <Text style={[styles.bulkIcon, { color: colors.error }]}>✕</Text>
+                    <Icon name="trash-outline" size={16} color={colors.error} />
                     <Text style={[styles.bulkText, { color: colors.error }]}>Löschen</Text>
                   </TouchableOpacity>
                   {bulkProcessing && <ActivityIndicator size="small" color={colors.accent} />}
@@ -583,10 +594,19 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             </>
           ) : (
             <>
+              {geoPhotos.length > 0 && Platform.OS !== 'web' && (
+                <TouchableOpacity
+                  style={[styles.viewToggle, viewMode === 'map' && styles.viewToggleActive]}
+                  onPress={() => setViewMode(v => v === 'grid' ? 'map' : 'grid')}
+                  activeOpacity={0.7}
+                >
+                  <Icon name={viewMode === 'grid' ? 'map-outline' : 'grid-outline'} size={16} color={viewMode === 'map' ? '#FFFFFF' : colors.textSecondary} />
+                </TouchableOpacity>
+              )}
               {photoStats.days > 1 && (
                 <Text style={styles.statsText}>{photoStats.count} Fotos · {photoStats.days} Tage</Text>
               )}
-              {flatPhotos.length >= 3 && (
+              {flatPhotos.length >= 3 && viewMode === 'grid' && (
                 <TouchableOpacity
                   style={styles.slideshowButton}
                   onPress={() => { openViewer(flatPhotos[0]); startSlideshow(); }}
@@ -595,9 +615,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Text style={styles.slideshowButtonText}>▶ Diashow</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.selectButton} onPress={() => setSelectMode(true)} activeOpacity={0.7}>
-                <Text style={styles.selectButtonText}>Auswählen</Text>
-              </TouchableOpacity>
+              {viewMode === 'grid' && (
+                <TouchableOpacity style={styles.selectButton} onPress={() => setSelectMode(true)} activeOpacity={0.7}>
+                  <Text style={styles.selectButtonText}>Auswählen</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
@@ -654,12 +676,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         <PhotosSkeleton />
       ) : photos.length === 0 ? (
         <EmptyState
-          icon="📸"
+          iconName="camera-outline"
           title="Keine Fotos"
           message="Lade Fotos hoch, um deine Reiseerinnerungen festzuhalten"
           actionLabel="Foto hochladen"
           onAction={handleUpload}
         />
+      ) : viewMode === 'map' && geoPhotos.length > 0 ? (
+        <PhotoMapView photos={geoPhotos} onPhotoPress={openViewer} />
       ) : (
         <FlatList
           data={sortedPhotos}
@@ -668,6 +692,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           numColumns={COLUMNS}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.columnWrapper}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={loadPhotos} tintColor={colors.primary} />}
         />
       )}
 
@@ -686,7 +711,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           {/* Top bar */}
           <View style={styles.viewerTopBar}>
             <TouchableOpacity style={styles.viewerBtn} onPress={() => { setSelectedPhoto(null); setEditingCaption(false); stopSlideshow(); }}>
-              <Text style={styles.viewerBtnText}>✕</Text>
+              <Icon name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.viewerCounter}>
               {slideshowActive ? 'Diashow' : flatPhotos.length > 0 ? `${viewerIndex + 1} / ${flatPhotos.length}` : ''}
@@ -694,12 +719,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             <View style={styles.viewerTopActions}>
               {flatPhotos.length >= 3 && (
                 <TouchableOpacity style={styles.viewerBtn} onPress={slideshowActive ? stopSlideshow : startSlideshow}>
-                  <Text style={styles.viewerBtnText}>{slideshowActive ? '⏸' : '▶'}</Text>
+                  <Icon name={slideshowActive ? 'pause' : 'play'} size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
               {selectedPhoto && (
                 <TouchableOpacity style={styles.viewerBtn} onPress={() => handleSingleExport(selectedPhoto)}>
-                  <Text style={styles.viewerBtnText}>↗</Text>
+                  <Icon name="share-outline" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
             </View>
@@ -896,6 +921,13 @@ const styles = StyleSheet.create({
   },
   checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   checkmark: { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1 },
+
+  // View toggle
+  viewToggle: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  viewToggleActive: { backgroundColor: colors.secondary },
 
   // FAB
   fab: { position: 'absolute', right: spacing.xl, bottom: spacing.xl, width: 56, height: 56 },

@@ -1193,15 +1193,16 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     // User picks granularity from there
   }, [generateStructure]);
 
-  const confirmPlan = useCallback(async (skipConflictCheck = false) => {
-    if (!plan) return;
+  const confirmPlan = useCallback(async (skipConflictCheck = false, overridePlan?: AiTripPlan) => {
+    const activePlan = overridePlan || plan;
+    if (!activePlan) return;
 
     // Check for conflicts before executing (enhance mode only)
     if (!skipConflictCheck && mode === 'enhance' && tripId) {
       try {
         const existingActivities = await getActivitiesForTrip(tripId);
         const existingTitles = new Set(existingActivities.map(a => a.title.toLowerCase()));
-        const conflicting = plan.days?.flatMap(d => d.activities || [])
+        const conflicting = activePlan.days?.flatMap(d => d.activities || [])
           .filter(a => existingTitles.has(a.title.toLowerCase()))
           .map(a => a.title) || [];
 
@@ -1220,7 +1221,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
     try {
       const result = await executePlan(
-        plan,
+        activePlan,
         tripId,
         userId,
         contextRef.current.currency || 'CHF',

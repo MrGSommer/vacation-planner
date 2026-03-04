@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { supabase } from '../../api/supabase';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
@@ -85,7 +86,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <Header title="Warteliste" onBack={() => navigation.goBack()} />
           <View style={styles.successContainer}>
             <LinearGradient colors={[...gradients.ocean]} style={styles.successGradient}>
-              <Text style={styles.successIcon}>{'🎉'}</Text>
+              <Icon name="happy-outline" size={48} color="#FFFFFF" />
               <Text style={styles.successTitle}>Du bist dabei!</Text>
               <Text style={styles.successMessage}>
                 Wir benachrichtigen dich per E-Mail, sobald WayFable für dich bereit ist.
@@ -104,7 +105,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         <Header title="Warteliste" onBack={() => navigation.goBack()} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <Text style={styles.waitlistEmoji}>{'✈️'}</Text>
+            <Icon name="airplane-outline" size={48} color={colors.primary} />
             <Text style={styles.title}>Bald verfügbar!</Text>
             <Text style={styles.subtitle}>
               WayFable befindet sich aktuell in der Beta-Phase. Trag dich ein und wir melden uns, sobald du loslegen kannst.
@@ -155,7 +156,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
           <Pressable style={styles.agbRow} onPress={() => setAgbAccepted(!agbAccepted)}>
             <View style={[styles.checkbox, agbAccepted && styles.checkboxChecked]}>
-              {agbAccepted && <Text style={styles.checkmark}>{'✓'}</Text>}
+              {agbAccepted && <Icon name="checkmark" size={14} color="#FFFFFF" />}
             </View>
             <Text style={styles.agbText}>
               Ich akzeptiere die{' '}

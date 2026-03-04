@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Calendar, DateData } from 'react-native-calendars';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
+import { Icon } from '../../utils/icons';
 import { Header, Input, Button, PlaceAutocomplete, Avatar } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { useTrips } from '../../hooks/useTrips';
@@ -428,7 +429,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                 </View>
               ) : (
                 <View style={[styles.coverPicker, styles.coverPlaceholder]}>
-                  <Text style={styles.coverPlaceholderIcon}>🌄</Text>
+                  <Icon name="image-outline" size={32} color={colors.textLight} />
                   <Text style={styles.coverPlaceholderText}>Kein Bild (Farbverlauf)</Text>
                 </View>
               )}
@@ -452,7 +453,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.coverActionIcon}>📷</Text>
+                  <Icon name="camera-outline" size={18} color={colors.primary} />
                   <Text style={styles.coverActionText}>Eigenes</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -464,13 +465,13 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                   {unsplashLoading ? (
                     <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
-                    <Text style={styles.coverActionIcon}>{coverMode === 'unsplash' ? '🔄' : '✨'}</Text>
+                    <Icon name={coverMode === 'unsplash' ? 'refresh-outline' : 'sparkles-outline'} size={18} color={colors.primary} />
                   )}
                   <Text style={styles.coverActionText}>{coverMode === 'unsplash' ? 'Nächstes' : 'Vorschlag'}</Text>
                 </TouchableOpacity>
                 {coverImageUrl && (
                   <TouchableOpacity style={styles.coverActionBtn} onPress={handleClearCover} activeOpacity={0.7}>
-                    <Text style={styles.coverActionIcon}>✕</Text>
+                    <Icon name="close" size={18} color={colors.error} />
                     <Text style={[styles.coverActionText, { color: colors.error }]}>Standard</Text>
                   </TouchableOpacity>
                 )}
@@ -638,11 +639,11 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                       <View style={styles.memberInfo}>
                         <Text style={styles.memberName} numberOfLines={1}>{getDisplayName(member.profile)}</Text>
                         <TouchableOpacity onPress={() => handleToggleRole(member)}>
-                          <Text style={styles.memberRoleTappable}>{roleLabels[member.role] || member.role}  ↻</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Text style={styles.memberRoleTappable}>{roleLabels[member.role] || member.role}</Text><Icon name="swap-horizontal-outline" size={14} color={colors.secondary} /></View>
                         </TouchableOpacity>
                       </View>
                       <TouchableOpacity onPress={() => handleRemoveMember(member)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Text style={styles.removeMember}>✕</Text>
+                        <Icon name="close-circle-outline" size={20} color={colors.error} />
                       </TouchableOpacity>
                     </View>
                   ))}

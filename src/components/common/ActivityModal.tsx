@@ -6,8 +6,10 @@ import { TimePickerInput } from './TimePickerInput';
 import { CategoryFieldsInput } from './CategoryFieldsInput';
 import { PlaceAutocomplete, PlaceResult } from './PlaceAutocomplete';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { CATEGORY_COLORS } from '../../utils/categoryFields';
 import { Activity } from '../../types/database';
-import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { Icon, ACTIVITY_CATEGORY_ICONS } from '../../utils/icons';
 
 export interface ActivityFormData {
   title: string;
@@ -121,11 +123,11 @@ export const ActivityModal: React.FC<Props> = ({
               {categories.map(cat => (
                 <TouchableOpacity
                   key={cat.id}
-                  style={[styles.catChip, category === cat.id && styles.catChipActive]}
+                  style={[styles.catChip, category === cat.id && { borderColor: CATEGORY_COLORS[cat.id] || colors.primary, backgroundColor: (CATEGORY_COLORS[cat.id] || colors.primary) + '15' }]}
                   onPress={() => { setCategory(cat.id); setCategoryData({}); }}
                 >
-                  <Text style={styles.catIcon}>{cat.icon}</Text>
-                  <Text style={[styles.catLabel, category === cat.id && styles.catLabelActive]}>{cat.label}</Text>
+                  <Icon name={ACTIVITY_CATEGORY_ICONS[cat.id] || 'ellipsis-horizontal-circle-outline'} size={iconSize.sm} color={CATEGORY_COLORS[cat.id] || colors.textSecondary} />
+                  <Text style={[styles.catLabel, category === cat.id && { color: CATEGORY_COLORS[cat.id] || colors.primary, fontWeight: '600' as const }]}>{cat.label}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -197,7 +199,7 @@ const styles = StyleSheet.create({
   categoryRow: { marginBottom: spacing.md },
   catChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm, minHeight: 44, borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-  catIcon: { fontSize: 16, marginRight: 4 },
+  catIcon: { marginRight: 4 },
   catLabel: { ...typography.caption },
   catLabelActive: { color: colors.primary, fontWeight: '600' },
   buttons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },

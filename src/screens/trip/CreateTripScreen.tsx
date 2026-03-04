@@ -8,6 +8,7 @@ import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { AiTripModal } from '../../components/ai/AiTripModal';
+import { Icon } from '../../utils/icons';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -172,7 +173,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                     end={{ x: 1, y: 0 }}
                     style={styles.aiButtonGradient}
                   >
-                    <Text style={styles.aiButtonText}>{'✨ Mit Fable planen'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={18} color="#FFFFFF" /><Text style={styles.aiButtonText}>Mit Fable planen</Text></View>
                     <Text style={styles.aiButtonSubtext}>Dein Reisebegleiter hilft dir bei der Planung</Text>
                     {aiCredits > 0 && (
                       <Text style={styles.aiButtonSubtext}>{aiCredits} Inspirationen verfügbar</Text>
@@ -182,7 +183,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
               ) : (
                 <View style={styles.aiButton}>
                   <UpgradePrompt
-                    icon="✨"
+                    iconName="sparkles-outline"
                     title="Mit Fable planen"
                     message="Kaufe Inspirationen um deinen Reisebegleiter zu nutzen"
                     inline
@@ -273,7 +274,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
       {tripLimitReached ? (
         <View style={styles.footer}>
           <UpgradePrompt
-            icon="✈️"
+            iconName="airplane-outline"
             title="Trip-Limit erreicht"
             message="Upgrade auf Premium für unbegrenzte Trips"
             inline

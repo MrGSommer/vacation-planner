@@ -30,6 +30,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
+import { Icon } from '../../utils/icons';
 import { Button, Avatar } from '../../components/common';
 import { TripPrintTab } from '../../components/trip/TripPrintTab';
 
@@ -489,9 +490,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                           </Text>
                           {isOwner ? (
                             <TouchableOpacity onPress={() => handleToggleRole(member)}>
-                              <Text style={styles.memberRoleTappable}>
-                                {roleLabels[member.role] || member.role}  ↻
-                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Text style={styles.memberRoleTappable}>
+                                  {roleLabels[member.role] || member.role}
+                                </Text>
+                                <Icon name="swap-horizontal-outline" size={14} color={colors.secondary} />
+                              </View>
                             </TouchableOpacity>
                           ) : (
                             <Text style={styles.memberRole}>
@@ -504,7 +508,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                             onPress={() => handleRemoveMember(member)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
-                            <Text style={styles.removeMember}>✕</Text>
+                            <Icon name="close-circle-outline" size={20} color={colors.error} />
                           </TouchableOpacity>
                         )}
                       </View>
@@ -578,7 +582,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                       {getDisplayName(member.profile)}
                     </Text>
                     {transferTargetId === member.user_id && (
-                      <Text style={styles.transferCheck}>✓</Text>
+                      <Icon name="checkmark" size={16} color={colors.secondary} />
                     )}
                   </TouchableOpacity>
                 ))}

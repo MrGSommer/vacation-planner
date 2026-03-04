@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { typography, spacing } from '../../utils/theme';
-import { gradients } from '../../utils/theme';
+import { gradients, colors } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 const STATUS_TEXTS = [
   'Suche Sehenswürdigkeiten...',
@@ -60,14 +61,14 @@ export const AiPlanningAnimation: React.FC = () => {
 
   return (
     <LinearGradient colors={[...gradients.ocean]} style={styles.container}>
-      <Animated.Text
+      <Animated.View
         style={[
           styles.plane,
           { transform: [{ translateX }, { translateY }] },
         ]}
       >
-        {'✈️'}
-      </Animated.Text>
+        <Icon name="airplane" size={24} color={colors.primary} />
+      </Animated.View>
 
       <Animated.Text style={[styles.statusText, { opacity: textOpacity }]}>
         {STATUS_TEXTS[statusIndex]}

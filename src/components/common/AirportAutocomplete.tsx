@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { searchAirports, Airport } from '../../data/airports';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface Props {
   label?: string;
@@ -134,7 +135,7 @@ export const AirportAutocomplete: React.FC<Props> = ({ label, placeholder, value
     <View style={[styles.container, showDropdown && { zIndex: 9999 }]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
-        <Text style={styles.icon}>{'✈'}</Text>
+        <Icon name="airplane-outline" size={18} color={colors.textLight} />
         <TextInput
           style={styles.input}
           value={query}
@@ -146,7 +147,7 @@ export const AirportAutocomplete: React.FC<Props> = ({ label, placeholder, value
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.clearIcon}>{'✕'}</Text>
+            <Icon name="close-circle" size={18} color={colors.textLight} />
           </TouchableOpacity>
         )}
       </View>

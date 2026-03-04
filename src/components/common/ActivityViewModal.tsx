@@ -1,13 +1,16 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { Activity } from '../../types/database';
+import { ActivityComments } from './ActivityComments';
+import { ActivityReactions } from './ActivityReactions';
 import { FlightInfo } from '../../utils/flightLookup';
 import { getFlightStatusLabel } from '../../hooks/useFlightStatus';
-import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { Icon, getActivityIconName } from '../../utils/icons';
 import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { openInGoogleMaps } from '../../utils/openInMaps';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
 
 interface Props {
@@ -60,7 +63,7 @@ export const ActivityViewModal: React.FC<Props> = ({
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Category badge */}
             <View style={[styles.categoryBadge, { backgroundColor: catColor + '15' }]}>
-              <Text style={styles.categoryIcon}>{getActivityIcon(activity.category, catData)}</Text>
+              <Icon name={getActivityIconName(activity.category, catData)} size={iconSize.sm} color={catColor} />
               <Text style={[styles.categoryLabel, { color: catColor }]}>{cat?.label || activity.category}</Text>
             </View>
 
@@ -70,7 +73,7 @@ export const ActivityViewModal: React.FC<Props> = ({
             {/* Time */}
             {activity.start_time && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoIcon}>🕐</Text>
+                <Icon name="time-outline" size={iconSize.sm} color={colors.secondary} />
                 <Text style={styles.infoText}>{activity.start_time} Uhr</Text>
               </View>
             )}
@@ -78,14 +81,14 @@ export const ActivityViewModal: React.FC<Props> = ({
             {/* Location */}
             {activity.location_name && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoIcon}>📍</Text>
+                <Icon name="location-outline" size={iconSize.sm} color={colors.primary} />
                 <Text style={[styles.infoText, { flex: 1 }]}>{activity.location_name}</Text>
                 {activity.location_lat && activity.location_lng && (
                   <TouchableOpacity
                     onPress={() => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={styles.mapsLinkIcon}>↗</Text>
+                    <Icon name="open-outline" size={iconSize.xs} color={colors.secondary} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -163,7 +166,7 @@ export const ActivityViewModal: React.FC<Props> = ({
                           )}
                         </View>
                         <View style={styles.flightArrow}>
-                          <Text style={styles.flightArrowIcon}>{'✈'}</Text>
+                          <Icon name="airplane" size={iconSize.sm} color={colors.secondary} />
                           {flightStatus!.duration_min ? (
                             <Text style={styles.flightDuration}>
                               {Math.floor(flightStatus!.duration_min / 60)}h{String(flightStatus!.duration_min % 60).padStart(2, '0')}
@@ -231,6 +234,12 @@ export const ActivityViewModal: React.FC<Props> = ({
               userId={userId || ''}
               readOnly={!isEditor}
             />
+
+            {/* Reactions */}
+            <ActivityReactions activityId={activity.id} />
+
+            {/* Comments */}
+            <ActivityComments activityId={activity.id} />
           </ScrollView>
 
           {/* Action bar */}
@@ -238,11 +247,11 @@ export const ActivityViewModal: React.FC<Props> = ({
             {isEditor && (
               <>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => { onClose(); onEdit(activity); }}>
-                  <Text style={styles.editIcon}>✏️</Text>
+                  <Icon name="create-outline" size={iconSize.sm} color={colors.primary} />
                   <Text style={styles.actionText}>Bearbeiten</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => { onClose(); onDelete(activity.id); }}>
-                  <Text style={styles.deleteIcon}>🗑️</Text>
+                  <Icon name="trash-outline" size={iconSize.sm} color={colors.error} />
                   <Text style={[styles.actionText, { color: colors.error }]}>Löschen</Text>
                 </TouchableOpacity>
               </>

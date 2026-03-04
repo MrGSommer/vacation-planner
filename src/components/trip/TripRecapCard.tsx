@@ -6,7 +6,8 @@ import { getPhotos } from '../../api/photos';
 import { getStops } from '../../api/stops';
 import { updateTrip } from '../../api/trips';
 import { sendAiMessage, AiMessage } from '../../api/aiChat';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
+import { Icon, IconName } from '../../utils/icons';
 import { getDayCount } from '../../utils/dateHelpers';
 
 interface Props {
@@ -83,11 +84,11 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
     }
   };
 
-  const stats = [
-    { icon: '\uD83D\uDCC5', value: days, label: 'Tage', screen: 'Itinerary', params: { tripId: trip.id } },
-    { icon: '\uD83D\uDCCB', value: activityCount, label: 'Aktivitäten', screen: 'Itinerary', params: { tripId: trip.id } },
-    { icon: '\uD83D\uDCCD', value: stopCount, label: 'Stopps', screen: 'Stops', params: { tripId: trip.id } },
-    { icon: '\uD83D\uDCF8', value: photoCount, label: 'Fotos', screen: 'Photos', params: { tripId: trip.id } },
+  const stats: { icon: IconName; value: number; label: string; screen: string; params: { tripId: string } }[] = [
+    { icon: 'calendar-outline', value: days, label: 'Tage', screen: 'Itinerary', params: { tripId: trip.id } },
+    { icon: 'list-outline', value: activityCount, label: 'Aktivitäten', screen: 'Itinerary', params: { tripId: trip.id } },
+    { icon: 'pin-outline', value: stopCount, label: 'Stopps', screen: 'Stops', params: { tripId: trip.id } },
+    { icon: 'images-outline', value: photoCount, label: 'Fotos', screen: 'Photos', params: { tripId: trip.id } },
   ];
 
   return (
@@ -102,7 +103,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
             onPress={() => navigation.navigate(s.screen, s.params)}
             activeOpacity={0.7}
           >
-            <Text style={styles.statIcon}>{s.icon}</Text>
+            <Icon name={s.icon} size={iconSize.md} color={colors.primary} />
             <Text style={styles.statValue}>{s.value}</Text>
             <Text style={styles.statLabel}>{s.label}</Text>
           </TouchableOpacity>
@@ -122,7 +123,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
 
       {recap ? (
         <View style={styles.recapBox}>
-          <Text style={styles.recapIconText}>{'\u2728'}</Text>
+          <Icon name="sparkles" size={iconSize.md} color={colors.accent} />
           <Text style={styles.recapText}>{recap}</Text>
           <TouchableOpacity
             style={styles.redoBtn}
@@ -133,7 +134,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
             {recapLoading ? (
               <ActivityIndicator size="small" color={colors.accent} />
             ) : (
-              <Text style={styles.redoIcon}>{'\u21BB'}</Text>
+              <Icon name="refresh-outline" size={iconSize.sm} color={colors.textSecondary} />
             )}
           </TouchableOpacity>
         </View>
@@ -148,7 +149,7 @@ Schreibe warm und persönlich auf Deutsch. Fasse zusammen, was diese Reise beson
             <ActivityIndicator size="small" color={colors.accent} />
           ) : (
             <>
-              <Text style={styles.fableBtnIcon}>{'\u2728'}</Text>
+              <Icon name="sparkles" size={iconSize.md} color={colors.accent} />
               <View>
                 <Text style={styles.fableBtnText}>Fable Rückblick</Text>
                 <Text style={styles.fableBtnHint}>1 Inspiration</Text>

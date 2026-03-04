@@ -8,6 +8,17 @@
 const TAG_DATETIME_ORIGINAL = 0x9003;
 const TAG_DATETIME_DIGITIZED = 0x9004;
 const TAG_DATETIME = 0x0132;
+const TAG_GPS_IFD = 0x8825;
+const TAG_GPS_LAT_REF = 0x0001;
+const TAG_GPS_LAT = 0x0002;
+const TAG_GPS_LNG_REF = 0x0003;
+const TAG_GPS_LNG = 0x0004;
+
+export interface ExifData {
+  date: string | null;
+  lat: number | null;
+  lng: number | null;
+}
 
 /**
  * Extract the original date from an image's EXIF data.
@@ -262,6 +273,178 @@ function readStringTag(
     str += String.fromCharCode(data[strOffset + j]);
   }
   return str || null;
+}
+
+/** Extract full EXIF data (date + GPS) from an ArrayBuffer. */
+export function extractExifDataFromBuffer(buffer: ArrayBuffer): ExifData {
+  try {
+    const data = new Uint8Array(buffer);
+    return extractExifDataAuto(data);
+  } catch {
+    return { date: null, lat: null, lng: null };
+  }
+}
+
+function extractExifDataAuto(data: Uint8Array): ExifData {
+  if (data.length < 12) return { date: null, lat: null, lng: null };
+
+  // JPEG
+  if (data[0] === 0xFF && data[1] === 0xD8) {
+    return extractDataFromJpeg(data);
+  }
+
+  // HEIF/HEIC
+  const ftyp = String.fromCharCode(data[4], data[5], data[6], data[7]);
+  if (ftyp === 'ftyp') {
+    // For HEIF, fall back to date-only (GPS extraction in HEIF is complex)
+    const date = extractFromHeif(data);
+    return { date, lat: null, lng: null };
+  }
+
+  // For other formats, date-only
+  const date = extractExifDateAuto(data);
+  return { date, lat: null, lng: null };
+}
+
+function extractDataFromJpeg(data: Uint8Array): ExifData {
+  let offset = 2;
+  while (offset < data.length - 1) {
+    if (data[offset] !== 0xFF) break;
+    const marker = data[offset + 1];
+    if (marker === 0xE1) {
+      const length = (data[offset + 2] << 8) | data[offset + 3];
+      return parseExifBlockFull(data, offset + 4, length - 2);
+    }
+    if (marker === 0xD8 || marker === 0xD9) {
+      offset += 2;
+    } else {
+      const segLen = (data[offset + 2] << 8) | data[offset + 3];
+      offset += 2 + segLen;
+    }
+  }
+  return { date: null, lat: null, lng: null };
+}
+
+function parseExifBlockFull(data: Uint8Array, start: number, _length: number): ExifData {
+  const exifHeader = String.fromCharCode(data[start], data[start + 1], data[start + 2], data[start + 3]);
+  if (exifHeader !== 'Exif') return { date: null, lat: null, lng: null };
+  return parseTiffExifFull(data, start + 6);
+}
+
+function parseTiffExifFull(data: Uint8Array, tiffStart: number): ExifData {
+  if (tiffStart + 8 > data.length) return { date: null, lat: null, lng: null };
+
+  const byteOrder = (data[tiffStart] << 8) | data[tiffStart + 1];
+  const isLE = byteOrder === 0x4949;
+
+  const readU16 = (off: number) => {
+    if (off + 1 >= data.length) return 0;
+    return isLE ? data[off] | (data[off + 1] << 8) : (data[off] << 8) | data[off + 1];
+  };
+
+  const readU32 = (off: number) => {
+    if (off + 3 >= data.length) return 0;
+    return isLE
+      ? data[off] | (data[off + 1] << 8) | (data[off + 2] << 16) | ((data[off + 3] << 24) >>> 0)
+      : ((data[off] << 24) >>> 0) | (data[off + 1] << 16) | (data[off + 2] << 8) | data[off + 3];
+  };
+
+  const ifd0Offset = readU32(tiffStart + 4);
+  if (ifd0Offset === 0 || tiffStart + ifd0Offset >= data.length) return { date: null, lat: null, lng: null };
+  const ifd0Abs = tiffStart + ifd0Offset;
+
+  let exifIFDOffset: number | null = null;
+  let gpsIFDOffset: number | null = null;
+  let dateTime: string | null = null;
+
+  const ifd0Count = readU16(ifd0Abs);
+  for (let i = 0; i < ifd0Count; i++) {
+    const entryOff = ifd0Abs + 2 + i * 12;
+    if (entryOff + 12 > data.length) break;
+    const tag = readU16(entryOff);
+    if (tag === 0x8769) exifIFDOffset = readU32(entryOff + 8);
+    else if (tag === TAG_GPS_IFD) gpsIFDOffset = readU32(entryOff + 8);
+    else if (tag === TAG_DATETIME) dateTime = readStringTag(data, entryOff, tiffStart, readU32);
+  }
+
+  // Extract date from EXIF IFD
+  let date: string | null = null;
+  if (exifIFDOffset !== null) {
+    const exifAbs = tiffStart + exifIFDOffset;
+    if (exifAbs + 2 <= data.length) {
+      const exifCount = readU16(exifAbs);
+      let dateOriginal: string | null = null;
+      let dateDigitized: string | null = null;
+      for (let i = 0; i < exifCount; i++) {
+        const entryOff = exifAbs + 2 + i * 12;
+        if (entryOff + 12 > data.length) break;
+        const tag = readU16(entryOff);
+        if (tag === TAG_DATETIME_ORIGINAL) dateOriginal = readStringTag(data, entryOff, tiffStart, readU32);
+        else if (tag === TAG_DATETIME_DIGITIZED) dateDigitized = readStringTag(data, entryOff, tiffStart, readU32);
+      }
+      const raw = dateOriginal || dateDigitized || dateTime;
+      date = raw ? parseExifDateStr(raw) : null;
+    }
+  } else {
+    date = dateTime ? parseExifDateStr(dateTime) : null;
+  }
+
+  // Extract GPS
+  let lat: number | null = null;
+  let lng: number | null = null;
+  if (gpsIFDOffset !== null) {
+    const gpsAbs = tiffStart + gpsIFDOffset;
+    if (gpsAbs + 2 <= data.length) {
+      const gpsCount = readU16(gpsAbs);
+      let latRef = 'N';
+      let lngRef = 'E';
+      let latVals: number[] | null = null;
+      let lngVals: number[] | null = null;
+      for (let i = 0; i < gpsCount; i++) {
+        const entryOff = gpsAbs + 2 + i * 12;
+        if (entryOff + 12 > data.length) break;
+        const tag = readU16(entryOff);
+        if (tag === TAG_GPS_LAT_REF) {
+          latRef = String.fromCharCode(data[entryOff + 8]);
+        } else if (tag === TAG_GPS_LNG_REF) {
+          lngRef = String.fromCharCode(data[entryOff + 8]);
+        } else if (tag === TAG_GPS_LAT) {
+          latVals = readRationalArray(data, entryOff, tiffStart, readU32, 3);
+        } else if (tag === TAG_GPS_LNG) {
+          lngVals = readRationalArray(data, entryOff, tiffStart, readU32, 3);
+        }
+      }
+      if (latVals) {
+        lat = latVals[0] + latVals[1] / 60 + latVals[2] / 3600;
+        if (latRef === 'S') lat = -lat;
+      }
+      if (lngVals) {
+        lng = lngVals[0] + lngVals[1] / 60 + lngVals[2] / 3600;
+        if (lngRef === 'W') lng = -lng;
+      }
+    }
+  }
+
+  return { date, lat, lng };
+}
+
+function readRationalArray(
+  data: Uint8Array,
+  entryOff: number,
+  tiffStart: number,
+  readU32: (off: number) => number,
+  count: number,
+): number[] {
+  const valueOffset = tiffStart + readU32(entryOff + 8);
+  const vals: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const off = valueOffset + i * 8;
+    if (off + 8 > data.length) break;
+    const num = readU32(off);
+    const den = readU32(off + 4);
+    vals.push(den > 0 ? num / den : 0);
+  }
+  return vals;
 }
 
 /** Convert EXIF date "2024:03:15 14:30:00" → ISO string */

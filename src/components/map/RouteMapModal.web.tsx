@@ -4,6 +4,7 @@ import { importMapsLibrary } from '../common/PlaceAutocomplete';
 import { Activity } from '../../types/database';
 import { DirectionsResult, formatDuration, formatDistance } from '../../services/directions';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface Props {
   visible: boolean;
@@ -170,7 +171,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           <View style={styles.header}>
             <Text style={styles.title}>Route</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.closeIcon}>✕</Text>
+              <Icon name="close" size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
           {error ? (

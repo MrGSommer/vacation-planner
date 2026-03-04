@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { TripInvitation } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AcceptInvite'>;
 
@@ -94,7 +95,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   if (done) {
     return (
       <View style={styles.center}>
-        <Text style={styles.successIcon}>✅</Text>
+        <Icon name="checkmark-circle" size={48} color={colors.secondary} />
         <Text style={styles.title}>Einladung angenommen!</Text>
         <Text style={styles.subtitle}>Du hast jetzt Zugriff auf «{trip?.name}».</Text>
         <Button title="Reise öffnen" onPress={handleGoToTrip} style={styles.btn} />
@@ -105,7 +106,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <View style={styles.center}>
       <View style={styles.card}>
-        <Text style={styles.cardIcon}>✉️</Text>
+        <Icon name="mail-outline" size={48} color={colors.primary} />
         <Text style={styles.title}>Einladung</Text>
         {trip && <Text style={styles.tripName}>{trip.name}</Text>}
         {trip && <Text style={styles.subtitle}>{trip.destination}</Text>}

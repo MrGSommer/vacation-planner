@@ -13,6 +13,7 @@ import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
+import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
 import { ProgressStep } from '../../services/ai/planExecutor';
@@ -94,6 +95,8 @@ interface Props {
     groupType?: string;
   };
   onComplete?: (tripId: string) => void;
+  /** Auto-send this message after conversation starts (e.g. from "Fable vorschlagen lassen") */
+  autoMessage?: string;
 }
 
 const PROGRESS_LABELS: Record<ProgressStep, string> = {
@@ -107,7 +110,7 @@ const PROGRESS_LABELS: Record<ProgressStep, string> = {
 };
 
 export const AiTripModal: React.FC<Props> = ({
-  visible, onClose, mode, tripId, userId, initialContext = {}, onComplete,
+  visible, onClose, mode, tripId, userId, initialContext = {}, onComplete, autoMessage,
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -134,6 +137,7 @@ export const AiTripModal: React.FC<Props> = ({
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
   const shownSuggestionsRef = useRef<Set<string>>(new Set());
+  const autoMessageSentRef = useRef(false);
 
   // Can the user send messages? Premium or has credits
   const canSendMessages = isPremium || (creditsBalance !== null && creditsBalance > 0);
@@ -141,10 +145,21 @@ export const AiTripModal: React.FC<Props> = ({
   // Refresh profile (credits) when modal opens, then auto-start conversation
   useEffect(() => {
     if (visible && phase === 'idle' && contextReady) {
+      autoMessageSentRef.current = false;
       refreshProfile().then(() => startConversation(canSendMessages));
     }
     if (visible) { setCreditPurchased(false); setShowBuyModal(false); }
   }, [visible, phase, contextReady]);
+
+  // Auto-send message after conversation starts (e.g. "Erstelle eine Packliste")
+  useEffect(() => {
+    if (autoMessage && visible && phase === 'conversing' && !sending && !autoMessageSentRef.current && messages.length > 0 && canSendMessages) {
+      autoMessageSentRef.current = true;
+      // Small delay to let the greeting render first
+      const timer = setTimeout(() => sendMessage(autoMessage), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [autoMessage, visible, phase, sending, messages.length, canSendMessages]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -300,7 +315,7 @@ export const AiTripModal: React.FC<Props> = ({
         <AiPlanPreview
           plan={plan}
           currency={plan.trip?.currency || initialContext?.currency || 'CHF'}
-          onConfirm={confirmPlan}
+          onConfirm={(filteredPlan) => confirmPlan(false, filteredPlan)}
           onReject={hidePreview}
         />
       );
@@ -324,7 +339,7 @@ export const AiTripModal: React.FC<Props> = ({
       return (
         <View style={styles.completedContainer}>
           <LinearGradient colors={[...gradients.ocean]} style={styles.completedGradient}>
-            <Text style={styles.completedIcon}>{'🎉'}</Text>
+            <Icon name="happy-outline" size={48} color="#FFFFFF" />
             <Text style={styles.completedTitle}>Reiseplan erstellt!</Text>
             {executionResult && (
               <View style={styles.completedStats}>
@@ -542,23 +557,47 @@ export const AiTripModal: React.FC<Props> = ({
 
         {/* Plan review action buttons */}
         {isPlanReview && !adjustMode && (
-          <View style={styles.planReviewActions}>
-            <TouchableOpacity style={styles.planReviewBtn} onPress={showPreview} activeOpacity={0.7}>
-              <Text style={styles.planReviewBtnText}>{'📋 Details anzeigen'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={() => confirmPlan()} activeOpacity={0.7}>
-              <LinearGradient
-                colors={[...gradients.ocean]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.planReviewBtnGradient}
-              >
-                <Text style={styles.planReviewBtnPrimaryText}>{'✅ Übernehmen'}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.planReviewBtn} onPress={() => setAdjustMode(true)} activeOpacity={0.7}>
-              <Text style={styles.planReviewBtnText}>{'✏️ Anpassen'}</Text>
-            </TouchableOpacity>
+          <View>
+            <View style={styles.planReviewActions}>
+              <TouchableOpacity style={styles.planReviewBtn} onPress={showPreview} activeOpacity={0.7}>
+                <Icon name="list-outline" size={14} color={colors.primary} />
+                <Text style={styles.planReviewBtnText}>Details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={() => confirmPlan()} activeOpacity={0.7}>
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.planReviewBtnGradient}
+                >
+                  <Icon name="checkmark-circle-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.planReviewBtnPrimaryText}>Übernehmen</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.planReviewBtn} onPress={() => setAdjustMode(true)} activeOpacity={0.7}>
+                <Icon name="create-outline" size={14} color={colors.primary} />
+                <Text style={styles.planReviewBtnText}>Anpassen</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Day-specific refinement chips */}
+            {plan && plan.days?.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayAdjustRow} contentContainerStyle={styles.dayAdjustContent}>
+                {plan.days.map((day, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.dayAdjustChip}
+                    onPress={() => {
+                      setAdjustMode(true);
+                      setInputText(`Ändere Tag ${i + 1} (${day.date}): `);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="refresh-outline" size={12} color={colors.secondary} />
+                    <Text style={styles.dayAdjustChipText}>Tag {i + 1}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -652,6 +691,33 @@ export const AiTripModal: React.FC<Props> = ({
           </View>
         )}
 
+        {/* Conversation starters (shown when chat just started, no suggestions yet) */}
+        {!isPlanReview && !sending && phase === 'conversing' && messages.length <= 2 && !metadata?.suggested_questions?.length && !metadata?.form_options?.length && (
+          <View style={styles.startersContainer}>
+            {(mode === 'create' ? [
+              'Erstelle einen Reiseplan für mich',
+              'Ich brauche Inspiration — wohin soll es gehen?',
+              'Plane einen Wochenendtrip',
+              'Ich reise mit der Familie',
+            ] : [
+              'Erstelle einen Tagesplan',
+              'Was kann man dort unternehmen?',
+              'Plane Aktivitäten für den nächsten freien Tag',
+              'Schlage Restaurants in der Nähe vor',
+            ]).map((starter, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.starterChip}
+                onPress={() => handleChipPress(starter)}
+                activeOpacity={0.7}
+              >
+                <Icon name="chatbubble-ellipses-outline" size={14} color={colors.primary} />
+                <Text style={styles.starterChipText}>{starter}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Suggestion chips (conversing only — horizontal) */}
         {!isPlanReview && !metadata?.form_options?.length && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (() => {
           // Filter out already-shown suggestions to prevent loops
@@ -690,7 +756,7 @@ export const AiTripModal: React.FC<Props> = ({
               end={{ x: 1, y: 0 }}
               style={styles.generateButtonGradient}
             >
-              <Text style={styles.generateButtonText}>{mode === 'enhance' ? '✨ Reise planen' : '✨ Plan erstellen'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={18} color="#FFFFFF" /><Text style={styles.generateButtonText}>{mode === 'enhance' ? 'Reise planen' : 'Plan erstellen'}</Text></View>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -761,12 +827,13 @@ export const AiTripModal: React.FC<Props> = ({
         {phase !== 'completed' && (
           <View style={styles.header}>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Text style={styles.closeText}>{'✕'}</Text>
+              <Icon name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>
-                {'✨ Fable'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Icon name="sparkles-outline" size={18} color={colors.secondary} />
+                <Text style={styles.headerTitle}>Fable</Text>
+              </View>
               {creditsBalance !== null && (
                 <Text style={styles.creditsLabel}>{creditsBalance} Inspirationen</Text>
               )}
@@ -774,12 +841,12 @@ export const AiTripModal: React.FC<Props> = ({
             <View style={styles.headerRight}>
               {tripId && (
                 <TouchableOpacity onPress={() => { navigation.setParams({ openFable: true } as any); onClose(); navigation.navigate('FableTripSettings' as any, { tripId }); }} style={styles.closeButton}>
-                  <Text style={styles.settingsText}>{'⚙'}</Text>
+                  <Icon name="settings-outline" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
               {showRestartButton ? (
                 <TouchableOpacity onPress={handleRestart} style={styles.closeButton}>
-                  <Text style={styles.restartText}>{'↺'}</Text>
+                  <Icon name="refresh-outline" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               ) : (
                 <View style={styles.closeButton} />
@@ -815,9 +882,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   closeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  closeText: { fontSize: 20, color: colors.textSecondary },
-  restartText: { fontSize: 22, color: colors.textSecondary },
-  settingsText: { fontSize: 20, color: colors.textSecondary },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { ...typography.h3, textAlign: 'center' },
@@ -957,6 +1021,16 @@ const styles = StyleSheet.create({
   },
   typingText: { ...typography.caption, color: colors.textLight, fontStyle: 'italic' },
 
+  // Starters
+  startersContainer: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  starterChip: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.primary + '30',
+    backgroundColor: colors.primary + '08',
+  },
+  starterChipText: { ...typography.bodySmall, color: colors.primary, fontWeight: '500' },
+
   // Chips
   chipsContainer: { maxHeight: 48, borderTopWidth: 1, borderTopColor: colors.border },
   chipsContent: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
@@ -1088,10 +1162,13 @@ const styles = StyleSheet.create({
   },
   planReviewBtn: {
     flex: 1,
+    flexDirection: 'row',
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.md,
     backgroundColor: colors.background,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -1102,11 +1179,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   planReviewBtnGradient: {
+    flexDirection: 'row',
     paddingVertical: spacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     borderRadius: borderRadius.md,
   },
   planReviewBtnPrimaryText: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
+  dayAdjustRow: { maxHeight: 40, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
+  dayAdjustContent: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, gap: spacing.xs },
+  dayAdjustChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: borderRadius.full, backgroundColor: colors.secondary + '15',
+    borderWidth: 1, borderColor: colors.secondary + '30',
+  },
+  dayAdjustChipText: { ...typography.caption, color: colors.secondary, fontWeight: '600' },
 
   // Structure overview
   structureOverview: { flex: 1 },

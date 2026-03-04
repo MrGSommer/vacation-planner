@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
+import { Header, Card, EmptyState, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
 import type { ActivityFormData } from '../../components/common';
 import { getActivitiesForTrip, getDays, createActivity, updateActivity, deleteActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -10,11 +10,12 @@ import { getDirections, formatDuration, formatDistance, TRAVEL_MODES, TravelMode
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { Activity, Trip, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
-import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { Icon, getActivityIconName } from '../../utils/icons';
 import { getToday } from '../../utils/dateHelpers';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { openInGoogleMaps, openGoogleMapsDirections } from '../../utils/openInMaps';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -180,8 +181,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     return unsubscribe;
   }, [navigation, route.params]);
 
-  const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
-  const getTravelIcon = (mode: TravelMode) => TRAVEL_MODES.find(m => m.id === mode)?.icon || '🚗';
+  const getTravelIconName = (mode: TravelMode): string => TRAVEL_MODES.find(m => m.id === mode)?.icon || 'car-outline';
 
   const handleChangeTravelMode = async (activityId: string, newMode: TravelMode) => {
     setShowTravelModePicker(null);
@@ -354,9 +354,14 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.container}>
         <Header title="Route & Stops" onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })} />
         <UpgradePrompt
-          icon="🗺️"
+          iconName="map-outline"
           title="Routen & Stops"
-          message="Plane Übernachtungen, Zwischenstopps und Reiserouten mit Premium"
+          message="Plane deine Route visuell auf der Karte"
+          highlights={[
+            { icon: 'bed-outline', text: 'Übernachtungen & Hotels planen' },
+            { icon: 'navigate-outline', text: 'Zwischenstopps hinzufügen' },
+            { icon: 'car-outline', text: 'Route mit Google Maps öffnen' },
+          ]}
         />
         <TripBottomNav tripId={tripId} activeTab="Stops" />
       </View>
@@ -371,12 +376,12 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (
               <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontSize: 22 }}>✨</Text>
+                <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
               </TouchableOpacity>
             )}
             {activities.length >= 2 && (
               <TouchableOpacity onPress={() => setShowMapModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontSize: 20 }}>🗺️</Text>
+                <Icon name="map-outline" size={iconSize.md} color={colors.accent} />
               </TouchableOpacity>
             )}
           </View>
@@ -387,11 +392,13 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         {loading ? (
           <StopsSkeleton />
         ) : activities.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🗺️</Text>
-            <Text style={styles.emptyText}>Keine Stops geplant</Text>
-            <Text style={styles.emptySubtext}>Füge Übernachtungen und Zwischenstopps hinzu</Text>
-          </View>
+          <EmptyState
+            iconName="map-outline"
+            title="Keine Stops geplant"
+            message="Füge Übernachtungen und Zwischenstopps hinzu"
+            actionLabel="Stop hinzufügen"
+            onAction={openAddModal}
+          />
         ) : (
           activities.map((activity, i) => (
             <View key={activity.id}>
@@ -399,7 +406,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                 <View style={styles.travelSection}>
                   {calculating.has(activity.id) ? (
                     <View style={styles.travelBadge}>
-                      <Text style={styles.travelIcon}>⏳</Text>
+                      <Icon name="hourglass-outline" size={14} color={colors.sky} />
                       <Text style={styles.travelText}>Berechne...</Text>
                     </View>
                   ) : travelInfo.has(activity.id) ? (
@@ -414,11 +421,11 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                         }}
                         activeOpacity={0.7}
                       >
-                        <Text style={styles.travelIcon}>{getTravelIcon(travelInfo.get(activity.id)!.mode)}</Text>
+                        <Icon name={getTravelIconName(travelInfo.get(activity.id)!.mode) as any} size={14} color={colors.sky} />
                         <Text style={styles.travelText}>
                           {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
                         </Text>
-                        <Text style={styles.travelChevron}>▾</Text>
+                        <View style={{ marginLeft: spacing.xs }}><Icon name="chevron-down" size={12} color={colors.sky} /></View>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.routeMenuBtn}
@@ -428,7 +435,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                         }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Text style={styles.routeMenuDots}>⋮</Text>
+                        <Icon name="ellipsis-vertical" size={16} color={colors.sky} />
                       </TouchableOpacity>
                     </View>
                   ) : null}
@@ -453,7 +460,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                             );
                           }}
                         >
-                          <Text style={styles.routeMenuIcon}>🗺️</Text>
+                          <Icon name="map-outline" size={iconSize.sm} color={colors.accent} />
                           <Text style={styles.routeMenuLabel}>Gesamte Tagesroute</Text>
                         </TouchableOpacity>
                         <View style={styles.routeMenuDivider} />
@@ -469,7 +476,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                             );
                           }}
                         >
-                          <Text style={styles.routeMenuIcon}>↗️</Text>
+                          <Icon name="navigate-outline" size={iconSize.sm} color={colors.secondary} />
                           <Text style={styles.routeMenuLabel}>Abschnitt öffnen</Text>
                         </TouchableOpacity>
                       </View>
@@ -486,7 +493,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                             style={[styles.travelModeChip, current === tm.id && styles.travelModeChipActive]}
                             onPress={() => handleChangeTravelMode(activity.id, tm.id)}
                           >
-                            <Text style={styles.travelModeIcon}>{tm.icon}</Text>
+                            <Icon name={tm.icon as any} size={14} color={current === tm.id ? colors.sky : colors.textSecondary} />
                             <Text style={[styles.travelModeLabel, current === tm.id && styles.travelModeLabelActive]}>{tm.label}</Text>
                           </TouchableOpacity>
                         );
@@ -499,7 +506,9 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity activeOpacity={0.7} onPress={() => setViewActivity(activity)}>
                 <Card style={[styles.stopCard, isActivityToday(activity) && styles.stopCardToday]}>
                   <View style={styles.stopHeader}>
-                    <Text style={styles.stopIcon}>{getCategoryIcon(activity.category, activity.category_data)}</Text>
+                    <View style={[styles.stopIcon, { backgroundColor: (CATEGORY_COLORS[activity.category] || colors.primary) + '15' }]}>
+                      <Icon name={getActivityIconName(activity.category, activity.category_data)} size={iconSize.sm} color={CATEGORY_COLORS[activity.category] || colors.primary} />
+                    </View>
                     <View style={styles.stopInfo}>
                       <Text style={styles.stopName}>{activity.title}</Text>
                       {(activity.location_name || activity.location_address) && (
@@ -509,14 +518,17 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                           </Text>
                           {activity.location_lat && activity.location_lng && (
                             <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                              <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
+                              <Icon name="open-outline" size={14} color={colors.secondary} />
                             </TouchableOpacity>
                           )}
                         </View>
                       )}
                       <View style={styles.stopMeta}>
                         {activity.start_time && (
-                          <Text style={styles.stopTime}>🕐 {activity.start_time}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <Icon name="time-outline" size={12} color={colors.secondary} />
+                            <Text style={styles.stopTime}>{activity.start_time}</Text>
+                          </View>
                         )}
                         {(() => {
                           const detail = formatCategoryDetail(activity.category, activity.category_data || {});
@@ -529,7 +541,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                   </View>
                   <View style={styles.stopActions}>
                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
-                      <Text style={styles.deleteBtnText}>✕</Text>
+                      <Icon name="trash-outline" size={iconSize.xs} color={colors.error} />
                     </TouchableOpacity>
                   </View>
                 </Card>
@@ -541,7 +553,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
 
       <TouchableOpacity style={styles.fab} onPress={openAddModal} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.fabText}>+</Text>
+          <Icon name="add" size={28} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
 
@@ -590,10 +602,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   list: { flex: 1 },
   listContent: { padding: spacing.md, paddingBottom: 140 },
-  empty: { alignItems: 'center', paddingVertical: spacing.xxl },
-  emptyIcon: { fontSize: 48, marginBottom: spacing.md },
-  emptyText: { ...typography.h3, marginBottom: spacing.xs },
-  emptySubtext: { ...typography.bodySmall },
   travelSection: { alignItems: 'center', marginVertical: spacing.sm },
   travelBadge: {
     flexDirection: 'row',
@@ -603,12 +611,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sky + '20',
     borderRadius: borderRadius.full,
   },
-  travelIcon: { fontSize: 14, marginRight: spacing.xs },
-  travelText: { ...typography.caption, color: colors.sky, fontWeight: '600' },
-  travelChevron: { fontSize: 10, color: colors.sky, marginLeft: spacing.xs },
+  travelText: { ...typography.caption, color: colors.sky, fontWeight: '600', marginLeft: spacing.xs },
   travelBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   routeMenuBtn: { padding: 4 },
-  routeMenuDots: { fontSize: 16, color: colors.sky, fontWeight: '700' },
   routeMenuDropdown: {
     marginTop: spacing.xs,
     backgroundColor: colors.card,
@@ -619,7 +624,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   routeMenuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  routeMenuIcon: { fontSize: 16, marginRight: spacing.sm },
   routeMenuLabel: { ...typography.bodySmall, fontWeight: '500' },
   routeMenuDivider: { height: 1, backgroundColor: colors.border },
   travelModeRow: {
@@ -641,13 +645,12 @@ const styles = StyleSheet.create({
     borderColor: colors.sky,
     backgroundColor: colors.sky + '20',
   },
-  travelModeIcon: { fontSize: 12, marginRight: 3 },
   travelModeLabel: { ...typography.caption, fontSize: 11 },
   travelModeLabelActive: { color: colors.sky, fontWeight: '600' },
   stopCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stopCardToday: { borderLeftWidth: 3, borderLeftColor: colors.secondary, backgroundColor: colors.secondary + '08' },
   stopHeader: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  stopIcon: { fontSize: 28, marginRight: spacing.sm },
+  stopIcon: { width: 32, height: 32, borderRadius: 16, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   stopInfo: { flex: 1 },
   stopName: { ...typography.body, fontWeight: '600' },
   stopAddress: { ...typography.caption, marginTop: 2 },
@@ -656,8 +659,6 @@ const styles = StyleSheet.create({
   stopDetail: { ...typography.caption, fontWeight: '600' },
   stopActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
-  deleteBtnText: { fontSize: 16, color: colors.error },
   fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
-  fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
 });

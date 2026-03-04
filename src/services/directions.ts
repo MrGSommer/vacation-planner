@@ -5,29 +5,37 @@ const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || '';
 
+let mapsLoading: Promise<void> | null = null;
+
 const ensureGoogleMaps = (): Promise<void> => {
   if (Platform.OS !== 'web') return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    if ((window as any).google?.maps) { resolve(); return; }
+  if (mapsLoading) return mapsLoading;
+  mapsLoading = new Promise<void>((resolve, reject) => {
+    const waitForApi = () => {
+      if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
+      setTimeout(waitForApi, 50);
+    };
+    if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
     const existing = document.getElementById('google-maps-script');
-    if (existing) { existing.addEventListener('load', () => resolve()); return; }
+    if (existing) { waitForApi(); return; }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,marker&loading=async`;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => waitForApi();
     script.onerror = () => reject(new Error('Failed to load Google Maps'));
     document.head.appendChild(script);
   });
+  return mapsLoading;
 };
 
 export type TravelMode = 'driving' | 'walking' | 'bicycling' | 'transit';
 
 export const TRAVEL_MODES: { id: TravelMode; label: string; icon: string }[] = [
-  { id: 'driving', label: 'Auto', icon: '🚗' },
-  { id: 'transit', label: 'ÖV', icon: '🚆' },
-  { id: 'walking', label: 'Zu Fuss', icon: '🚶' },
-  { id: 'bicycling', label: 'Velo', icon: '🚲' },
+  { id: 'driving', label: 'Auto', icon: 'car-outline' },
+  { id: 'transit', label: 'ÖV', icon: 'train-outline' },
+  { id: 'walking', label: 'Zu Fuss', icon: 'walk-outline' },
+  { id: 'bicycling', label: 'Velo', icon: 'bicycle-outline' },
 ];
 
 export interface DirectionsResult {
@@ -36,30 +44,45 @@ export interface DirectionsResult {
   mode: TravelMode;
 }
 
-const modeToGoogleMode = (mode: TravelMode): string => {
+/** Map internal travel mode to Google Routes API travel mode */
+const toGoogleTravelMode = (mode: TravelMode): string => {
   switch (mode) {
-    case 'driving': return 'driving';
-    case 'walking': return 'walking';
-    case 'bicycling': return 'bicycling';
-    case 'transit': return 'transit';
-    default: return 'driving';
+    case 'driving': return 'DRIVING';
+    case 'walking': return 'WALKING';
+    case 'bicycling': return 'BICYCLING';
+    case 'transit': return 'TRANSIT';
+    default: return 'DRIVING';
   }
 };
 
+/** REST API fallback for native (Routes API v2) */
 const getDirectionsRest = async (
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
   mode: TravelMode = 'driving'
 ): Promise<DirectionsResult | null> => {
   try {
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=${modeToGoogleMode(mode)}&key=${API_KEY}`;
-    const res = await fetch(url);
+    const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': API_KEY,
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters',
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+        destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
+        travelMode: toGoogleTravelMode(mode),
+      }),
+    });
     const data = await res.json();
-    if (data.status !== 'OK' || !data.routes?.length) return null;
-    const leg = data.routes[0].legs[0];
+    if (!data.routes?.length) return null;
+    const route = data.routes[0];
+    // duration is a string like "1234s"
+    const durationSec = parseInt(route.duration?.replace('s', '') || '0', 10);
     return {
-      duration: Math.round(leg.duration.value / 60),
-      distance: leg.distance.value,
+      duration: Math.round(durationSec / 60),
+      distance: route.distanceMeters || 0,
       mode,
     };
   } catch {
@@ -67,6 +90,7 @@ const getDirectionsRest = async (
   }
 };
 
+/** Web implementation using Maps JavaScript API Route class (computeRoutes) */
 const getDirectionsWeb = async (
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
@@ -75,30 +99,35 @@ const getDirectionsWeb = async (
   try {
     await ensureGoogleMaps();
     const google = (window as any).google;
-    if (!google?.maps) return null;
-    const modeMap: Record<string, any> = {
-      driving: google.maps.TravelMode.DRIVING,
-      walking: google.maps.TravelMode.WALKING,
-      bicycling: google.maps.TravelMode.BICYCLING,
-      transit: google.maps.TravelMode.TRANSIT,
-    };
-    const service = new google.maps.DirectionsService();
-    const result = await service.route({
+    if (!google?.maps?.importLibrary) return getDirectionsRest(origin, destination, mode);
+
+    const { Route } = await google.maps.importLibrary('routes');
+    if (!Route?.computeRoutes) {
+      // Fallback to REST if Route class not available
+      return getDirectionsRest(origin, destination, mode);
+    }
+
+    const request = {
       origin: new google.maps.LatLng(origin.lat, origin.lng),
       destination: new google.maps.LatLng(destination.lat, destination.lng),
-      travelMode: modeMap[mode] || modeMap.driving,
-    });
-    if (result.routes?.length) {
-      const leg = result.routes[0].legs[0];
+      travelMode: toGoogleTravelMode(mode),
+      fields: ['durationMillis', 'distanceMeters'],
+    };
+
+    const { routes } = await Route.computeRoutes(request);
+    if (routes?.length) {
+      const route = routes[0];
+      const durationMs = route.durationMillis || 0;
       return {
-        duration: Math.round(leg.duration.value / 60),
-        distance: leg.distance.value,
+        duration: Math.round(durationMs / 60000),
+        distance: route.distanceMeters || 0,
         mode,
       };
     }
     return null;
   } catch {
-    return null;
+    // Fallback to REST on any error
+    return getDirectionsRest(origin, destination, mode);
   }
 };
 

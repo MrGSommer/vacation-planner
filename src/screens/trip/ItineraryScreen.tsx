@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
@@ -10,11 +10,12 @@ import { ItineraryDay, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { getDayDates, formatDateShort, formatTime, getToday } from '../../utils/dateHelpers';
 import { getTrip } from '../../api/trips';
-import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
+import { ACTIVITY_CATEGORIES } from '../../utils/constants';
+import { Icon, getActivityIconName } from '../../utils/icons';
 import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
 import { openInGoogleMaps } from '../../utils/openInMaps';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
 import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton';
@@ -24,6 +25,14 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 import { useWeather } from '../../hooks/useWeather';
 import { useFlightStatus, getFlightStatusLabel, isVerifiedFlight } from '../../hooks/useFlightStatus';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { InlineEditText } from '../../components/common/InlineEditText';
+import { ContextMenu, ContextMenuItem } from '../../components/common/ContextMenu';
+import { NAV_ICONS, MISC_ICONS } from '../../utils/icons';
+import { PollCard, CreatePollModal } from '../../components/common/PollCard';
+import { getPolls, PollWithVotes } from '../../api/polls';
+import { getReactionsByActivities } from '../../api/comments';
+import { ActivityReaction } from '../../types/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -52,6 +61,10 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [tripEndDate, setTripEndDate] = useState<string>('');
   const [tripDestLat, setTripDestLat] = useState<number | null>(null);
   const [tripDestLng, setTripDestLng] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ activity: Activity; position: { x: number; y: number } } | null>(null);
+  const [polls, setPolls] = useState<PollWithVotes[]>([]);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [reactionsMap, setReactionsMap] = useState<Record<string, ActivityReaction[]>>({});
   const tabScrollRef = useRef<ScrollView>(null);
   const tabWidths = useRef<number[]>([]);
 
@@ -98,7 +111,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   // Task 6: Split loadData into loadTripData (once) and loadActivities (per day)
   const loadTripData = useCallback(async () => {
     try {
-      const [trip, fetchedAllActivities, tripPhotos] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId), getPhotos(tripId).catch(() => [])]);
+      const [trip, fetchedAllActivities, tripPhotos, tripPolls] = await Promise.all([getTrip(tripId), getActivitiesForTrip(tripId), getPhotos(tripId).catch(() => []), getPolls(tripId).catch(() => [])]);
+      setPolls(tripPolls);
       setAllTripActivities(fetchedAllActivities);
       setHotelActivities(fetchedAllActivities.filter(a => a.category === 'hotel'));
       setTripStartDate(trip.start_date);
@@ -155,6 +169,12 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     scrollToActiveTab(dayId);
     const acts = await getActivities(dayId);
     setActivities(acts);
+    // Load reactions for visible activities
+    if (acts.length > 0) {
+      getReactionsByActivities(acts.map(a => a.id)).then(setReactionsMap).catch(() => {});
+    } else {
+      setReactionsMap({});
+    }
   }, [scrollToActiveTab]);
 
   useEffect(() => { loadTripData(); }, [loadTripData]);
@@ -310,7 +330,55 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     setShowModal(true);
   };
 
-  const getCategoryIcon = (cat: string, catData?: Record<string, any> | null) => getActivityIcon(cat, catData);
+  const handleDuplicate = async (activity: Activity) => {
+    try {
+      await createActivity({
+        day_id: activity.day_id,
+        trip_id: activity.trip_id,
+        title: `${activity.title} (Kopie)`,
+        description: activity.description,
+        category: activity.category,
+        start_time: activity.start_time,
+        end_time: activity.end_time,
+        location_name: activity.location_name,
+        location_lat: activity.location_lat,
+        location_lng: activity.location_lng,
+        location_address: activity.location_address,
+        cost: activity.cost,
+        currency: activity.currency,
+        sort_order: activities.length,
+        check_in_date: activity.check_in_date,
+        check_out_date: activity.check_out_date,
+        category_data: activity.category_data,
+      });
+      showToast('Aktivität dupliziert', 'success');
+      if (selectedDayId) loadDayActivities(selectedDayId);
+    } catch {
+      showToast('Fehler beim Duplizieren', 'error');
+    }
+  };
+
+  const getContextMenuItems = (activity: Activity): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      { label: 'Bearbeiten', icon: 'create-outline', onPress: () => openEdit(activity) },
+      { label: 'Duplizieren', icon: 'copy-outline', onPress: () => handleDuplicate(activity) },
+    ];
+    if (activity.location_lat && activity.location_lng) {
+      items.push({
+        label: 'In Maps öffnen',
+        icon: 'map-outline',
+        onPress: () => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined),
+      });
+    }
+    items.push({ label: 'Löschen', icon: 'trash-outline', onPress: () => handleDelete(activity.id), destructive: true });
+    return items;
+  };
+
+  const openContextMenu = (activity: Activity, event: any) => {
+    const pageX = event.nativeEvent?.pageX ?? event.pageX ?? 200;
+    const pageY = event.nativeEvent?.pageY ?? event.pageY ?? 200;
+    setContextMenu({ activity, position: { x: Math.min(pageX, 300), y: pageY } });
+  };
 
   // Find accommodation for the selected day based on hotel activities
   const selectedDay = days.find(d => d.id === selectedDayId);
@@ -380,6 +448,36 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     },
   }), [days, selectedDayId, loadDayActivities]);
 
+  // Keyboard shortcuts (web)
+  useKeyboardShortcuts([
+    {
+      key: 'ArrowLeft',
+      ignoreWhenTyping: true,
+      handler: () => {
+        const idx = days.findIndex(d => d.id === selectedDayId);
+        if (idx > 0) loadDayActivities(days[idx - 1].id);
+      },
+    },
+    {
+      key: 'ArrowRight',
+      ignoreWhenTyping: true,
+      handler: () => {
+        const idx = days.findIndex(d => d.id === selectedDayId);
+        if (idx >= 0 && idx < days.length - 1) loadDayActivities(days[idx + 1].id);
+      },
+    },
+    {
+      key: 'n',
+      ignoreWhenTyping: true,
+      handler: () => {
+        setModalActivity(null);
+        setModalDefaultCategory(undefined);
+        setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {});
+        setShowModal(true);
+      },
+    },
+  ]);
+
   const renderHotelCard = (hotel: Activity, type: 'continuing' | 'check-in', isCheckout?: boolean) => {
     const nights = getNightsCount(hotel);
     const badgeText = type === 'check-in' ? 'Check-in' : isCheckout ? 'Check-out' : 'Unterkunft';
@@ -389,14 +487,19 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={[styles.accommodationBadge, badgeStyle]}>
           <Text style={[styles.accommodationBadgeText, isCheckout && { color: colors.error }]}>{badgeText}</Text>
         </View>
-        <Text style={styles.accommodationIcon}>🏠</Text>
+        <View style={styles.accommodationIcon}><Icon name="bed-outline" size={iconSize.lg} color={colors.primary} /></View>
         <View style={styles.accommodationInfo}>
-          <Text style={styles.accommodationName}>{hotel.title}</Text>
+          <InlineEditText
+            value={hotel.title}
+            onSave={(v) => updateActivity(hotel.id, { title: v }).then(() => { if (selectedDayId) loadDayActivities(selectedDayId); })}
+            style={styles.accommodationName}
+            maxLength={100}
+          />
           {nights && <Text style={styles.accommodationNights}>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
-          {hotel.location_name && <Text style={styles.accommodationAddress}>📍 {hotel.location_name}</Text>}
+          {hotel.location_name && <Text style={styles.accommodationAddress}>{hotel.location_name}</Text>}
         </View>
         <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(hotel.id); }} style={styles.deleteBtn}>
-          <Text style={styles.deleteBtnText}>✕</Text>
+          <Icon name="close" size={16} color={colors.error} />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -404,7 +507,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const renderTravelCard = (type: 'arrival' | 'departure', transport: Activity | null | undefined) => {
     const label = type === 'arrival' ? 'Anreise' : 'Abreise';
-    const icon = type === 'arrival' ? '🛬' : '🛫';
+    const iconName = type === 'arrival' ? 'airplane-outline' as const : 'airplane-outline' as const;
     const borderColor = type === 'arrival' ? colors.success : colors.error;
 
     if (transport) {
@@ -418,11 +521,11 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={[styles.travelDayBadge, { backgroundColor: borderColor + '20' }]}>
             <Text style={[styles.travelDayBadgeText, { color: borderColor }]}>{label}</Text>
           </View>
-          <Text style={styles.travelDayIcon}>{icon}</Text>
+          <View style={styles.travelDayIcon}><Icon name={iconName} size={iconSize.lg} color={borderColor} /></View>
           <View style={styles.travelDayInfo}>
             <Text style={styles.travelDayTitle}>{transport.title}</Text>
             {detail && <Text style={styles.travelDayDetail}>{linkifyText(detail)}</Text>}
-            {transport.location_name && <Text style={styles.accommodationAddress}>📍 {transport.location_name}</Text>}
+            {transport.location_name && <Text style={styles.accommodationAddress}>{transport.location_name}</Text>}
             {transport.category_data?.transport_type === 'Flug' && transport.category_data?.flight_verified && (() => {
               const fs = flightStatuses.get(transport.id);
               const { label: statusLabel, color: statusColor } = fs ? getFlightStatusLabel(fs.status) : { label: 'Geplant', color: '#3498DB' };
@@ -434,7 +537,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             })()}
           </View>
           <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(transport.id); }} style={styles.deleteBtn}>
-            <Text style={styles.deleteBtnText}>✕</Text>
+            <Icon name={NAV_ICONS.close} size={iconSize.xs} color={colors.error} />
           </TouchableOpacity>
         </TouchableOpacity>
       );
@@ -455,9 +558,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         }}
         activeOpacity={0.7}
       >
-        <Text style={styles.travelDayIcon}>{icon}</Text>
-        <Text style={styles.travelDayPlaceholder}>{label} hinzufugen</Text>
-        <Text style={styles.travelDayPlus}>+</Text>
+        <View style={styles.travelDayIcon}><Icon name="airplane-outline" size={iconSize.lg} color={borderColor} /></View>
+        <Text style={styles.travelDayPlaceholder}>{label} hinzufügen</Text>
+        <Icon name="add-circle-outline" size={iconSize.md} color={colors.primary} />
       </TouchableOpacity>
     );
   };
@@ -477,7 +580,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         rightAction={
           isFeatureAllowed('ai') ? (
             <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={{ fontSize: 22 }}>✨</Text>
+              <Icon name={MISC_ICONS.sparkles} size={iconSize.md} color={colors.accent} />
             </TouchableOpacity>
           ) : undefined
         }
@@ -501,7 +604,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
               >
                 <View style={styles.tabTopRow}>
                   <Text style={[styles.tabDay, selectedDayId === day.id && styles.tabDayActive]}>Tag {i + 1}</Text>
-                  {pc > 0 && <Text style={[styles.tabPhotoCount, selectedDayId === day.id && styles.tabPhotoCountActive]}>{'\uD83D\uDCF8'}{pc}</Text>}
+                  {pc > 0 && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><Icon name="images-outline" size={10} color={selectedDayId === day.id ? 'rgba(255,255,255,0.7)' : colors.textLight} /><Text style={[styles.tabPhotoCount, selectedDayId === day.id && styles.tabPhotoCountActive]}>{pc}</Text></View>}
                 </View>
                 <Text style={[styles.tabDate, selectedDayId === day.id && styles.tabDateActive]}>{formatDateShort(day.date)}</Text>
                 {w && <Text style={[styles.tabWeather, selectedDayId === day.id && styles.tabWeatherActive]}>{w.icon} {w.tempMax}°</Text>}
@@ -513,7 +616,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* Activities Timeline with swipe */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
-        <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent} keyboardDismissMode="on-drag">
+        <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent} keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={loading} onRefresh={loadTripData} tintColor={colors.primary} />}>
           {/* Weather summary for selected day */}
           {selectedDate && weather.get(selectedDate) && (() => {
             const w = weather.get(selectedDate)!;
@@ -533,7 +636,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {filteredActivities.length === 0 && !continuingStay && !newCheckIn ? (
             <View style={styles.emptyDay}>
-              <Text style={styles.emptyIcon}>{isGeneratingThisTrip ? '\u2728' : '\uD83D\uDCDD'}</Text>
+              <Icon name={isGeneratingThisTrip ? 'sparkles' : 'create-outline'} size={48} color={colors.secondary} />
               <Text style={styles.emptyText}>
                 {isGeneratingThisTrip ? 'Fable plant diesen Tag...' : 'Noch keine Aktivitäten'}
               </Text>
@@ -543,17 +646,53 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           ) : (
             filteredActivities.map((activity, i) => (
-              <TouchableOpacity key={activity.id} style={styles.activityCard} onPress={() => setViewActivity(activity)} onLongPress={() => handleDelete(activity.id)} activeOpacity={0.7}>
+              <TouchableOpacity
+                key={activity.id}
+                style={styles.activityCard}
+                onPress={() => setViewActivity(activity)}
+                onLongPress={(e) => openContextMenu(activity, e)}
+                activeOpacity={0.7}
+                // @ts-ignore — web right-click
+                onContextMenu={Platform.OS === 'web' ? ((e: any) => { e.preventDefault(); openContextMenu(activity, e); }) : undefined}
+              >
                 <View style={styles.timelineLine}>
                   <View style={[styles.timelineDot, { backgroundColor: CATEGORY_COLORS[activity.category] || colors.primary }]} />
                   {i < filteredActivities.length - 1 && <View style={styles.timelineConnector} />}
                 </View>
                 <Card style={styles.activityContent}>
                   <View style={styles.activityHeader}>
-                    <Text style={styles.activityIcon}>{getCategoryIcon(activity.category, activity.category_data)}</Text>
+                    <View style={[styles.activityIcon, { backgroundColor: (CATEGORY_COLORS[activity.category] || colors.primary) + '15' }]}>
+                      <Icon name={getActivityIconName(activity.category, activity.category_data)} size={iconSize.sm} color={CATEGORY_COLORS[activity.category] || colors.primary} />
+                    </View>
                     <View style={styles.activityInfo}>
-                      <Text style={styles.activityTitle}>{activity.title}</Text>
-                      {activity.start_time && <Text style={styles.activityTime}>{activity.start_time}</Text>}
+                      <InlineEditText
+                        value={activity.title}
+                        onSave={(v) => updateActivity(activity.id, { title: v }).then(() => { if (selectedDayId) loadDayActivities(selectedDayId); })}
+                        style={styles.activityTitle}
+                        maxLength={100}
+                      />
+                      <InlineEditText
+                        value={activity.start_time ? formatTime(activity.start_time) : ''}
+                        onSave={(v) => {
+                          const trimmed = v.trim();
+                          if (!trimmed) {
+                            updateActivity(activity.id, { start_time: null }).then(() => {
+                              if (selectedDayId) loadDayActivities(selectedDayId);
+                            });
+                            return;
+                          }
+                          const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+                          if (!timeMatch) return;
+                          const time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+                          updateActivity(activity.id, { start_time: time }).then(() => {
+                            if (selectedDayId) resortActivitiesByTime(selectedDayId).then(() => loadDayActivities(selectedDayId));
+                          });
+                        }}
+                        style={activity.start_time ? styles.activityTime : styles.activityTimePlaceholder}
+                        maxLength={5}
+                        placeholder="Uhrzeit hinzufügen"
+                        allowEmpty
+                      />
                     </View>
                     {/* Flight status badge — verified flights always show badge */}
                     {activity.category === 'transport' && activity.category_data?.transport_type === 'Flug' && activity.category_data?.flight_verified && (() => {
@@ -566,21 +705,38 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       ) : null;
                     })()}
                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
-                      <Text style={styles.deleteBtnText}>✕</Text>
+                      <Icon name={NAV_ICONS.close} size={iconSize.xs} color={colors.error} />
                     </TouchableOpacity>
                   </View>
                   {activity.location_name && (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={styles.activityLocation}>📍 {activity.location_name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Icon name="location-outline" size={14} color={colors.primary} />
+                        <Text style={styles.activityLocation}>{activity.location_name}</Text>
+                      </View>
                       {activity.location_lat && activity.location_lng && (
                         <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Text style={{ fontSize: 14, color: colors.textLight, marginLeft: 4 }}>↗</Text>
+                          <Icon name="open-outline" size={14} color={colors.secondary} />
                         </TouchableOpacity>
                       )}
                     </View>
                   )}
                   {renderActivityDetail(activity)}
                   {activity.description && <Text style={styles.activityDesc}>{linkifyText(activity.description)}</Text>}
+                  {/* Inline reactions summary */}
+                  {reactionsMap[activity.id] && reactionsMap[activity.id].length > 0 && (
+                    <View style={styles.inlineReactions}>
+                      {['👍', '👎', '❤️', '🤔'].map(emoji => {
+                        const count = reactionsMap[activity.id].filter(r => r.emoji === emoji).length;
+                        return count > 0 ? (
+                          <View key={emoji} style={styles.inlineReactionChip}>
+                            <Text style={styles.inlineReactionEmoji}>{emoji}</Text>
+                            <Text style={styles.inlineReactionCount}>{count}</Text>
+                          </View>
+                        ) : null;
+                      })}
+                    </View>
+                  )}
                 </Card>
               </TouchableOpacity>
             ))
@@ -590,7 +746,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           {newCheckIn && renderHotelCard(newCheckIn, 'check-in')}
           {!newCheckIn && isCheckingOut && !isLastDay && (
             <View style={styles.noAccommodation}>
-              <Text style={styles.noAccommodationIcon}>⚠️</Text>
+              <Icon name="alert-circle-outline" size={iconSize.sm} color="#E67E22" />
               <Text style={styles.noAccommodationText}>Keine Unterkunft geplant</Text>
             </View>
           )}
@@ -600,12 +756,61 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         </ScrollView>
       </View>
 
+      {/* Active polls */}
+      {polls.filter(p => !p.is_closed).length > 0 && (
+        <View style={styles.pollsSection}>
+          {polls.filter(p => !p.is_closed).map(poll => (
+            <PollCard key={poll.id} poll={poll} onUpdate={() => getPolls(tripId).then(setPolls).catch(() => {})} />
+          ))}
+        </View>
+      )}
+
+      {/* Quick-add bar */}
+      <View style={styles.quickAddBar}>
+        {([
+          { label: 'Essen', category: 'food', icon: 'restaurant-outline' as const },
+          { label: 'Transport', category: 'transport', icon: 'car-outline' as const },
+          { label: 'Besuch', category: 'sightseeing', icon: 'camera-outline' as const },
+          { label: 'Aktivität', category: 'activity', icon: 'bicycle-outline' as const },
+        ]).map((item) => (
+          <TouchableOpacity
+            key={item.category}
+            style={styles.quickAddBtn}
+            onPress={() => {
+              setModalActivity(null);
+              setModalDefaultCategory(item.category);
+              setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {});
+              setShowModal(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon name={item.icon} size={iconSize.xs} color={CATEGORY_COLORS[item.category] || colors.primary} />
+            <Text style={[styles.quickAddLabel, { color: CATEGORY_COLORS[item.category] || colors.primary }]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity
+          style={styles.quickAddBtn}
+          onPress={() => setShowPollModal(true)}
+          activeOpacity={0.7}
+        >
+          <Icon name="bar-chart-outline" size={iconSize.xs} color={colors.secondary} />
+          <Text style={styles.quickAddLabel}>Abstimmung</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategory(undefined); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.fabText}>+</Text>
+          <Icon name="add" size={iconSize.xl} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
+
+      <ContextMenu
+        visible={!!contextMenu}
+        onClose={() => setContextMenu(null)}
+        items={contextMenu ? getContextMenuItems(contextMenu.activity) : []}
+        position={contextMenu?.position ?? { x: 0, y: 0 }}
+      />
 
       <ActivityViewModal
         visible={!!viewActivity}
@@ -638,6 +843,13 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           userId={user.id}
         />
       )}
+
+      <CreatePollModal
+        visible={showPollModal}
+        tripId={tripId}
+        onClose={() => setShowPollModal(false)}
+        onCreated={() => getPolls(tripId).then(setPolls).catch(() => {})}
+      />
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
@@ -672,15 +884,31 @@ const styles = StyleSheet.create({
   timelineConnector: { width: 2, flex: 1, backgroundColor: colors.primaryLight, marginTop: 4 },
   activityContent: { flex: 1, marginLeft: spacing.sm },
   activityHeader: { flexDirection: 'row', alignItems: 'center' },
-  activityIcon: { fontSize: 24, marginRight: spacing.sm },
+  activityIcon: { width: 32, height: 32, borderRadius: 16, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   activityInfo: { flex: 1 },
   activityTitle: { ...typography.body, fontWeight: '600' },
   activityTime: { ...typography.caption, color: colors.primary },
+  activityTimePlaceholder: { ...typography.caption, color: colors.textLight, fontStyle: 'italic' },
   activityLocation: { ...typography.bodySmall, marginTop: spacing.xs },
   activityDetail: { ...typography.bodySmall, color: colors.accent, marginTop: spacing.xs, fontWeight: '500' },
   activityDesc: { ...typography.bodySmall, color: colors.textSecondary, marginTop: spacing.xs },
+  inlineReactions: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs, flexWrap: 'wrap' },
+  inlineReactionChip: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.background, paddingHorizontal: 6, paddingVertical: 2, borderRadius: borderRadius.sm, borderWidth: 1, borderColor: colors.border },
+  inlineReactionEmoji: { fontSize: 12 },
+  inlineReactionCount: { ...typography.caption, fontSize: 11, fontWeight: '600', color: colors.textSecondary },
   deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
   deleteBtnText: { fontSize: 16, color: colors.error },
+  quickAddBar: {
+    position: 'absolute', left: spacing.md, right: 56 + spacing.xl + spacing.md, bottom: 56 + spacing.md,
+    flexDirection: 'row', gap: spacing.xs,
+  },
+  quickAddBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: spacing.sm, borderRadius: borderRadius.md,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    ...shadows.sm,
+  },
+  quickAddLabel: { ...typography.caption, fontWeight: '600', color: colors.primary },
   fab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
@@ -713,4 +941,5 @@ const styles = StyleSheet.create({
   weatherBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
   weatherBannerIcon: { fontSize: 18 },
   weatherBannerTemp: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' as const },
+  pollsSection: { marginBottom: spacing.md },
 });

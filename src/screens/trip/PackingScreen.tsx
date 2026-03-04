@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, EmptyState, TripBottomNav } from '../../components/common';
@@ -17,7 +17,8 @@ import { PACKING_CATEGORIES } from '../../utils/constants';
 import { TRIP_TYPES, PACKING_TEMPLATES } from '../../utils/packingTemplates';
 import { useRealtime } from '../../hooks/useRealtime';
 import { getDisplayName } from '../../utils/profileHelpers';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
+import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { PackingSkeleton } from '../../components/skeletons/PackingSkeleton';
 import { useToast } from '../../contexts/ToastContext';
 import { AiTripModal } from '../../components/ai/AiTripModal';
@@ -26,14 +27,16 @@ import { useAuthContext } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'Kleidung': '\uD83D\uDC55',
-  'Toilettenartikel': '\uD83E\uDDF4',
-  'Elektronik': '\uD83D\uDD0C',
-  'Dokumente': '\uD83D\uDCC4',
-  'Medikamente': '\uD83D\uDC8A',
-  'Medizin': '\uD83D\uDC8A',
-  'Sonstiges': '\uD83D\uDCE6',
+import type { IconName } from '../../utils/icons';
+
+const PACKING_CATEGORY_ICONS: Record<string, { icon: IconName; color: string }> = {
+  'Kleidung': { icon: 'shirt-outline', color: '#4A90D9' },
+  'Toilettenartikel': { icon: 'water-outline', color: '#4ECDC4' },
+  'Elektronik': { icon: 'flash-outline', color: '#FDCB6E' },
+  'Dokumente': { icon: 'document-text-outline', color: '#6C5CE7' },
+  'Medikamente': { icon: 'medkit-outline', color: '#FF6B6B' },
+  'Medizin': { icon: 'medkit-outline', color: '#FF6B6B' },
+  'Sonstiges': { icon: 'cube-outline', color: '#95A5A6' },
 };
 
 interface CustomTemplate {
@@ -49,6 +52,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
   const [showAiModal, setShowAiModal] = useState(false);
+  const [aiAutoMessage, setAiAutoMessage] = useState<string | undefined>();
   const [listId, setListId] = useState<string | null>(null);
   const [items, setItems] = useState<PackingItem[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -335,7 +339,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!newTemplateName.trim() || items.length === 0) return;
     const id = `custom_${Date.now()}`;
     const templateItems = items.map(i => ({ name: i.name, category: i.category, quantity: i.quantity }));
-    const newTemplate: CustomTemplate = { id, label: newTemplateName.trim(), icon: '\uD83D\uDCCB', items: templateItems };
+    const newTemplate: CustomTemplate = { id, label: newTemplateName.trim(), icon: 'clipboard-outline', items: templateItems };
     persistTemplates([...customTemplates, newTemplate]);
     setShowSaveTemplate(false);
     setNewTemplateName('');
@@ -438,11 +442,11 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isFeatureAllowed('ai') && (
               <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={{ fontSize: 22 }}>✨</Text>
+                <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.headerBtn}>📋</Text>
+              <Icon name="clipboard-outline" size={iconSize.md} color={colors.accent} />
             </TouchableOpacity>
           </View>
         }
@@ -452,7 +456,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
       {totalItems > 0 && (
         <View style={styles.progressCard}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressEmoji}>{progress === 100 ? '✅' : '🧳'}</Text>
+            <View style={[styles.progressIconWrap, { backgroundColor: (progress === 100 ? colors.success : colors.secondary) + '15' }]}>
+              <Icon name={progress === 100 ? 'checkmark-circle' : 'briefcase-outline'} size={iconSize.md} color={progress === 100 ? colors.success : colors.secondary} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.progressTitle}>
                 {progress === 100 ? 'Alles eingepackt!' : `${packed} von ${totalItems} eingepackt`}
@@ -475,18 +481,20 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         <PackingSkeleton />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="🧳"
+          iconName="bag-outline"
           title="Packliste leer"
-          message="Starte mit einer Vorlage oder füge einzelne Gegenstände hinzu"
+          message="Starte mit einer Vorlage oder lass Fable eine Packliste erstellen"
           actionLabel="Vorlage wählen"
           onAction={() => setShowTemplatePicker(true)}
+          secondaryActionLabel={isFeatureAllowed('ai') ? 'Fable vorschlagen lassen' : undefined}
+          onSecondaryAction={isFeatureAllowed('ai') ? () => { setAiAutoMessage('Erstelle eine Packliste für diese Reise basierend auf Reiseziel, Dauer und Wetter.'); setShowAiModal(true); } : undefined}
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={colors.primary} />}>
           {Object.entries(grouped).map(([category, catItems]) => {
             const catPacked = catItems.filter(i => i.is_packed).length;
             const isCollapsed = collapsedCats.has(category);
-            const catIcon = CATEGORY_ICONS[category] || '\uD83D\uDCE6';
+            const catMeta = PACKING_CATEGORY_ICONS[category] || { icon: 'cube-outline' as IconName, color: '#95A5A6' };
 
             return (
               <View key={category} style={styles.categoryCard}>
@@ -495,12 +503,14 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   onPress={() => toggleCategory(category)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.categoryIcon}>{catIcon}</Text>
-                  <Text style={styles.categoryTitle}>{category}</Text>
-                  <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryBadgeText}>{catPacked}/{catItems.length}</Text>
+                  <View style={[styles.categoryIconWrap, { backgroundColor: catMeta.color + '15' }]}>
+                    <Icon name={catMeta.icon} size={iconSize.sm} color={catMeta.color} />
                   </View>
-                  <Text style={styles.chevron}>{isCollapsed ? '\u25B6' : '\u25BC'}</Text>
+                  <Text style={styles.categoryTitle}>{category}</Text>
+                  <View style={[styles.categoryBadge, catPacked === catItems.length && catItems.length > 0 && { backgroundColor: colors.success + '15' }]}>
+                    <Text style={[styles.categoryBadgeText, catPacked === catItems.length && catItems.length > 0 && { color: colors.success }]}>{catPacked}/{catItems.length}</Text>
+                  </View>
+                  <Icon name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={iconSize.xs} color={colors.textLight} />
                 </TouchableOpacity>
 
                 {!isCollapsed && catItems.map(item => (
@@ -515,11 +525,11 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                     >
                       {selectionMode ? (
                         <View style={[styles.checkbox, selectedIds.has(item.id) && styles.selectedCheck]}>
-                          {selectedIds.has(item.id) && <Text style={styles.checkmark}>✓</Text>}
+                          {selectedIds.has(item.id) && <Icon name="checkmark" size={14} color="#FFFFFF" />}
                         </View>
                       ) : (
                         <View style={[styles.checkbox, item.is_packed && styles.checked]}>
-                          {item.is_packed && <Text style={styles.checkmark}>✓</Text>}
+                          {item.is_packed && <Icon name="checkmark" size={14} color="#FFFFFF" />}
                         </View>
                       )}
                     </TouchableOpacity>
@@ -549,7 +559,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                           <Text style={styles.assignAvatarText}>{getAssigneeInitial(item.assigned_to)}</Text>
                         </View>
                       ) : (
-                        <Text style={styles.assignPlaceholder}>👥</Text>
+                        <Icon name="people-outline" size={iconSize.xs} color={colors.textLight} />
                       )}
                     </TouchableOpacity>
                   </View>
@@ -565,7 +575,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
               onPress={() => setShowSaveTemplate(true)}
               activeOpacity={0.7}
             >
-              <Text style={styles.saveTemplateBtnIcon}>💾</Text>
+              <Icon name="bookmark-outline" size={iconSize.sm} color={colors.secondary} />
               <Text style={styles.saveTemplateBtnText}>Als Vorlage speichern</Text>
             </TouchableOpacity>
           )}
@@ -576,15 +586,19 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
       {selectionMode && (
         <View style={styles.selectionBar}>
           <TouchableOpacity style={styles.selectionAction} onPress={() => handleBulkPack(true)}>
-            <Text style={styles.selectionActionText}>✓ Packen</Text>
+            <Icon name="checkmark-circle-outline" size={iconSize.sm} color={colors.success} />
+            <Text style={[styles.selectionActionText, { color: colors.success }]}>Packen</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.selectionAction} onPress={() => handleBulkPack(false)}>
-            <Text style={styles.selectionActionText}>↩ Entpacken</Text>
+            <Icon name="arrow-undo-outline" size={iconSize.sm} color={colors.secondary} />
+            <Text style={[styles.selectionActionText, { color: colors.secondary }]}>Entpacken</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.selectionAction} onPress={handleBulkDelete}>
+            <Icon name="trash-outline" size={iconSize.sm} color={colors.error} />
             <Text style={[styles.selectionActionText, { color: colors.error }]}>Löschen</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.selectionAction} onPress={exitSelectionMode}>
+            <Icon name="close-outline" size={iconSize.sm} color={colors.textSecondary} />
             <Text style={[styles.selectionActionText, { color: colors.textSecondary }]}>Abbrechen</Text>
           </TouchableOpacity>
         </View>
@@ -604,7 +618,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   style={[styles.catChip, newCategory === cat && styles.catChipActive]}
                   onPress={() => setNewCategory(cat)}
                 >
-                  <Text style={styles.catChipIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={[styles.catText, newCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
@@ -650,7 +664,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                     onPress={() => handleTemplateSelect(type.id)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.templateChipIcon}>{type.icon}</Text>
+                    <Icon name={type.icon as any} size={18} color={colors.secondary} />
                     <Text style={styles.templateChipLabel}>{type.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -668,7 +682,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                           onPress={() => handleTemplateSelect(tmpl.id)}
                           activeOpacity={0.7}
                         >
-                          <Text style={styles.templateChipIcon}>{tmpl.icon}</Text>
+                          <Icon name="clipboard-outline" size={18} color={colors.accent} />
                           <Text style={styles.templateChipLabel} numberOfLines={1}>{tmpl.label}</Text>
                           <Text style={styles.templateChipCount}>{tmpl.items.length}</Text>
                         </TouchableOpacity>
@@ -677,13 +691,13 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                             onPress={() => handleEditTemplate(tmpl)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           >
-                            <Text style={styles.templateActionIcon}>✏️</Text>
+                            <Icon name="create-outline" size={16} color={colors.accent} />
                           </TouchableOpacity>
                           <TouchableOpacity
                             onPress={() => handleDeleteCustomTemplate(tmpl.id)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           >
-                            <Text style={styles.templateActionIcon}>🗑️</Text>
+                            <Icon name="trash-outline" size={16} color={colors.error} />
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -698,7 +712,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => { setShowTemplatePicker(false); setShowSaveTemplate(true); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.newTemplateBtnIcon}>+</Text>
+                <Icon name="add-circle-outline" size={18} color={colors.secondary} />
                 <Text style={styles.newTemplateBtnText}>Aktuelle Liste als Vorlage speichern</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -746,9 +760,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
             <ScrollView style={{ maxHeight: 300, flexGrow: 0 }} showsVerticalScrollIndicator={false}>
               {editingTemplate?.items.map((item, index) => (
                 <View key={index} style={styles.editTemplateItem}>
-                  <Text style={styles.editTemplateItemIcon}>
-                    {CATEGORY_ICONS[item.category] || '\uD83D\uDCE6'}
-                  </Text>
+                  <Icon name={(PACKING_CATEGORY_ICONS[item.category] || { icon: 'cube-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[item.category] || { color: '#95A5A6' }).color} />
                   <Text style={styles.editTemplateItemName} numberOfLines={1}>{item.name}</Text>
                   {item.quantity > 1 && (
                     <Text style={styles.editTemplateItemQty}>×{item.quantity}</Text>
@@ -757,7 +769,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                     onPress={() => handleRemoveTemplateItem(index)}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Text style={{ fontSize: 16, color: colors.error }}>✕</Text>
+                    <Icon name="close-circle-outline" size={iconSize.sm} color={colors.error} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -794,7 +806,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   style={[styles.catChip, editItemCategory === cat && styles.catChipActive]}
                   onPress={() => setEditItemCategory(cat)}
                 >
-                  <Text style={styles.catChipIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={[styles.catText, editItemCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
@@ -820,7 +832,8 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                 style={styles.editDeleteBtn}
                 onPress={handleDeleteFromEdit}
               >
-                <Text style={styles.editDeleteBtnText}>🗑️ Löschen</Text>
+                <Icon name="trash-outline" size={iconSize.xs} color={colors.error} />
+                <Text style={styles.editDeleteBtnText}>Löschen</Text>
               </TouchableOpacity>
               <Button title="Abbrechen" onPress={() => setEditingItem(null)} variant="ghost" style={styles.modalBtn} />
               <Button title="Speichern" onPress={handleSaveEditItem} disabled={!editItemName.trim()} style={styles.modalBtn} />
@@ -846,9 +859,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   style={styles.assignOption}
                   onPress={() => handleMoveToCategory(cat)}
                 >
-                  <Text style={styles.assignOptionIcon}>{CATEGORY_ICONS[cat] || '\uD83D\uDCE6'}</Text>
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={iconSize.sm} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={styles.assignOptionName}>{cat}</Text>
-                  {currentCat === cat && <Text style={styles.assignCheck}>✓</Text>}
+                  {currentCat === cat && <Icon name="checkmark" size={14} color={colors.secondary} />}
                 </TouchableOpacity>
               );
             })}
@@ -867,10 +880,10 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.assignTitle}>Zuweisen an</Text>
 
             <TouchableOpacity style={styles.assignOption} onPress={() => handleAssign(null)}>
-              <Text style={styles.assignOptionIcon}>👥</Text>
+              <Icon name="people-outline" size={iconSize.sm} color={colors.secondary} />
               <Text style={styles.assignOptionName}>Team (alle)</Text>
               {assignItemId && !items.find(i => i.id === assignItemId)?.assigned_to && (
-                <Text style={styles.assignCheck}>✓</Text>
+                <Icon name="checkmark" size={14} color={colors.secondary} />
               )}
             </TouchableOpacity>
 
@@ -891,7 +904,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                     {getDisplayName(collab.profile)}{isSelf ? ' (Du)' : ''}
                   </Text>
                   {assignItemId && items.find(i => i.id === assignItemId)?.assigned_to === collab.profile.id && (
-                    <Text style={styles.assignCheck}>✓</Text>
+                    <Icon name="checkmark" size={14} color={colors.secondary} />
                   )}
                 </TouchableOpacity>
               );
@@ -903,17 +916,18 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.fabText}>+</Text>
+          <Icon name="add" size={28} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
 
       {showAiModal && user && (
         <AiTripModal
           visible={showAiModal}
-          onClose={() => setShowAiModal(false)}
+          onClose={() => { setShowAiModal(false); setAiAutoMessage(undefined); }}
           mode="enhance"
           tripId={tripId}
           userId={user.id}
+          autoMessage={aiAutoMessage}
         />
       )}
 
@@ -942,7 +956,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  progressEmoji: { fontSize: 24 },
+  progressIconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   progressTitle: { ...typography.bodySmall, fontWeight: '600', color: colors.text },
   progressPercent: { ...typography.caption, color: colors.textSecondary },
   progressBarOuter: {
@@ -970,7 +984,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     gap: spacing.sm,
   },
-  categoryIcon: { fontSize: 18 },
+  categoryIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   categoryTitle: { ...typography.body, fontWeight: '600', flex: 1 },
   categoryBadge: {
     backgroundColor: colors.background,
@@ -979,7 +993,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
   },
   categoryBadgeText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
-  chevron: { fontSize: 10, color: colors.textLight },
 
   // Items
   itemRow: {
@@ -1018,7 +1031,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   assignAvatarText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  assignPlaceholder: { fontSize: 16 },
 
   // Save as template inline button
   saveTemplateBtn: {
@@ -1033,7 +1045,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     borderStyle: 'dashed',
   },
-  saveTemplateBtnIcon: { fontSize: 16 },
   saveTemplateBtnText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
 
   // Selection bar
@@ -1051,6 +1062,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: spacing.xs,
+    gap: 2,
   },
   selectionActionText: { ...typography.caption, fontWeight: '600', color: colors.primary },
 
@@ -1071,7 +1083,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
-  catChipIcon: { fontSize: 14 },
   catText: { ...typography.caption, fontWeight: '600' },
   catTextActive: { color: '#fff' },
   quantityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
@@ -1120,7 +1131,6 @@ const styles = StyleSheet.create({
     borderColor: colors.accent + '40',
     backgroundColor: colors.accent + '08',
   },
-  templateChipIcon: { fontSize: 18 },
   templateChipLabel: { ...typography.bodySmall, fontWeight: '600', flexShrink: 1 },
   templateChipCount: { ...typography.caption, color: colors.textLight, marginLeft: 'auto' },
   customTemplateRow: {
@@ -1133,7 +1143,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
   },
-  templateActionIcon: { fontSize: 14 },
   newTemplateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1147,7 +1156,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: spacing.sm,
   },
-  newTemplateBtnIcon: { fontSize: 18, color: colors.textSecondary },
   newTemplateBtnText: { ...typography.bodySmall, color: colors.textSecondary },
 
   // Edit template modal
@@ -1159,7 +1167,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  editTemplateItemIcon: { fontSize: 14 },
   editTemplateItemName: { ...typography.bodySmall, flex: 1 },
   editTemplateItemQty: { ...typography.caption, color: colors.textSecondary },
 
@@ -1186,7 +1193,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  assignOptionIcon: { fontSize: 20, marginRight: spacing.md, width: 28, textAlign: 'center' },
   assignOptionAvatar: {
     width: 28,
     height: 28,
@@ -1203,5 +1209,4 @@ const styles = StyleSheet.create({
   // FAB
   fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
-  fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
 });

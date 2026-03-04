@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
 import { TripProvider } from './src/contexts/TripContext';
@@ -11,6 +12,7 @@ import { PlanGenerationProvider } from './src/contexts/PlanGenerationContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
+import { LoadingScreen } from './src/components/common';
 
 import { logCritical } from './src/services/errorLogger';
 
@@ -30,6 +32,17 @@ function UnhandledRejectionHandler({ children }: { children: React.ReactNode }) 
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans: PlusJakartaSans_400Regular,
+    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
+    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
+    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return <LoadingScreen />;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

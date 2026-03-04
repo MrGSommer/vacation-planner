@@ -139,6 +139,8 @@ export const uploadPhoto = async (
   exifDate?: string | null,
   tripName?: string,
   creatorName?: string,
+  exifLat?: number | null,
+  exifLng?: number | null,
 ): Promise<Photo> => {
   const cleanName = buildPhotoName(tripName, exifDate);
   const ts = Date.now();
@@ -204,6 +206,8 @@ export const uploadPhoto = async (
       day_id: resolvedDayId,
       taken_at: takenAt,
       creator_name: creatorName || null,
+      lat: exifLat || null,
+      lng: exifLng || null,
     })
     .select()
     .single();

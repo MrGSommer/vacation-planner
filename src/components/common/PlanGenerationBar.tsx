@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { useNavigation } from '@react-navigation/native';
 import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 export const PlanGenerationBar: React.FC = () => {
   const { isGenerating, completed, progress, tripId, destination, cancelGeneration, dismissCompleted } = usePlanGeneration();
@@ -109,7 +110,7 @@ export const PlanGenerationBar: React.FC = () => {
           onPress={cancelGeneration}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.cancelText}>✕</Text>
+          <Icon name="close" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
 

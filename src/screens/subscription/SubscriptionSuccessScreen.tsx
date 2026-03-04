@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, typography, gradients, borderRadius } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -23,7 +24,7 @@ export const SubscriptionSuccessScreen: React.FC<Props> = ({ navigation }) => {
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
-        <Text style={styles.icon}>{'🎉'}</Text>
+        <Icon name="happy-outline" size={64} color="#FFFFFF" />
         <Text style={styles.title}>Willkommen bei Premium!</Text>
         <Text style={styles.message}>
           Dein Upgrade war erfolgreich. Du hast jetzt Zugriff auf alle Features.
@@ -31,10 +32,12 @@ export const SubscriptionSuccessScreen: React.FC<Props> = ({ navigation }) => {
       </LinearGradient>
 
       <View style={styles.features}>
-        <Text style={styles.featureItem}>{'✅ Unbegrenzte Trips & Kollaborateure'}</Text>
-        <Text style={styles.featureItem}>{'✅ Foto-Galerie'}</Text>
-        <Text style={styles.featureItem}>{'✅ Routen & Stops'}</Text>
-        <Text style={styles.featureItem}>{'✅ Reisebegleiter Fable mit Inspirationen'}</Text>
+        {['Unbegrenzte Trips & Kollaborateure', 'Foto-Galerie', 'Routen & Stops', 'Reisebegleiter Fable mit Inspirationen'].map((item, i) => (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm }}>
+            <Icon name="checkmark-circle" size={20} color={colors.secondary} />
+            <Text style={styles.featureItem}>{item}</Text>
+          </View>
+        ))}
       </View>
 
       <Button
@@ -55,10 +58,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
     marginBottom: spacing.xl,
   },
-  icon: { fontSize: 64, marginBottom: spacing.md },
+  icon: { marginBottom: spacing.md },
   title: { ...typography.h1, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.sm },
   message: { ...typography.body, color: 'rgba(255,255,255,0.9)', textAlign: 'center' },
   features: { marginBottom: spacing.xl },
-  featureItem: { ...typography.body, marginBottom: spacing.sm },
+  featureItem: { ...typography.body },
   button: { marginTop: spacing.md },
 });

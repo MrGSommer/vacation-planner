@@ -4,7 +4,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/common';
-import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, gradients, iconSize } from '../../utils/theme';
+import { Icon, IconName } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -53,7 +54,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           end={{ x: 1, y: 1 }}
           style={styles.hero}
         >
-          <Text style={styles.heroEmoji}>{'✈️'}</Text>
+          <Icon name="airplane" size={64} color="#FFFFFF" />
           <Text style={styles.heroTitle}>Deine Reisen.{'\n'}Dein Weg.</Text>
           <Text style={styles.heroSubtitle}>
             Plane Traumreisen gemeinsam mit Freunden — Routen, Budgets, Unterkünfte und mehr. Alles an einem Ort.
@@ -81,16 +82,16 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.sectionSubtitle}>Von der Idee bis zur Erinnerung — WayFable begleitet dich durch jede Phase deiner Reise</Text>
 
           <View style={styles.featureGrid}>
-            {[
-              { icon: '📅', title: 'Tagesplaner', desc: 'Plane jeden Tag mit Aktivitäten, Zeiten und Orten' },
-              { icon: '🗺️', title: 'Routen & Stops', desc: 'Visualisiere deine Route mit Übernachtungen und Zwischenstopps' },
-              { icon: '💰', title: 'Budget-Tracker', desc: 'Behalte Ausgaben im Blick mit Kategorien und Charts' },
-              { icon: '👥', title: 'Team-Planung', desc: 'Lade Freunde ein und plant gemeinsam in Echtzeit' },
-              { icon: '📸', title: 'Foto-Galerie', desc: 'Halte Erinnerungen fest und teile sie mit der Gruppe' },
-              { icon: '✨', title: 'Reisebegleiter Fable', desc: 'Dein persönlicher Begleiter plant die perfekte Reise für dich' },
-            ].map((f, i) => (
+            {([
+              { icon: 'calendar-outline' as IconName, title: 'Tagesplaner', desc: 'Plane jeden Tag mit Aktivitäten, Zeiten und Orten' },
+              { icon: 'map-outline' as IconName, title: 'Routen & Stops', desc: 'Visualisiere deine Route mit Übernachtungen und Zwischenstopps' },
+              { icon: 'wallet-outline' as IconName, title: 'Budget-Tracker', desc: 'Behalte Ausgaben im Blick mit Kategorien und Charts' },
+              { icon: 'people-outline' as IconName, title: 'Team-Planung', desc: 'Lade Freunde ein und plant gemeinsam in Echtzeit' },
+              { icon: 'images-outline' as IconName, title: 'Foto-Galerie', desc: 'Halte Erinnerungen fest und teile sie mit der Gruppe' },
+              { icon: 'sparkles-outline' as IconName, title: 'Reisebegleiter Fable', desc: 'Dein persönlicher Begleiter plant die perfekte Reise für dich' },
+            ]).map((f, i) => (
               <View key={i} style={[styles.featureCard, { width: isWide ? '30%' : '100%' }]}>
-                <Text style={styles.featureIcon}>{f.icon}</Text>
+                <Icon name={f.icon} size={iconSize.lg} color={colors.primary} />
                 <Text style={styles.featureTitle}>{f.title}</Text>
                 <Text style={styles.featureDesc}>{f.desc}</Text>
               </View>
@@ -135,10 +136,10 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.pricingPrice}>CHF 0</Text>
               <Text style={styles.pricingPeriod}>für immer</Text>
               <View style={styles.pricingFeatures}>
-                <Text style={styles.pricingFeature}>{'✓ 2 aktive Trips'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ 2 Kollaborateure'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Tagesplan & Budget'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Packliste'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>2 aktive Trips</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>2 Kollaborateure</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Tagesplan & Budget</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Packliste</Text></View>
               </View>
               <Button
                 title="Kostenlos starten"
@@ -161,11 +162,11 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.pricingPeriod}>pro Monat</Text>
               <Text style={styles.pricingYearly}>oder CHF 99/Jahr (-17%)</Text>
               <View style={styles.pricingFeatures}>
-                <Text style={styles.pricingFeature}>{'✓ Unbegrenzte Trips'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Unbegrenzte Kollaborateure'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Foto-Galerie'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Routen & Stops'}</Text>
-                <Text style={styles.pricingFeature}>{'✓ Reisebegleiter Fable'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Unbegrenzte Trips</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Unbegrenzte Kollaborateure</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Foto-Galerie</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Routen & Stops</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.xs }}><Icon name="checkmark" size={14} color={colors.secondary} /><Text style={styles.pricingFeature}>Reisebegleiter Fable</Text></View>
               </View>
               <Button
                 title="Premium starten"

@@ -32,11 +32,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     borderRadius: borderRadius.full,
     padding: 3,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   option: {
     flex: 1,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
     borderRadius: borderRadius.full,
   },

@@ -5,6 +5,7 @@ import { getDocuments, uploadDocument, deleteDocument } from '../../api/document
 import { ActivityDocument } from '../../types/database';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface Props {
   activityId: string;
@@ -122,7 +123,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
           </View>
           {!readOnly && (
             <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(doc); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.docDelete}>✕</Text>
+              <Icon name="close-circle" size={16} color={colors.error} />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
