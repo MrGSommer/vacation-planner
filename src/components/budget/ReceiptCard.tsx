@@ -323,10 +323,14 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                     title="Löschen"
                     variant="ghost"
                     onPress={() => {
-                      Alert.alert('Beleg löschen', 'Beleg und zugehörige Ausgaben wirklich löschen?', [
-                        { text: 'Abbrechen', style: 'cancel' },
-                        { text: 'Löschen', style: 'destructive', onPress: () => { onDelete(receipt.id); setExpanded(false); } },
-                      ]);
+                      if (Platform.OS === 'web') {
+                        if (window.confirm('Beleg und zugehörige Ausgaben wirklich löschen?')) { onDelete(receipt.id); setExpanded(false); }
+                      } else {
+                        Alert.alert('Beleg löschen', 'Beleg und zugehörige Ausgaben wirklich löschen?', [
+                          { text: 'Abbrechen', style: 'cancel' },
+                          { text: 'Löschen', style: 'destructive', onPress: () => { onDelete(receipt.id); setExpanded(false); } },
+                        ]);
+                      }
                     }}
                     style={styles.footerBtn}
                   />
@@ -337,10 +341,14 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                     title="Löschen"
                     variant="ghost"
                     onPress={() => {
-                      Alert.alert('Beleg löschen', 'Diesen Beleg wirklich löschen?', [
-                        { text: 'Abbrechen', style: 'cancel' },
-                        { text: 'Löschen', style: 'destructive', onPress: () => { onDelete(receipt.id); setExpanded(false); } },
-                      ]);
+                      if (Platform.OS === 'web') {
+                        if (window.confirm('Diesen Beleg wirklich löschen?')) { onDelete(receipt.id); setExpanded(false); }
+                      } else {
+                        Alert.alert('Beleg löschen', 'Diesen Beleg wirklich löschen?', [
+                          { text: 'Abbrechen', style: 'cancel' },
+                          { text: 'Löschen', style: 'destructive', onPress: () => { onDelete(receipt.id); setExpanded(false); } },
+                        ]);
+                      }
                     }}
                     style={styles.footerBtn}
                   />

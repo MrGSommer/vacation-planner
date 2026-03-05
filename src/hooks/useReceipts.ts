@@ -62,6 +62,8 @@ export const useReceipts = (tripId: string) => {
 
   const removeReceipt = useCallback(async (id: string) => {
     setReceipts(prev => prev.filter(r => r.id !== id));
+    // Delete associated expenses first (for completed receipts), then the receipt itself
+    await receiptsApi.deleteExpensesByReceiptId(id);
     await receiptsApi.deleteReceipt(id);
   }, []);
 
