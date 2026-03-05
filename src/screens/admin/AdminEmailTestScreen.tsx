@@ -85,7 +85,7 @@ export const AdminEmailTestScreen: React.FC<Props> = ({ navigation }) => {
     <AdminGuard>
       <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('AdminDashboard' as any)} style={styles.backBtn}>
             <Text style={styles.backText}>{'<'} Zurück</Text>
           </TouchableOpacity>
           <Text style={styles.title}>E-Mail-Test</Text>
