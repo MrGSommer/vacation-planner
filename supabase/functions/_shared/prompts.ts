@@ -817,6 +817,47 @@ Regeln:
 - NIEMALS ß verwenden, immer ss`;
 }
 
+export function buildReceiptScanPrompt(context: any): string {
+  const currency = context.currency || 'CHF';
+  return `Du bist ein OCR-Spezialist fuer Kassenbelege und Quittungen. Analysiere das Bild und extrahiere alle Positionen.
+
+REGELN:
+- Extrahiere JEDEN einzelnen Artikel/Position vom Beleg
+- MwSt/Steuer-Zeilen NICHT als Item, sondern ins "tax"-Feld
+- Rabatte als Items mit negativem total_price
+- Trinkgeld (Tip/Service) ins "tip"-Feld, NICHT als Item
+- Wenn ein Preis pro Stueck nicht erkennbar ist, setze unit_price auf null
+- quantity ist immer mindestens 1
+- Erkenne die Waehrung auf dem Beleg (Standard: ${currency})
+- Datumsformat: YYYY-MM-DD
+- Restaurantname: aus Kopfzeile/Logo des Belegs
+
+AUSGABE — NUR valides JSON, kein Markdown, keine Erklaerung:
+{
+  "restaurant_name": "string oder null",
+  "date": "YYYY-MM-DD oder null",
+  "currency_detected": "CHF/EUR/USD/etc.",
+  "items": [
+    {
+      "name": "Artikelbezeichnung",
+      "quantity": 1,
+      "unit_price": 12.50,
+      "total_price": 12.50
+    }
+  ],
+  "subtotal": 0.00,
+  "tax": 0.00,
+  "tip": 0.00,
+  "total": 0.00
+}
+
+WICHTIG:
+- Wenn Zahlen nicht lesbar: bestmoeglich schaetzen und "name" mit "(unleserlich)" markieren
+- Summe der Items sollte ungefaehr dem subtotal entsprechen
+- Falls kein subtotal auf dem Beleg: berechne aus den Items
+- Falls total nicht lesbar: summiere subtotal + tax + tip`;
+}
+
 export function buildSystemPrompt(task: string, context: any): string {
   switch (task) {
     case 'plan_generation':
@@ -833,6 +874,8 @@ export function buildSystemPrompt(task: string, context: any): string {
       return buildDayPlanAgentPrompt(context);
     case 'recap':
       return buildRecapSystemPrompt(context);
+    case 'receipt_scan':
+      return buildReceiptScanPrompt(context);
     default:
       return buildConversationSystemPrompt(context);
   }

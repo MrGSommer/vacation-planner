@@ -5,7 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header, TripBottomNav } from '../../components/common';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
-import { ScopeToggle } from '../../components/budget/ScopeToggle';
+import { ReceiptScanModal } from '../../components/budget/ReceiptScanModal';
+import { ReceiptCard } from '../../components/budget/ReceiptCard';
+import { useReceipts } from '../../hooks/useReceipts';
+import { Receipt } from '../../types/database';
 import { BudgetOverviewCard } from '../../components/budget/BudgetOverviewCard';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
 import { ExpenseItem } from '../../components/budget/ExpenseItem';
@@ -23,6 +26,7 @@ import { Icon } from '../../utils/icons';
 import { SettlementCard } from '../../components/budget/SettlementCard';
 import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
+import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Budget'>;
 
@@ -32,23 +36,36 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  usePresence(tripId, 'Budget');
   const [showAiModal, setShowAiModal] = useState(false);
-  const [scope, setScope] = useState<'group' | 'personal'>('group');
-  const [tab, setTab] = useState<TabType>('budget');
+  const [tab, setTab] = useState<TabType>('expenses');
+  const [showPrivateOnly, setShowPrivateOnly] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [collaborators, setCollaborators] = useState<CollaboratorWithProfile[]>([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
+  const [showReceiptScan, setShowReceiptScan] = useState(false);
 
   const {
     categories, expenses, loading, total, totalBudget, byCategory,
     addCategory, updateCategory, removeCategory,
-    addExpense, updateExpense, removeExpense, upgradeExpenseToGroup, refresh,
-  } = useBudget(tripId, scope);
+    addExpense, updateExpense, removeExpense, refresh,
+  } = useBudget(tripId);
+
+  const {
+    receipts, addReceipt, updateReceipt: updateReceiptHook,
+    removeReceipt, completeReceipt, reopenReceipt,
+  } = useReceipts(tripId);
 
   const currency = trip?.currency || 'CHF';
+
+  const filteredExpenses = showPrivateOnly
+    ? expenses.filter(e => e.scope === 'personal')
+    : expenses;
+
+  const groupExpenses = expenses.filter(e => e.scope === 'group');
 
   // Reopen Fable modal when returning from FableTripSettings
   useEffect(() => {
@@ -101,6 +118,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleAddExpense = useCallback(async (data: {
     amount: number; description: string; category_id: string; date: string;
     paid_by: string | null; split_with: string[];
+    scope: 'group' | 'personal'; visible_to: string[];
   }) => {
     try {
       await addExpense({
@@ -112,6 +130,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         date: data.date,
         paid_by: data.paid_by,
         split_with: data.split_with,
+        scope: data.scope,
+        visible_to: data.visible_to,
       });
     } catch {
       Alert.alert('Fehler', 'Ausgabe konnte nicht erstellt werden');
@@ -133,13 +153,76 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     ]);
   }, [removeExpense]);
 
-  const handleUpgradeToGroup = useCallback(async (id: string, paidBy: string, splitWith: string[]) => {
+  const handleReceiptSave = useCallback(async (data: {
+    imageUrl: string;
+    restaurantName: string | null;
+    date: string | null;
+    currency: string;
+    items: Receipt['items'];
+    subtotal: number | null;
+    tax: number | null;
+    tip: number | null;
+    total: number | null;
+    categoryId: string | null;
+    paidBy: string | null;
+  }) => {
+    if (!user) return;
     try {
-      await upgradeExpenseToGroup(id, paidBy, splitWith);
+      await addReceipt({
+        trip_id: tripId,
+        scanned_by: user.id,
+        status: 'scanned',
+        image_url: data.imageUrl,
+        restaurant_name: data.restaurantName,
+        date: data.date,
+        currency: data.currency,
+        items: data.items,
+        subtotal: data.subtotal,
+        tax: data.tax,
+        tip: data.tip,
+        total: data.total,
+        paid_by: data.paidBy,
+        category_id: data.categoryId,
+      });
     } catch {
-      Alert.alert('Fehler', 'Ausgabe konnte nicht geteilt werden');
+      Alert.alert('Fehler', 'Beleg konnte nicht gespeichert werden');
     }
-  }, [upgradeExpenseToGroup]);
+  }, [addReceipt, tripId, user]);
+
+  const handleReceiptUpdate = useCallback(async (id: string, updates: any) => {
+    try {
+      await updateReceiptHook(id, updates);
+    } catch {
+      Alert.alert('Fehler', 'Beleg konnte nicht aktualisiert werden');
+    }
+  }, [updateReceiptHook]);
+
+  const handleReceiptComplete = useCallback(async (receipt: Receipt) => {
+    try {
+      await completeReceipt(receipt);
+      refresh(); // Refresh expenses too
+    } catch {
+      Alert.alert('Fehler', 'Beleg konnte nicht abgeschlossen werden');
+    }
+  }, [completeReceipt, refresh]);
+
+  const handleReceiptReopen = useCallback(async (id: string) => {
+    try {
+      await reopenReceipt(id);
+      refresh();
+    } catch {
+      Alert.alert('Fehler', 'Beleg konnte nicht erneut geöffnet werden');
+    }
+  }, [reopenReceipt, refresh]);
+
+  const handleReceiptDelete = useCallback(async (id: string) => {
+    try {
+      await removeReceipt(id);
+      refresh();
+    } catch {
+      Alert.alert('Fehler', 'Beleg konnte nicht gelöscht werden');
+    }
+  }, [removeReceipt, refresh]);
 
   return (
     <View style={styles.container}>
@@ -158,11 +241,14 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         <BudgetSkeleton />
       ) : (
         <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.primary} />}>
-          {/* Scope Toggle */}
-          <ScopeToggle scope={scope} onChange={setScope} />
-
-          {/* Tab Bar */}
+          {/* Tab Bar with Privacy Filter */}
           <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, tab === 'expenses' && styles.tabActive]}
+              onPress={() => setTab('expenses')}
+            >
+              <Text style={[styles.tabText, tab === 'expenses' && styles.tabTextActive]}>Ausgaben</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.tab, tab === 'budget' && styles.tabActive]}
               onPress={() => setTab('budget')}
@@ -170,10 +256,15 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={[styles.tabText, tab === 'budget' && styles.tabTextActive]}>Budget</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, tab === 'expenses' && styles.tabActive]}
-              onPress={() => setTab('expenses')}
+              style={styles.filterButton}
+              onPress={() => setShowPrivateOnly(prev => !prev)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={[styles.tabText, tab === 'expenses' && styles.tabTextActive]}>Ausgaben</Text>
+              <Icon
+                name={showPrivateOnly ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color={showPrivateOnly ? colors.primary : colors.textSecondary}
+              />
             </TouchableOpacity>
           </View>
 
@@ -189,9 +280,9 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 categories={byCategory.map(c => ({ name: c.name, color: c.color, spent: c.spent }))}
               />
 
-              {scope === 'group' && expenses.length > 0 && (
+              {groupExpenses.length > 0 && (
                 <SettlementCard
-                  expenses={expenses}
+                  expenses={groupExpenses}
                   collaborators={collaborators}
                   currency={currency}
                   currentUserId={user?.id || ''}
@@ -222,10 +313,32 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : (
             /* ===== EXPENSES TAB ===== */
             <>
-              {expenses.length === 0 ? (
+              {/* Receipt cards (open ones first) */}
+              {receipts
+                .sort((a, b) => {
+                  if (a.status === 'completed' && b.status !== 'completed') return 1;
+                  if (a.status !== 'completed' && b.status === 'completed') return -1;
+                  return 0;
+                })
+                .map(receipt => (
+                  <ReceiptCard
+                    key={receipt.id}
+                    receipt={receipt}
+                    currency={currency}
+                    collaborators={collaborators}
+                    currentUserId={user?.id || ''}
+                    onUpdate={handleReceiptUpdate}
+                    onComplete={handleReceiptComplete}
+                    onReopen={handleReceiptReopen}
+                    onDelete={handleReceiptDelete}
+                  />
+                ))
+              }
+
+              {filteredExpenses.length === 0 && receipts.length === 0 ? (
                 <Text style={styles.emptyText}>Noch keine Ausgaben erfasst</Text>
               ) : (
-                expenses.map(exp => (
+                filteredExpenses.filter(exp => !exp.receipt_id).map(exp => (
                   <SwipeableRow
                     key={exp.id}
                     actions={[
@@ -237,7 +350,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                     <ExpenseItem
                       expense={exp}
                       currency={currency}
-                      showPaidBy={scope === 'group'}
+                      showPaidBy={exp.scope === 'group'}
                       collaborators={collaborators}
                       onPress={() => setEditingExpense(exp)}
                       onLongPress={() => handleDeleteExpense(exp.id)}
@@ -248,6 +361,24 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
             </>
           )}
         </ScrollView>
+      )}
+
+      {/* Scan FAB (expenses tab only, AI-gated) */}
+      {tab === 'expenses' && isFeatureAllowed('ai') && (
+        <TouchableOpacity
+          style={styles.scanFab}
+          onPress={() => setShowReceiptScan(true)}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={[colors.secondary, '#3DBCB3']}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Icon name="scan-outline" size={24} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
       )}
 
       {/* FAB */}
@@ -295,7 +426,6 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         collaborators={collaborators}
         currentUserId={user?.id || ''}
         currency={currency}
-        scope={scope}
       />
 
       <EditExpenseModal
@@ -304,12 +434,21 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setEditingExpense(null)}
         onSave={handleUpdateExpense}
         onDelete={handleDeleteExpense}
-        onUpgradeToGroup={scope === 'personal' ? handleUpgradeToGroup : undefined}
         categories={categories}
         collaborators={collaborators}
         currentUserId={user?.id || ''}
         currency={currency}
-        scope={scope}
+      />
+
+      <ReceiptScanModal
+        visible={showReceiptScan}
+        onClose={() => setShowReceiptScan(false)}
+        onSave={handleReceiptSave}
+        tripId={tripId}
+        categories={categories}
+        collaborators={collaborators}
+        currentUserId={user?.id || ''}
+        currency={currency}
       />
 
       {showAiModal && user && (
@@ -336,6 +475,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
     overflow: 'hidden',
+    alignItems: 'center',
     ...shadows.sm,
   },
   tab: {
@@ -348,6 +488,10 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: colors.primary },
   tabText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   tabTextActive: { color: colors.primary },
+  filterButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   emptyText: {
     ...typography.body,
     color: colors.textSecondary,
@@ -364,6 +508,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   addCatText: { ...typography.bodySmall, fontWeight: '600', color: colors.primary },
+  scanFab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md + 56 + spacing.sm, width: 56, height: 56 },
   fab: { position: 'absolute', right: spacing.xl, bottom: 56 + spacing.md, width: 56, height: 56 },
   fabGradient: {
     width: 56,

@@ -200,7 +200,7 @@ export const executePlan = async (
       c => !existingBudgetNames.has(c.name.toLowerCase()),
     );
     for (const cat of newBudgetCats) {
-      await createBudgetCategory(finalTripId, cat.name, cat.color, cat.budget_limit || null, 'group');
+      await createBudgetCategory(finalTripId, cat.name, cat.color, cat.budget_limit || null);
       budgetCategoriesCreated++;
     }
   }

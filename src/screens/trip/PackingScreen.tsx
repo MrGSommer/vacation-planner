@@ -24,6 +24,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 
@@ -51,6 +52,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { showToast } = useToast();
   const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  usePresence(tripId, 'Packliste');
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiAutoMessage, setAiAutoMessage] = useState<string | undefined>();
   const [listId, setListId] = useState<string | null>(null);

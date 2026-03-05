@@ -1528,7 +1528,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       // Create budget categories
       const { createBudgetCategory } = await import('../api/budgets');
       for (const cat of parsed.categories) {
-        await createBudgetCategory(tripId, cat.name, cat.color, cat.budget_limit, 'group');
+        await createBudgetCategory(tripId, cat.name, cat.color, cat.budget_limit);
       }
 
       const totalBudget = parsed.categories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);

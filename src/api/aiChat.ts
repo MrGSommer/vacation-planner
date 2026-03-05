@@ -74,7 +74,52 @@ export interface AiResponse {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export type AiTask = 'greeting' | 'conversation' | 'plan_generation' | 'plan_activities'
-  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search' | 'recap';
+  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search' | 'recap' | 'receipt_scan'
+;
+
+export const sendReceiptScan = async (
+  imageBase64: string,
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+  context: AiContext,
+): Promise<AiResponse> => {
+  const messages = [{
+    role: 'user' as const,
+    content: [
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data: imageBase64 },
+      },
+      { type: 'text', text: 'Bitte analysiere diesen Kassenbeleg und extrahiere alle Positionen als JSON.' },
+    ],
+  }];
+
+  const { data, error } = await supabase.functions.invoke('scan-receipt', {
+    body: { messages, context },
+  });
+
+  if (data?.error) {
+    const err = new Error(data.error) as any;
+    err.retryable = data.retryable || false;
+    throw err;
+  }
+  if (error) {
+    if (error.context instanceof Response) {
+      try {
+        const body = await error.context.json();
+        if (body?.error) {
+          const err = new Error(body.error) as any;
+          err.retryable = body.retryable || false;
+          throw err;
+        }
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+      }
+    }
+    throw new Error(error.message || 'Beleg-Scan fehlgeschlagen');
+  }
+
+  return { content: data.content, usage: data.usage, credits_remaining: data.credits_remaining };
+};
 
 export const sendAiMessage = async (
   task: AiTask,

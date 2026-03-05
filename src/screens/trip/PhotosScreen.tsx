@@ -27,6 +27,7 @@ import { parseISO } from 'date-fns';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
+import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
 
@@ -42,6 +43,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { user, profile } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
   const { showToast } = useToast();
+  usePresence(tripId, 'Fotos');
   const creatorName = profile ? getDisplayName(profile) : undefined;
 
   if (!isFeatureAllowed('photos')) {

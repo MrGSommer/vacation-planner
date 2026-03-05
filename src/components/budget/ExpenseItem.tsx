@@ -6,6 +6,7 @@ import { CollaboratorWithProfile } from '../../api/invitations';
 import { formatDate } from '../../utils/dateHelpers';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface ExpenseItemProps {
   expense: Expense;
@@ -36,6 +37,9 @@ export const ExpenseItem: React.FC<ExpenseItemProps> = ({
         <View style={styles.row}>
           <View style={styles.left}>
             <View style={styles.titleRow}>
+              {expense.receipt_id && (
+                <Icon name="receipt-outline" size={14} color={colors.secondary} />
+              )}
               <Text style={styles.desc} numberOfLines={1}>{expense.description}</Text>
               {catName && (
                 <View style={[styles.chip, { backgroundColor: catColor ? `${catColor}20` : colors.border }]}>
@@ -59,7 +63,12 @@ export const ExpenseItem: React.FC<ExpenseItemProps> = ({
               )}
             </View>
           </View>
-          <Text style={styles.amount}>{currency} {expense.amount.toFixed(2)}</Text>
+          <View style={styles.amountRow}>
+            {expense.scope === 'personal' && (
+              <Icon name="lock-closed-outline" size={14} color={colors.textSecondary} />
+            )}
+            <Text style={styles.amount}>{currency} {expense.amount.toFixed(2)}</Text>
+          </View>
         </View>
       </Card>
     </TouchableOpacity>
@@ -82,5 +91,6 @@ const styles = StyleSheet.create({
   date: { ...typography.caption },
   paidBy: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   paidByText: { ...typography.caption, maxWidth: 100 },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   amount: { ...typography.body, fontWeight: '700', color: colors.primary },
 });

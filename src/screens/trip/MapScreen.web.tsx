@@ -13,6 +13,7 @@ import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { usePresence } from '../../hooks/usePresence';
 
 const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
   || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -48,6 +49,7 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
 
 export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
+  usePresence(tripId, 'Karte');
   const mapRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
   const [loading, setLoading] = useState(true);

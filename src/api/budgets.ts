@@ -2,16 +2,13 @@ import { supabase } from './supabase';
 import { BudgetCategory, Expense } from '../types/database';
 
 export const getBudgetCategories = async (
-  tripId: string,
-  scope?: 'group' | 'personal'
+  tripId: string
 ): Promise<BudgetCategory[]> => {
-  let query = supabase
+  const { data, error } = await supabase
     .from('budget_categories')
     .select('*')
     .eq('trip_id', tripId)
     .order('name');
-  if (scope) query = query.eq('scope', scope);
-  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 };
@@ -20,9 +17,7 @@ export const createBudgetCategory = async (
   tripId: string,
   name: string,
   color: string,
-  budgetLimit: number | null,
-  scope: 'group' | 'personal',
-  userId?: string
+  budgetLimit: number | null
 ): Promise<BudgetCategory> => {
   const { data, error } = await supabase
     .from('budget_categories')
@@ -31,8 +26,6 @@ export const createBudgetCategory = async (
       name,
       color,
       budget_limit: budgetLimit,
-      scope,
-      user_id: scope === 'personal' ? userId : null,
     })
     .select()
     .single();
@@ -60,22 +53,19 @@ export const deleteBudgetCategory = async (id: string): Promise<void> => {
 };
 
 export const getExpenses = async (
-  tripId: string,
-  scope?: 'group' | 'personal'
+  tripId: string
 ): Promise<Expense[]> => {
-  let query = supabase
+  const { data, error } = await supabase
     .from('expenses')
     .select('*, budget_categories(name, color)')
     .eq('trip_id', tripId)
     .order('date', { ascending: false });
-  if (scope) query = query.eq('scope', scope);
-  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 };
 
 export const createExpense = async (
-  expense: Omit<Expense, 'id' | 'created_at' | 'budget_categories'>
+  expense: Omit<Expense, 'id' | 'created_at' | 'budget_categories' | 'receipt_id' | 'creator_name'> & { receipt_id?: string | null; creator_name?: string | null }
 ): Promise<Expense> => {
   const { data, error } = await supabase
     .from('expenses')
@@ -103,21 +93,6 @@ export const updateExpense = async (
 export const deleteExpense = async (id: string): Promise<void> => {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
-};
-
-export const upgradeToGroup = async (
-  id: string,
-  paidBy: string,
-  splitWith: string[]
-): Promise<Expense> => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .update({ scope: 'group', paid_by: paidBy, split_with: splitWith })
-    .eq('id', id)
-    .select('*, budget_categories(name, color)')
-    .single();
-  if (error) throw error;
-  return data;
 };
 
 export const getTripExpenseTotal = async (tripId: string): Promise<number> => {

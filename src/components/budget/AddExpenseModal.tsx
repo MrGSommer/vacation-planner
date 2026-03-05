@@ -6,6 +6,7 @@ import { BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface AddExpenseModalProps {
   visible: boolean;
@@ -17,12 +18,13 @@ interface AddExpenseModalProps {
     date: string;
     paid_by: string | null;
     split_with: string[];
+    scope: 'group' | 'personal';
+    visible_to: string[];
   }) => void;
   categories: BudgetCategory[];
   collaborators: CollaboratorWithProfile[];
   currentUserId: string;
   currency: string;
-  scope: 'group' | 'personal';
 }
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
@@ -33,7 +35,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   collaborators,
   currentUserId,
   currency,
-  scope,
 }) => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -41,14 +42,17 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [paidBy, setPaidBy] = useState(currentUserId);
   const [splitWith, setSplitWith] = useState<string[]>([]);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [visibleTo, setVisibleTo] = useState<string[]>([currentUserId]);
 
-  // Default split_with to all collaborators when opening in group mode
   useEffect(() => {
-    if (visible && scope === 'group') {
+    if (visible) {
       setPaidBy(currentUserId);
       setSplitWith(collaborators.map(c => c.user_id));
+      setIsPrivate(false);
+      setVisibleTo([currentUserId]);
     }
-  }, [visible, scope, collaborators, currentUserId]);
+  }, [visible, collaborators, currentUserId]);
 
   const handleSave = () => {
     if (!amount || !description.trim() || !categoryId) return;
@@ -57,8 +61,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       description: description.trim(),
       category_id: categoryId,
       date,
-      paid_by: scope === 'group' ? paidBy : null,
-      split_with: scope === 'group' ? splitWith : [],
+      paid_by: isPrivate ? null : paidBy,
+      split_with: isPrivate ? [] : splitWith,
+      scope: isPrivate ? 'personal' : 'group',
+      visible_to: isPrivate ? visibleTo : [],
     });
     reset();
     onClose();
@@ -69,6 +75,13 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     setDescription('');
     setCategoryId('');
     setDate(new Date().toISOString().split('T')[0]);
+    setIsPrivate(false);
+  };
+
+  const toggleVisibleTo = (userId: string) => {
+    setVisibleTo(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
   };
 
   return (
@@ -118,7 +131,48 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               ))}
             </View>
 
-            {scope === 'group' && collaborators.length > 0 && (
+            {/* Privacy Toggle */}
+            <TouchableOpacity
+              style={[styles.privacyToggle, isPrivate && styles.privacyToggleActive]}
+              onPress={() => setIsPrivate(prev => !prev)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name={isPrivate ? 'lock-closed' : 'lock-open-outline'}
+                size={16}
+                color={isPrivate ? colors.primary : colors.textSecondary}
+              />
+              <Text style={[styles.privacyText, isPrivate && styles.privacyTextActive]}>
+                Privat
+              </Text>
+            </TouchableOpacity>
+
+            {isPrivate && collaborators.length > 1 && (
+              <>
+                <Text style={styles.fieldLabel}>Sichtbar für</Text>
+                <View style={styles.catRow}>
+                  {collaborators.map(c => (
+                    <TouchableOpacity
+                      key={c.user_id}
+                      style={[
+                        styles.catChip,
+                        visibleTo.includes(c.user_id) && { backgroundColor: colors.secondary, borderColor: colors.secondary },
+                      ]}
+                      onPress={() => {
+                        if (c.user_id === currentUserId) return;
+                        toggleVisibleTo(c.user_id);
+                      }}
+                    >
+                      <Text style={[styles.catText, visibleTo.includes(c.user_id) && { color: '#fff' }]}>
+                        {getDisplayName(c.profile)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {!isPrivate && collaborators.length > 0 && (
               <>
                 <Text style={styles.fieldLabel}>Bezahlt von</Text>
                 <View style={styles.catRow}>
@@ -187,6 +241,24 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   catText: { ...typography.caption, fontWeight: '600' },
+  privacyToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.lg,
+  },
+  privacyToggleActive: {
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}10`,
+  },
+  privacyText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
+  privacyTextActive: { color: colors.primary },
   buttons: { flexDirection: 'row', gap: spacing.md },
   btn: { flex: 1 },
 });

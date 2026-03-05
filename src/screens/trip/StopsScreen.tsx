@@ -24,6 +24,7 @@ import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 import { RouteMapModal } from '../../components/map/RouteMapModal';
 import { AiTripModal } from '../../components/ai/AiTripModal';
+import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
@@ -41,6 +42,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { isFeatureAllowed } = useSubscription();
   const { user } = useAuthContext();
+  usePresence(tripId, 'Stopps');
   const [showAiModal, setShowAiModal] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);

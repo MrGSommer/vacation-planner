@@ -6,6 +6,7 @@ import { BudgetCategory, Expense } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface EditExpenseModalProps {
   visible: boolean;
@@ -13,12 +14,10 @@ interface EditExpenseModalProps {
   onClose: () => void;
   onSave: (id: string, updates: Partial<Expense>) => void;
   onDelete: (id: string) => void;
-  onUpgradeToGroup?: (id: string, paidBy: string, splitWith: string[]) => void;
   categories: BudgetCategory[];
   collaborators: CollaboratorWithProfile[];
   currentUserId: string;
   currency: string;
-  scope: 'group' | 'personal';
 }
 
 export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
@@ -27,12 +26,10 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
   onClose,
   onSave,
   onDelete,
-  onUpgradeToGroup,
   categories,
   collaborators,
   currentUserId,
   currency,
-  scope,
 }) => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -40,7 +37,8 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
   const [date, setDate] = useState('');
   const [paidBy, setPaidBy] = useState('');
   const [splitWith, setSplitWith] = useState<string[]>([]);
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [visibleTo, setVisibleTo] = useState<string[]>([]);
 
   useEffect(() => {
     if (expense) {
@@ -50,7 +48,8 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
       setDate(expense.date);
       setPaidBy(expense.paid_by || currentUserId);
       setSplitWith(expense.split_with || []);
-      setShowUpgrade(false);
+      setIsPrivate(expense.scope === 'personal');
+      setVisibleTo(expense.visible_to?.length ? expense.visible_to : [currentUserId]);
     }
   }, [expense, currentUserId]);
 
@@ -63,14 +62,27 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
       description: description.trim(),
       category_id: categoryId,
       date,
+      scope: isPrivate ? 'personal' : 'group',
+      visible_to: isPrivate ? visibleTo : [],
+      paid_by: isPrivate ? null : paidBy,
+      split_with: isPrivate ? [] : splitWith,
     });
     onClose();
   };
 
-  const handleUpgrade = () => {
-    if (onUpgradeToGroup && splitWith.length > 0) {
-      onUpgradeToGroup(expense.id, paidBy, splitWith);
-      onClose();
+  const toggleVisibleTo = (userId: string) => {
+    setVisibleTo(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleTogglePrivacy = (newPrivate: boolean) => {
+    setIsPrivate(newPrivate);
+    if (newPrivate) {
+      setVisibleTo([currentUserId]);
+    } else {
+      setPaidBy(currentUserId);
+      setSplitWith(collaborators.map(c => c.user_id));
     }
   };
 
@@ -121,16 +133,48 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
               ))}
             </View>
 
-            {scope === 'personal' && onUpgradeToGroup && !showUpgrade && (
-              <Button
-                title="Als Gruppe teilen"
-                variant="secondary"
-                onPress={() => setShowUpgrade(true)}
-                style={{ marginBottom: spacing.md }}
+            {/* Privacy Toggle */}
+            <TouchableOpacity
+              style={[styles.privacyToggle, isPrivate && styles.privacyToggleActive]}
+              onPress={() => handleTogglePrivacy(!isPrivate)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name={isPrivate ? 'lock-closed' : 'lock-open-outline'}
+                size={16}
+                color={isPrivate ? colors.primary : colors.textSecondary}
               />
+              <Text style={[styles.privacyText, isPrivate && styles.privacyTextActive]}>
+                Privat
+              </Text>
+            </TouchableOpacity>
+
+            {isPrivate && collaborators.length > 1 && (
+              <>
+                <Text style={styles.fieldLabel}>Sichtbar für</Text>
+                <View style={styles.catRow}>
+                  {collaborators.map(c => (
+                    <TouchableOpacity
+                      key={c.user_id}
+                      style={[
+                        styles.catChip,
+                        visibleTo.includes(c.user_id) && { backgroundColor: colors.secondary, borderColor: colors.secondary },
+                      ]}
+                      onPress={() => {
+                        if (c.user_id === currentUserId) return;
+                        toggleVisibleTo(c.user_id);
+                      }}
+                    >
+                      <Text style={[styles.catText, visibleTo.includes(c.user_id) && { color: '#fff' }]}>
+                        {getDisplayName(c.profile)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
             )}
 
-            {showUpgrade && (
+            {!isPrivate && collaborators.length > 0 && (
               <>
                 <Text style={styles.fieldLabel}>Bezahlt von</Text>
                 <View style={styles.catRow}>
@@ -157,13 +201,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
                   onChange={setSplitWith}
                 />
                 <View style={{ height: spacing.md }} />
-
-                <Button
-                  title="Jetzt teilen"
-                  onPress={handleUpgrade}
-                  disabled={splitWith.length === 0}
-                  style={{ marginBottom: spacing.md }}
-                />
               </>
             )}
 
@@ -212,6 +249,24 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   catText: { ...typography.caption, fontWeight: '600' },
+  privacyToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.lg,
+  },
+  privacyToggleActive: {
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}10`,
+  },
+  privacyText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
+  privacyTextActive: { color: colors.primary },
   buttons: { flexDirection: 'row', gap: spacing.sm },
   btn: { flex: 1 },
 });

@@ -33,7 +33,6 @@ import { exportKML } from '../../utils/geoImport';
 import { ensureContrast, tintWithWhite } from '../../utils/colorExtraction';
 import { TripRecapCard } from '../../components/trip/TripRecapCard';
 import { ChangeLog } from '../../components/common/ChangeLog';
-import { PresenceAvatars } from '../../components/common/PresenceAvatars';
 import { usePresence } from '../../hooks/usePresence';
 import { Icon } from '../../utils/icons';
 
@@ -377,15 +376,18 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.headerRight}>
           {nonOwnerCollabs.length > 0 && (
             <TouchableOpacity onPress={() => setShowShareModal(true)} activeOpacity={0.7} style={styles.avatarRow}>
-              {nonOwnerCollabs.slice(0, 4).map((c, i) => (
-                <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }]}>
-                  <Avatar
-                    uri={c.profile.avatar_url}
-                    name={getDisplayName(c.profile)}
-                    size={28}
-                  />
-                </View>
-              ))}
+              {nonOwnerCollabs.slice(0, 4).map((c, i) => {
+                const isOnline = presenceUsers.some(p => p.userId === c.user_id);
+                return (
+                  <View key={c.id} style={[styles.avatarWrap, i > 0 && { marginLeft: -8 }, isOnline && { borderColor: '#A855F7' }]}>
+                    <Avatar
+                      uri={c.profile.avatar_url}
+                      name={getDisplayName(c.profile)}
+                      size={28}
+                    />
+                  </View>
+                );
+              })}
               {nonOwnerCollabs.length > 4 && (
                 <View style={[styles.avatarWrap, { marginLeft: -8 }]}>
                   <View style={styles.avatarOverflow}>
@@ -436,11 +438,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
       <Text style={styles.destination}>{trip.destination}</Text>
       <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
-      {presenceUsers.length > 0 && (
-        <View style={{ marginTop: spacing.sm }}>
-          <PresenceAvatars users={presenceUsers} />
-        </View>
-      )}
     </>
   );
 

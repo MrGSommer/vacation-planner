@@ -33,6 +33,7 @@ import { PollCard, CreatePollModal } from '../../components/common/PollCard';
 import { getPolls, PollWithVotes } from '../../api/polls';
 import { getReactionsByActivities } from '../../api/comments';
 import { ActivityReaction } from '../../types/database';
+import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -41,6 +42,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { showToast } = useToast();
   const { user } = useAuthContext();
   const { isFeatureAllowed } = useSubscription();
+  usePresence(tripId, 'Programm');
   const { isGenerating: isPlanGenerating, tripId: generatingTripId } = usePlanGeneration();
   const isGeneratingThisTrip = isPlanGenerating && generatingTripId === tripId;
   const [showAiModal, setShowAiModal] = useState(false);

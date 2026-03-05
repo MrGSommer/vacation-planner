@@ -4,7 +4,7 @@ import * as budgetApi from '../api/budgets';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useRealtime, RealtimePayload } from './useRealtime';
 
-export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group') => {
+export const useBudget = (tripId: string) => {
   const { user } = useAuthContext();
   const [categories, setCategories] = useState<BudgetCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -14,8 +14,8 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     setLoading(true);
     try {
       const [cats, exps] = await Promise.all([
-        budgetApi.getBudgetCategories(tripId, scope),
-        budgetApi.getExpenses(tripId, scope),
+        budgetApi.getBudgetCategories(tripId),
+        budgetApi.getExpenses(tripId),
       ]);
       setCategories(cats);
       setExpenses(exps);
@@ -24,7 +24,7 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     } finally {
       setLoading(false);
     }
-  }, [tripId, scope]);
+  }, [tripId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -32,9 +32,6 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
   const handleExpenseRealtime = useCallback((payload?: RealtimePayload) => {
     if (!payload) { fetchData(); return; }
     const { eventType } = payload;
-    const record = (payload.new || payload.old) as any;
-    // Only handle events matching our current scope
-    if (record?.scope !== scope) return;
     if (eventType === 'INSERT' && payload.new) {
       const newExp = payload.new as unknown as Expense;
       setExpenses(prev => prev.some(e => e.id === newExp.id) ? prev : [newExp, ...prev]);
@@ -47,7 +44,7 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     } else {
       fetchData();
     }
-  }, [fetchData, scope]);
+  }, [fetchData]);
 
   useRealtime('expenses', `trip_id=eq.${tripId}`, handleExpenseRealtime);
 
@@ -55,8 +52,6 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
   const handleCategoryRealtime = useCallback((payload?: RealtimePayload) => {
     if (!payload) { fetchData(); return; }
     const { eventType } = payload;
-    const record = (payload.new || payload.old) as any;
-    if (record?.scope !== scope) return;
     if (eventType === 'INSERT' && payload.new) {
       const newCat = payload.new as unknown as BudgetCategory;
       setCategories(prev => prev.some(c => c.id === newCat.id) ? prev : [...prev, newCat]);
@@ -69,7 +64,7 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     } else {
       fetchData();
     }
-  }, [fetchData, scope]);
+  }, [fetchData]);
 
   useRealtime('budget_categories', `trip_id=eq.${tripId}`, handleCategoryRealtime);
 
@@ -77,10 +72,10 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
   const addCategory = useCallback(async (name: string, color: string, budgetLimit?: number) => {
     if (!user) return;
     const created = await budgetApi.createBudgetCategory(
-      tripId, name, color, budgetLimit ?? null, scope, user.id
+      tripId, name, color, budgetLimit ?? null
     );
     setCategories(prev => [...prev, created]);
-  }, [tripId, scope, user]);
+  }, [tripId, user]);
 
   const updateCategory = useCallback(async (
     id: string,
@@ -97,18 +92,18 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
 
   // Expense CRUD
   const addExpense = useCallback(async (
-    expense: Omit<Expense, 'id' | 'created_at' | 'user_id' | 'scope' | 'budget_categories'>
+    expense: Omit<Expense, 'id' | 'created_at' | 'user_id' | 'budget_categories' | 'receipt_id' | 'creator_name'> & {
+      scope: 'group' | 'personal';
+      visible_to: string[];
+    }
   ) => {
     if (!user) return;
     const created = await budgetApi.createExpense({
       ...expense,
       user_id: user.id,
-      scope,
-      paid_by: scope === 'group' ? (expense.paid_by || user.id) : null,
-      split_with: scope === 'group' ? (expense.split_with || []) : [],
     });
     setExpenses(prev => [created, ...prev]);
-  }, [user, scope]);
+  }, [user]);
 
   const updateExpense = useCallback(async (
     id: string,
@@ -121,15 +116,6 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
   const removeExpense = useCallback(async (id: string) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
     await budgetApi.deleteExpense(id);
-  }, []);
-
-  const upgradeExpenseToGroup = useCallback(async (
-    id: string, paidBy: string, splitWith: string[]
-  ) => {
-    const updated = await budgetApi.upgradeToGroup(id, paidBy, splitWith);
-    // Remove from personal list (it's now group scope)
-    setExpenses(prev => prev.filter(e => e.id !== id));
-    return updated;
   }, []);
 
   const total = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
@@ -157,7 +143,6 @@ export const useBudget = (tripId: string, scope: 'group' | 'personal' = 'group')
     addExpense,
     updateExpense,
     removeExpense,
-    upgradeExpenseToGroup,
     refresh: fetchData,
   };
 };

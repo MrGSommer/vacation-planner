@@ -219,8 +219,6 @@ export interface BudgetCategory {
   name: string;
   color: string;
   budget_limit: number | null;
-  scope: 'group' | 'personal';
-  user_id: string | null;
   created_at: string;
 }
 
@@ -236,9 +234,41 @@ export interface Expense {
   scope: 'group' | 'personal';
   paid_by: string | null;
   split_with: string[];
+  visible_to: string[];
   creator_name: string | null;
+  receipt_id: string | null;
   created_at: string;
   budget_categories?: { name: string; color: string };
+}
+
+export interface ReceiptItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit_price: number | null;
+  total_price: number;
+  assigned_to: { user_id: string; quantity: number }[];
+  is_tip: boolean;
+}
+
+export interface Receipt {
+  id: string;
+  trip_id: string;
+  scanned_by: string;
+  status: 'scanned' | 'in_progress' | 'completed';
+  image_url: string;
+  restaurant_name: string | null;
+  date: string | null;
+  currency: string;
+  items: ReceiptItem[];
+  subtotal: number | null;
+  tax: number | null;
+  tip: number | null;
+  total: number | null;
+  paid_by: string | null;
+  category_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PackingList {

@@ -5,6 +5,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { getActiveAnnouncements, getDismissedAnnouncementIds, dismissAnnouncement } from '../../api/announcements';
+import { supabase } from '../../api/supabase';
 import { colors, spacing, borderRadius, typography, gradients } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { Announcement } from '../../types/database';
@@ -59,7 +60,7 @@ export const AnnouncementModal: React.FC = () => {
 
   const handleCta = useCallback(async () => {
     if (!announcement) return;
-    const url = announcement.cta_url;
+    let url = announcement.cta_url;
 
     // Dismiss first
     try {
@@ -69,18 +70,51 @@ export const AnnouncementModal: React.FC = () => {
     }
     setAnnouncement(null);
 
-    // Navigate if it's an internal route
-    if (url) {
-      if (url.startsWith('/')) {
-        // Simple internal path mapping
-        const route = url.slice(1);
-        if (route === 'subscription') navigation.navigate('Subscription');
-        else if (route === 'profile') navigation.navigate('Main', { screen: 'Profile' } as any);
-        else if (route === 'feedback') navigation.navigate('FeedbackModal');
-        else if (Platform.OS === 'web') window.open(url, '_blank');
-      } else if (Platform.OS === 'web') {
-        window.open(url, '_blank');
+    if (!url) return;
+
+    // Resolve {latestTrip} placeholder with user's most recent trip
+    if (url.includes('{latestTrip}')) {
+      try {
+        const { data } = await supabase
+          .from('trips')
+          .select('id')
+          .order('start_date', { ascending: false })
+          .limit(1)
+          .single();
+        if (data?.id) {
+          url = url.replace('{latestTrip}', data.id);
+        } else {
+          // No trip — fallback to home
+          return;
+        }
+      } catch {
+        return;
       }
+    }
+
+    // Navigate based on route type
+    if (url.startsWith('/')) {
+      const route = url.slice(1);
+      // Trip sub-routes: /trip/{id}/budget, /trip/{id}/packing, etc.
+      const tripMatch = route.match(/^trip\/([^/]+)(?:\/(.+))?$/);
+      if (tripMatch) {
+        const [, tripId, subRoute] = tripMatch;
+        const screenMap: Record<string, string> = {
+          budget: 'Budget', packing: 'Packing', itinerary: 'Itinerary',
+          photos: 'Photos', stops: 'Stops', map: 'Map',
+        };
+        const screen = subRoute ? screenMap[subRoute] : undefined;
+        if (screen) {
+          navigation.navigate(screen as any, { tripId } as any);
+        } else {
+          navigation.navigate('TripDetail', { tripId } as any);
+        }
+      } else if (route === 'subscription') navigation.navigate('Subscription');
+      else if (route === 'profile') navigation.navigate('Main', { screen: 'Profile' } as any);
+      else if (route === 'feedback') navigation.navigate('FeedbackModal');
+      else if (Platform.OS === 'web') window.open(url, '_blank');
+    } else if (Platform.OS === 'web') {
+      window.open(url, '_blank');
     }
   }, [announcement, navigation]);
 
@@ -102,11 +136,15 @@ export const AnnouncementModal: React.FC = () => {
       <Pressable style={styles.overlay} onPress={handleDismiss}>
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
           <LinearGradient colors={[...gradients.sunset]} style={styles.gradient}>
-            {announcement.image_url ? (
+            {announcement.image_url?.startsWith('icon:') ? (
+              <View style={styles.icon}>
+                <Icon name={(announcement.image_url.slice(5) || 'megaphone') as any} size={40} color="#FFFFFF" />
+              </View>
+            ) : announcement.image_url ? (
               <Image source={{ uri: announcement.image_url }} style={styles.image} resizeMode="contain" />
             ) : (
               <View style={styles.icon}>
-                <Icon name="megaphone-outline" size={40} color={colors.primary} />
+                <Icon name="megaphone-outline" size={40} color="#FFFFFF" />
               </View>
             )}
             <Text style={styles.title}>{announcement.title}</Text>

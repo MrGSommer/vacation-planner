@@ -115,7 +115,6 @@ async function createBudgetCategoryViaRest(tripId: string, name: string, color: 
       name,
       color,
       budget_limit: limit,
-      scope: 'group',
     }),
   });
 }
