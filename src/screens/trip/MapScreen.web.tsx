@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import Constants from 'expo-constants';
 import { Header, LoadingScreen, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult, importMapsLibrary } from '../../components/common/PlaceAutocomplete';
 import { getStops } from '../../api/stops';
@@ -15,9 +14,7 @@ import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { usePresence } from '../../hooks/usePresence';
 
-const API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-  || '';
+const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 

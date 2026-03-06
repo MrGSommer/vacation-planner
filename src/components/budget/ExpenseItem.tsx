@@ -11,6 +11,7 @@ import { Icon } from '../../utils/icons';
 interface ExpenseItemProps {
   expense: Expense;
   currency: string;
+  currentUserId?: string;
   showPaidBy?: boolean;
   collaborators?: CollaboratorWithProfile[];
   onPress: () => void;
@@ -20,6 +21,7 @@ interface ExpenseItemProps {
 export const ExpenseItem: React.FC<ExpenseItemProps> = ({
   expense,
   currency,
+  currentUserId,
   showPaidBy = false,
   collaborators = [],
   onPress,
@@ -30,6 +32,14 @@ export const ExpenseItem: React.FC<ExpenseItemProps> = ({
   const paidByCollab = showPaidBy && expense.paid_by
     ? collaborators.find(c => c.user_id === expense.paid_by)
     : null;
+
+  // Calculate user's share
+  const isGroup = expense.scope === 'group' && expense.split_with.length > 0;
+  const myShare = isGroup && currentUserId
+    ? (expense.split_with.includes(currentUserId) ? expense.amount / expense.split_with.length : 0)
+    : expense.amount;
+  const iPaid = expense.paid_by === currentUserId;
+  const showShare = isGroup && currentUserId && expense.split_with.length > 1;
 
   return (
     <TouchableOpacity onPress={onPress} onLongPress={onLongPress} activeOpacity={0.7}>
@@ -50,24 +60,26 @@ export const ExpenseItem: React.FC<ExpenseItemProps> = ({
             <View style={styles.metaRow}>
               <Text style={styles.date}>{formatDate(expense.date)}</Text>
               {paidByCollab && (
-                <View style={styles.paidBy}>
-                  <Avatar
-                    uri={paidByCollab.profile.avatar_url}
-                    name={getDisplayName(paidByCollab.profile)}
-                    size={18}
-                  />
-                  <Text style={styles.paidByText} numberOfLines={1}>
-                    {getDisplayName(paidByCollab.profile)}
-                  </Text>
-                </View>
+                <Text style={styles.paidByText} numberOfLines={1}>
+                  {getDisplayName(paidByCollab.profile)}
+                </Text>
               )}
             </View>
           </View>
-          <View style={styles.amountRow}>
+          <View style={styles.amountCol}>
             {expense.scope === 'personal' && (
-              <Icon name="lock-closed-outline" size={14} color={colors.textSecondary} />
+              <Icon name="lock-closed-outline" size={12} color={colors.textSecondary} />
             )}
-            <Text style={styles.amount}>{currency} {expense.amount.toFixed(2)}</Text>
+            {showShare ? (
+              <>
+                <Text style={[styles.shareAmount, iPaid ? styles.sharePositive : styles.shareNegative]}>
+                  {iPaid ? `+${(expense.amount - myShare).toFixed(2)}` : myShare > 0 ? `-${myShare.toFixed(2)}` : '–'}
+                </Text>
+                <Text style={styles.totalAmount}>{currency} {expense.amount.toFixed(2)}</Text>
+              </>
+            ) : (
+              <Text style={styles.amount}>{currency} {expense.amount.toFixed(2)}</Text>
+            )}
           </View>
         </View>
       </Card>
@@ -89,8 +101,11 @@ const styles = StyleSheet.create({
   chipText: { ...typography.caption, fontWeight: '600' },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: spacing.sm },
   date: { ...typography.caption },
-  paidBy: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  paidByText: { ...typography.caption, maxWidth: 100 },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  amount: { ...typography.body, fontWeight: '700', color: colors.primary },
+  paidByText: { ...typography.caption, color: colors.textSecondary, maxWidth: 100 },
+  amountCol: { alignItems: 'flex-end', gap: 1 },
+  amount: { ...typography.body, fontWeight: '700', color: colors.text },
+  shareAmount: { ...typography.body, fontWeight: '700' },
+  sharePositive: { color: colors.success },
+  shareNegative: { color: colors.error },
+  totalAmount: { ...typography.caption, color: colors.textLight, fontSize: 10 },
 });

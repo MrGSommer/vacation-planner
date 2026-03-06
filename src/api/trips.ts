@@ -159,12 +159,11 @@ export const duplicateTrip = async (tripId: string, userId: string): Promise<Tri
     fable_enabled: original.fable_enabled,
     fable_budget_visible: original.fable_budget_visible,
     fable_packing_visible: original.fable_packing_visible,
-    fable_stops_visible: original.fable_stops_visible,
-    fable_personality: original.fable_personality,
-    fable_detail_level: original.fable_detail_level,
-    fable_creativity: original.fable_creativity,
-    fable_language: original.fable_language,
-  } as any);
+    fable_web_search: original.fable_web_search,
+    fable_memory_enabled: original.fable_memory_enabled,
+    fable_instruction: original.fable_instruction,
+    fable_recap: original.fable_recap,
+  });
 
   // 3. Copy days + activities
   const { data: days } = await supabase.from('itinerary_days').select('*').eq('trip_id', tripId).order('date');

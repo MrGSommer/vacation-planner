@@ -59,7 +59,7 @@ export const ActivityViewModal: React.FC<Props> = ({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity style={styles.modal} activeOpacity={1} onStartShouldSetResponder={() => true}>
+        <TouchableOpacity style={styles.modal} activeOpacity={1} onPress={() => {}}>
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Category badge */}
             <View style={[styles.categoryBadge, { backgroundColor: catColor + '15' }]}>

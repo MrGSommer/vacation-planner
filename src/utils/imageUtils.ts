@@ -14,14 +14,18 @@ export interface CompressedImage {
 /**
  * Compress an image for receipt scanning.
  * Web: uses canvas to resize and compress.
- * Native: uses expo-image-manipulator if available, otherwise passes through.
+ * Native: accepts a URI string from expo-image-picker.
  */
-export async function compressForReceipt(file: File | Blob): Promise<CompressedImage> {
+export async function compressForReceipt(input: File | Blob | string): Promise<CompressedImage> {
   if (Platform.OS === 'web') {
-    return compressWeb(file);
+    return compressWeb(input as File | Blob);
   }
-  // Native fallback: convert blob to base64 directly
-  return blobToCompressedImage(file);
+  // Native: input is a URI string from expo-image-picker
+  const uri = typeof input === 'string' ? input : '';
+  if (!uri) throw new Error('Native requires a URI string');
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return blobToCompressedImage(blob);
 }
 
 async function compressWeb(file: File | Blob): Promise<CompressedImage> {

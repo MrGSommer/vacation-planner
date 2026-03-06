@@ -90,6 +90,7 @@ export const executePlan = async (
       destination_lng: plan.trip.destination_lng,
       cover_image_url: null,
       cover_image_attribution: null,
+      theme_color: null,
       start_date: plan.trip.start_date,
       end_date: plan.trip.end_date,
       status: 'planning',
@@ -97,6 +98,13 @@ export const executePlan = async (
       notes: plan.trip.notes,
       travelers_count: 1,
       group_type: 'solo',
+      fable_enabled: true,
+      fable_budget_visible: true,
+      fable_packing_visible: true,
+      fable_web_search: true,
+      fable_memory_enabled: true,
+      fable_instruction: null,
+      fable_recap: null,
     });
     finalTripId = trip.id;
   }
@@ -276,12 +284,12 @@ export const parsePlanJson = (content: string): AiTripPlan => {
         console.warn('parsePlanJson: recovered truncated JSON');
       } catch {
         console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
-        logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
+        logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson', raw_preview: cleaned.substring(0, 300), raw_length: cleaned.length } });
         throw e;
       }
     } else {
       console.error('parsePlanJson failed. Raw content:', content.substring(0, 500));
-      logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson' } });
+      logError(e, { component: 'planExecutor', context: { action: 'parsePlanJson', raw_preview: cleaned.substring(0, 300), raw_length: cleaned.length } });
       throw e;
     }
   }
@@ -294,7 +302,44 @@ export const parsePlanJson = (content: string): AiTripPlan => {
   return plan;
 };
 
-function tryRepairTruncatedJson(json: string): string | null {
+/**
+ * Safe JSON parse for agent responses (packing, budget, day plan).
+ * Extracts JSON from markdown/text, attempts repair on truncated responses.
+ */
+export function safeParseAgentJson<T>(content: string, action: string): T {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    logError(new Error('No JSON found in AI response'), {
+      component: 'safeParseAgentJson',
+      context: { action, raw_preview: content.substring(0, 300) },
+    });
+    throw new Error('Ungültige Antwort vom AI-Service');
+  }
+
+  let raw = jsonMatch[0];
+  try {
+    return JSON.parse(raw) as T;
+  } catch (firstError) {
+    // Attempt repair
+    const repaired = tryRepairTruncatedJson(raw);
+    if (repaired) {
+      try {
+        const result = JSON.parse(repaired) as T;
+        console.warn(`safeParseAgentJson[${action}]: recovered truncated JSON`);
+        return result;
+      } catch {
+        // Repair failed too
+      }
+    }
+    logError(firstError, {
+      component: 'safeParseAgentJson',
+      context: { action, raw_preview: raw.substring(0, 300), raw_length: raw.length },
+    });
+    throw new Error('AI-Antwort konnte nicht verarbeitet werden');
+  }
+}
+
+export function tryRepairTruncatedJson(json: string): string | null {
   // Count open/close brackets and braces
   let openBraces = 0;
   let openBrackets = 0;

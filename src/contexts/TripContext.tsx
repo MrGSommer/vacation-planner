@@ -48,7 +48,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const end = new Date(trip.end_date);
         end.setHours(23, 59, 59, 999);
 
-        let expectedStatus: string | null = null;
+        let expectedStatus: Trip['status'] | null = null;
         if (today > end && trip.status !== 'completed') {
           expectedStatus = 'completed';
         } else if (today >= start && today <= end && trip.status !== 'active') {

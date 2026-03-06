@@ -9,8 +9,8 @@ interface BudgetCategoryCardProps {
   spent: number;
   budgetLimit: number | null;
   currency: string;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 export const BudgetCategoryCard: React.FC<BudgetCategoryCardProps> = ({

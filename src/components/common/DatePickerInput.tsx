@@ -14,6 +14,7 @@ interface DatePickerInputProps {
   minDate?: string;
   /** Dates after this are disabled */
   maxDate?: string;
+  containerStyle?: any;
 }
 
 function formatDisplay(dateStr: string): string {
@@ -22,13 +23,13 @@ function formatDisplay(dateStr: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder, initialDate, minDate, maxDate }) => {
+export const DatePickerInput: React.FC<DatePickerInputProps> = ({ label, value, onChange, placeholder, initialDate, minDate, maxDate, containerStyle }) => {
   const [visible, setVisible] = useState(false);
 
   const calendarCurrent = value || initialDate || undefined;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TouchableOpacity style={styles.input} onPress={() => setVisible(true)} activeOpacity={0.7}>
         <Text style={[styles.inputText, !value && styles.placeholder]}>

@@ -10,6 +10,7 @@ import { ReceiptCard } from '../../components/budget/ReceiptCard';
 import { useReceipts } from '../../hooks/useReceipts';
 import { Receipt } from '../../types/database';
 import { BudgetOverviewCard } from '../../components/budget/BudgetOverviewCard';
+import { ExpenseSummaryCard } from '../../components/budget/ExpenseSummaryCard';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
 import { ExpenseItem } from '../../components/budget/ExpenseItem';
 import { AddCategoryModal } from '../../components/budget/AddCategoryModal';
@@ -23,7 +24,7 @@ import { Trip, Expense, BudgetCategory } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
-import { SettlementCard } from '../../components/budget/SettlementCard';
+import { Settlement } from '../../utils/splitCalculator';
 import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
 import { usePresence } from '../../hooks/usePresence';
@@ -65,7 +66,35 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     ? expenses.filter(e => e.scope === 'personal')
     : expenses;
 
+  // Receipts are always group — hide when private filter is on
+  const filteredReceipts = showPrivateOnly ? [] : receipts;
+
   const groupExpenses = expenses.filter(e => e.scope === 'group');
+
+  // Filtered totals for budget tab (respect private filter)
+  const filteredTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const filteredByCategory = React.useMemo(() => {
+    const catIds = new Set(categories.map(c => c.id));
+    const result = categories.map(cat => ({
+      ...cat,
+      spent: filteredExpenses.filter(e => e.category_id === cat.id).reduce((sum, e) => sum + e.amount, 0),
+    }));
+    const uncategorizedSpent = filteredExpenses
+      .filter(e => !e.category_id || !catIds.has(e.category_id))
+      .reduce((sum, e) => sum + e.amount, 0);
+    if (uncategorizedSpent > 0) {
+      result.push({
+        id: '__uncategorized__',
+        trip_id: tripId,
+        name: 'Unkategorisiert',
+        color: '#9E9E9E',
+        budget_limit: null,
+        created_at: '',
+        spent: uncategorizedSpent,
+      });
+    }
+    return result;
+  }, [categories, filteredExpenses, tripId]);
 
   // Reopen Fable modal when returning from FableTripSettings
   useEffect(() => {
@@ -116,7 +145,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [removeCategory]);
 
   const handleAddExpense = useCallback(async (data: {
-    amount: number; description: string; category_id: string; date: string;
+    amount: number; description: string; category_id: string | null; date: string;
     paid_by: string | null; split_with: string[];
     scope: 'group' | 'personal'; visible_to: string[];
   }) => {
@@ -152,6 +181,26 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
       { text: 'Löschen', style: 'destructive', onPress: () => removeExpense(id) },
     ]);
   }, [removeExpense]);
+
+  const handleSettle = useCallback(async (settlement: Settlement) => {
+    if (!user) return;
+    try {
+      await addExpense({
+        trip_id: tripId,
+        category_id: categories[0]?.id || null,
+        description: `Ausgleich: ${settlement.fromName} → ${settlement.toName}`,
+        amount: settlement.amount,
+        currency,
+        date: new Date().toISOString().split('T')[0],
+        paid_by: settlement.from,
+        split_with: [settlement.to],
+        scope: 'group',
+        visible_to: [],
+      });
+    } catch {
+      Alert.alert('Fehler', 'Ausgleich konnte nicht erstellt werden');
+    }
+  }, [addExpense, tripId, currency, categories, user]);
 
   const handleReceiptSave = useCallback(async (data: {
     imageUrl: string;
@@ -275,12 +324,12 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
             <>
               <BudgetOverviewCard
                 totalBudget={totalBudget}
-                totalSpent={total}
+                totalSpent={filteredTotal}
                 currency={currency}
-                categories={byCategory.map(c => ({ name: c.name, color: c.color, spent: c.spent }))}
+                categories={filteredByCategory.map(c => ({ name: c.name, color: c.color, spent: c.spent }))}
               />
 
-              {byCategory.map(cat => (
+              {filteredByCategory.map(cat => (
                 <BudgetCategoryCard
                   key={cat.id}
                   name={cat.name}
@@ -288,12 +337,12 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                   spent={cat.spent}
                   budgetLimit={cat.budget_limit}
                   currency={currency}
-                  onEdit={() => setEditingCategory(cat)}
-                  onDelete={() => handleDeleteCategory(cat.id, cat.name)}
+                  onEdit={cat.id !== '__uncategorized__' ? () => setEditingCategory(cat) : undefined}
+                  onDelete={cat.id !== '__uncategorized__' ? () => handleDeleteCategory(cat.id, cat.name) : undefined}
                 />
               ))}
 
-              {byCategory.length === 0 && (
+              {filteredByCategory.length === 0 && (
                 <Text style={styles.emptyText}>Noch keine Kategorien erstellt</Text>
               )}
 
@@ -304,61 +353,96 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : (
             /* ===== EXPENSES TAB ===== */
             <>
-              {/* Receipt cards (open ones first) */}
-              {receipts
-                .sort((a, b) => {
-                  if (a.status === 'completed' && b.status !== 'completed') return 1;
-                  if (a.status !== 'completed' && b.status === 'completed') return -1;
-                  return 0;
-                })
-                .map(receipt => (
-                  <ReceiptCard
-                    key={receipt.id}
-                    receipt={receipt}
-                    currency={currency}
-                    collaborators={collaborators}
-                    currentUserId={user?.id || ''}
-                    categories={categories}
-                    onUpdate={handleReceiptUpdate}
-                    onComplete={handleReceiptComplete}
-                    onReopen={handleReceiptReopen}
-                    onDelete={handleReceiptDelete}
-                    onCategoryCreated={(cat) => refresh()}
-                  />
-                ))
-              }
+              {/* Summary + Settlement Card */}
+              <ExpenseSummaryCard
+                expenses={filteredExpenses}
+                collaborators={collaborators}
+                currency={currency}
+                currentUserId={user?.id || ''}
+                groupExpenses={groupExpenses}
+                onSettle={handleSettle}
+              />
 
-              {filteredExpenses.length === 0 && receipts.length === 0 ? (
+              {filteredExpenses.length === 0 && filteredReceipts.length === 0 ? (
                 <Text style={styles.emptyText}>Noch keine Ausgaben erfasst</Text>
               ) : (
-                filteredExpenses.filter(exp => !exp.receipt_id).map(exp => (
-                  <SwipeableRow
-                    key={exp.id}
-                    actions={[
-                      { icon: 'create-outline', color: colors.primary, onPress: () => setEditingExpense(exp) },
-                      { icon: 'trash-outline', color: colors.error, onPress: () => removeExpense(exp.id) },
-                    ]}
-                    disabled={Platform.OS === 'web'}
-                  >
-                    <ExpenseItem
-                      expense={exp}
-                      currency={currency}
-                      showPaidBy={exp.scope === 'group'}
-                      collaborators={collaborators}
-                      onPress={() => setEditingExpense(exp)}
-                      onLongPress={() => handleDeleteExpense(exp.id)}
-                    />
-                  </SwipeableRow>
-                ))
-              )}
+                (() => {
+                  // Merge receipts + manual expenses into one sorted list
+                  type FeedItem =
+                    | { type: 'receipt'; data: Receipt; sortDate: string; sortCreated: string }
+                    | { type: 'expense'; data: typeof filteredExpenses[0]; sortDate: string; sortCreated: string };
 
-              {groupExpenses.length > 0 && (
-                <SettlementCard
-                  expenses={groupExpenses}
-                  collaborators={collaborators}
-                  currency={currency}
-                  currentUserId={user?.id || ''}
-                />
+                  const feed: FeedItem[] = [
+                    ...filteredReceipts.map(r => ({
+                      type: 'receipt' as const,
+                      data: r,
+                      sortDate: r.date || r.created_at,
+                      sortCreated: r.created_at,
+                    })),
+                    ...filteredExpenses
+                      .filter(exp => !exp.receipt_id)
+                      .map(e => ({
+                        type: 'expense' as const,
+                        data: e,
+                        sortDate: e.date,
+                        sortCreated: e.created_at,
+                      })),
+                  ];
+
+                  feed.sort((a, b) =>
+                    new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime()
+                    || new Date(b.sortCreated).getTime() - new Date(a.sortCreated).getTime()
+                  );
+
+                  return feed.map(item => {
+                    if (item.type === 'receipt') {
+                      const receipt = item.data;
+                      return (
+                        <SwipeableRow
+                          key={`r-${receipt.id}`}
+                          actions={[
+                            { icon: 'trash-outline', color: colors.error, onPress: () => handleReceiptDelete(receipt.id) },
+                          ]}
+                          disabled={Platform.OS === 'web'}
+                        >
+                          <ReceiptCard
+                            receipt={receipt}
+                            currency={currency}
+                            collaborators={collaborators}
+                            currentUserId={user?.id || ''}
+                            categories={categories}
+                            onUpdate={handleReceiptUpdate}
+                            onComplete={handleReceiptComplete}
+                            onReopen={handleReceiptReopen}
+                            onDelete={handleReceiptDelete}
+                            onCategoryCreated={() => refresh()}
+                          />
+                        </SwipeableRow>
+                      );
+                    }
+                    const exp = item.data;
+                    return (
+                      <SwipeableRow
+                        key={`e-${exp.id}`}
+                        actions={[
+                          { icon: 'create-outline', color: colors.primary, onPress: () => setEditingExpense(exp) },
+                          { icon: 'trash-outline', color: colors.error, onPress: () => removeExpense(exp.id) },
+                        ]}
+                        disabled={Platform.OS === 'web'}
+                      >
+                        <ExpenseItem
+                          expense={exp}
+                          currency={currency}
+                          currentUserId={user?.id}
+                          showPaidBy={exp.scope === 'group'}
+                          collaborators={collaborators}
+                          onPress={() => setEditingExpense(exp)}
+                          onLongPress={() => handleDeleteExpense(exp.id)}
+                        />
+                      </SwipeableRow>
+                    );
+                  });
+                })()
               )}
             </>
           )}
@@ -428,6 +512,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         collaborators={collaborators}
         currentUserId={user?.id || ''}
         currency={currency}
+        onCreateCategory={async (name, color) => { await addCategory(name, color); }}
       />
 
       <EditExpenseModal
@@ -440,6 +525,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         collaborators={collaborators}
         currentUserId={user?.id || ''}
         currency={currency}
+        onCreateCategory={async (name, color) => { await addCategory(name, color); }}
       />
 
       <ReceiptScanModal

@@ -3,6 +3,8 @@ import {
   View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView,
   Image, ActivityIndicator, TextInput, Alert, Platform,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Button } from '../common';
 import { BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
@@ -12,6 +14,7 @@ import { uploadReceiptImage } from '../../api/receipts';
 import { compressForReceipt, CompressedImage } from '../../utils/imageUtils';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { DatePickerInput } from '../common/DatePickerInput';
 
 const CATEGORY_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8C42', '#6C5CE7'];
 
@@ -99,6 +102,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
   const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     setStep('capture');
@@ -121,11 +125,11 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
     setNewCatColor(CATEGORY_COLORS[0]);
   }, [currency, currentUserId]);
 
-  const handleFileSelect = useCallback(async (file: File) => {
+  const handleFileSelect = useCallback(async (input: File | string) => {
     try {
-      const result = await compressForReceipt(file);
+      const result = await compressForReceipt(input);
       setCompressed(result);
-      setPreviewUri(URL.createObjectURL(result.blob));
+      setPreviewUri(typeof input === 'string' ? input : URL.createObjectURL(result.blob));
       // Start OCR immediately
       setStep('processing');
       setProcessing(true);
@@ -156,7 +160,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
       setStep('review');
 
       // Store imageUrl for save
-      (window as any).__lastReceiptImageUrl = imageUrl;
+      imageUrlRef.current = imageUrl;
     } catch (e: any) {
       setError(e.message || 'Beleg konnte nicht gelesen werden');
       setStep('processing'); // Stay on processing to show error + retry
@@ -165,8 +169,29 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
     }
   }, [tripId, currency]);
 
+  const handleImagePick = useCallback(async (source: 'camera' | 'library') => {
+    const pickerFn = source === 'camera'
+      ? ImagePicker.launchCameraAsync
+      : ImagePicker.launchImageLibraryAsync;
+    const result = await pickerFn({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await handleFileSelect(result.assets[0].uri);
+  }, [handleFileSelect]);
+
+  const handleDocumentPick = useCallback(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['image/*'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await handleFileSelect(result.assets[0].uri);
+  }, [handleFileSelect]);
+
   const handleSave = useCallback(() => {
-    const imageUrl = (window as any).__lastReceiptImageUrl;
+    const imageUrl = imageUrlRef.current;
     if (!imageUrl) return;
 
     const receiptItems = items.map(item => ({
@@ -212,7 +237,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
 
     reset();
     onClose();
-    delete (window as any).__lastReceiptImageUrl;
+    imageUrlRef.current = null;
   }, [items, tip, restaurantName, receiptDate, detectedCurrency, subtotal, tax, total, categoryId, paidBy, collaborators, onSave, reset, onClose]);
 
   const updateItem = useCallback((id: string, field: keyof OcrItem, value: string) => {
@@ -279,7 +304,25 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                     />
                   </>
                 ) : (
-                  <Text style={styles.captureText}>Kamera-Unterstützung für Native folgt</Text>
+                  <View style={styles.nativePickerButtons}>
+                    <Button
+                      title="Kamera"
+                      onPress={() => handleImagePick('camera')}
+                      style={styles.captureButton}
+                    />
+                    <Button
+                      title="Aus Mediathek wählen"
+                      onPress={() => handleImagePick('library')}
+                      variant="ghost"
+                      style={styles.captureButton}
+                    />
+                    <Button
+                      title="Aus Dateien wählen"
+                      onPress={handleDocumentPick}
+                      variant="ghost"
+                      style={styles.captureButton}
+                    />
+                  </View>
                 )}
               </View>
             )}
@@ -323,14 +366,12 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
-                  <View style={styles.fieldHalf}>
-                    <Text style={styles.fieldLabel}>Datum</Text>
-                    <TextInput
-                      style={styles.input}
+                  <View style={[styles.fieldHalf, { marginBottom: 0 }]}>
+                    <DatePickerInput
+                      label="Datum"
                       value={receiptDate}
-                      onChangeText={setReceiptDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={colors.textLight}
+                      onChange={setReceiptDate}
+                      maxDate={new Date().toISOString().split('T')[0]}
                     />
                   </View>
                 </View>
@@ -547,6 +588,7 @@ const styles = StyleSheet.create({
   captureIcon: { marginBottom: spacing.lg },
   captureText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg, maxWidth: 280 },
   captureButton: { minWidth: 200 },
+  nativePickerButtons: { gap: spacing.sm, alignItems: 'center' as const },
 
   // Processing step
   processingContainer: { alignItems: 'center', paddingVertical: spacing.lg },

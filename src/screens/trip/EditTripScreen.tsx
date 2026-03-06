@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
   roleBtnText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
   roleBtnTextActive: { color: '#FFFFFF' },
   inviteBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, justifyContent: 'center' },
-  inviteBtnText: { color: '#FFFFFF', ...typography.caption, fontWeight: '600' },
+  inviteBtnText: { ...typography.caption, fontWeight: '600', color: '#FFFFFF' },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   memberInfo: { flex: 1, marginLeft: spacing.sm },
   memberName: { ...typography.body, fontWeight: '500' },

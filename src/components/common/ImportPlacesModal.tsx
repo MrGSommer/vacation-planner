@@ -94,7 +94,7 @@ export const ImportPlacesModal: React.FC<Props> = ({ visible, onClose, onImport,
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={handleClose}>
-        <TouchableOpacity style={styles.modal} activeOpacity={1} onStartShouldSetResponder={() => true}>
+        <TouchableOpacity style={styles.modal} activeOpacity={1} onPress={() => {}}>
           <Text style={styles.title}>Orte importieren</Text>
           <Text style={styles.subtitle}>KML oder GeoJSON Datei auswahlen</Text>
 

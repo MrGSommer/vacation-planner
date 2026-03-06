@@ -72,7 +72,7 @@ export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCl
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={handleClose}>
-        <TouchableOpacity style={styles.modal} activeOpacity={1} onStartShouldSetResponder={() => true}>
+        <TouchableOpacity style={styles.modal} activeOpacity={1} onPress={() => {}}>
           <Text style={styles.title}>Reise leeren</Text>
           <Text style={styles.subtitle}>Wähle aus, welche Daten gelöscht werden sollen. Stammdaten (Name, Ziel, Reisedaten) bleiben erhalten.</Text>
 

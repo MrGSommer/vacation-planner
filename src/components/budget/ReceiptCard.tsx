@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView,
   Alert, Platform, TextInput,
 } from 'react-native';
-import { Card, Avatar, Button } from '../common';
+import { Card, Avatar, Button, DatePickerInput } from '../common';
 import { Receipt, ReceiptItem, BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
 import { getDisplayName } from '../../utils/profileHelpers';
@@ -218,12 +218,13 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
               </View>
               <View style={styles.metaRow}>
                 {receipt.date && <Text style={styles.date}>{formatDate(receipt.date)}</Text>}
-                {myShare > 0 && (
-                  <Text style={styles.share}>
-                    {receipt.paid_by === currentUserId
-                      ? `Du erhältst: ${currency} ${(receipt.total! - myShare).toFixed(2)}`
-                      : `Dein Anteil: ${currency} ${myShare.toFixed(2)}`}
-                  </Text>
+                {currentCategory && (
+                  <View style={[styles.metaCatBadge, { backgroundColor: currentCategory.color + '20' }]}>
+                    <Text style={[styles.metaCatText, { color: currentCategory.color }]}>{currentCategory.name}</Text>
+                  </View>
+                )}
+                {paidByCollab && (
+                  <Text style={styles.metaPaidBy}>{getDisplayName(paidByCollab.profile)}</Text>
                 )}
               </View>
               {/* Progress bar */}
@@ -233,7 +234,20 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                 </View>
               )}
             </View>
-            <Text style={styles.total}>{currency} {(receipt.total || 0).toFixed(2)}</Text>
+            <View style={styles.amountCol}>
+              {myShare > 0 ? (
+                <>
+                  <Text style={[styles.shareAmount, receipt.paid_by === currentUserId ? styles.sharePositive : styles.shareNegative]}>
+                    {receipt.paid_by === currentUserId
+                      ? `+${(receipt.total! - myShare).toFixed(2)}`
+                      : `-${myShare.toFixed(2)}`}
+                  </Text>
+                  <Text style={styles.totalSmall}>{currency} {(receipt.total || 0).toFixed(2)}</Text>
+                </>
+              ) : (
+                <Text style={styles.total}>{currency} {(receipt.total || 0).toFixed(2)}</Text>
+              )}
+            </View>
           </View>
         </Card>
       </TouchableOpacity>
@@ -272,14 +286,12 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
               {isEditable && (
                 <View style={styles.metadataSection}>
                   <View style={styles.fieldRow}>
-                    <View style={styles.fieldHalf}>
-                      <Text style={styles.fieldLabel}>Datum</Text>
-                      <TextInput
-                        style={styles.metaInput}
+                    <View style={[styles.fieldHalf, { marginBottom: 0 }]}>
+                      <DatePickerInput
+                        label="Datum"
                         value={receipt.date || ''}
-                        onChangeText={(v) => handleMetadataUpdate('date', v || null)}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={colors.textLight}
+                        onChange={(v) => handleMetadataUpdate('date', v || null)}
+                        maxDate={new Date().toISOString().split('T')[0]}
                       />
                     </View>
                     {currentCategory && (
@@ -351,40 +363,53 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
               )}
 
               {/* Read-only metadata for completed status */}
-              {!isEditable && receipt.date && (
-                <View style={styles.metadataSection}>
-                  <Text style={styles.fieldLabel}>Datum</Text>
-                  <Text style={styles.metaReadOnly}>{formatDate(receipt.date)}</Text>
+              {!isEditable && (
+                <View style={styles.readOnlyMetaRow}>
+                  {receipt.date && (
+                    <View style={styles.readOnlyMetaItem}>
+                      <Text style={styles.readOnlyMetaLabel}>Datum</Text>
+                      <Text style={styles.readOnlyMetaValue}>{formatDate(receipt.date)}</Text>
+                    </View>
+                  )}
                   {currentCategory && (
-                    <>
-                      <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>Kategorie</Text>
+                    <View style={styles.readOnlyMetaItem}>
+                      <Text style={styles.readOnlyMetaLabel}>Kategorie</Text>
                       <Text style={[styles.categoryBadge, { backgroundColor: currentCategory.color + '30', color: currentCategory.color }]}>
                         {currentCategory.name}
                       </Text>
-                    </>
+                    </View>
+                  )}
+                  {paidByCollab && (
+                    <View style={styles.readOnlyMetaItem}>
+                      <Text style={styles.readOnlyMetaLabel}>Bezahlt von</Text>
+                      <Text style={styles.readOnlyMetaValue}>{getDisplayName(paidByCollab.profile)}</Text>
+                    </View>
                   )}
                 </View>
               )}
 
-              {/* Paid By */}
-              <Text style={styles.sectionLabel}>Bezahlt von</Text>
-              <View style={styles.chipRow}>
-                {collaborators.map(c => (
-                  <TouchableOpacity
-                    key={c.user_id}
-                    style={[
-                      styles.chip,
-                      receipt.paid_by === c.user_id && { backgroundColor: colors.secondary, borderColor: colors.secondary },
-                    ]}
-                    onPress={() => handleSetPaidBy(c.user_id)}
-                    disabled={!isEditable}
-                  >
-                    <Text style={[styles.chipText, receipt.paid_by === c.user_id && { color: '#fff' }]}>
-                      {getDisplayName(c.profile)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {/* Paid By (editable) */}
+              {isEditable && (
+                <>
+                  <Text style={styles.sectionLabel}>Bezahlt von</Text>
+                  <View style={styles.chipRow}>
+                    {collaborators.map(c => (
+                      <TouchableOpacity
+                        key={c.user_id}
+                        style={[
+                          styles.chip,
+                          receipt.paid_by === c.user_id && { backgroundColor: colors.secondary, borderColor: colors.secondary },
+                        ]}
+                        onPress={() => handleSetPaidBy(c.user_id)}
+                      >
+                        <Text style={[styles.chipText, receipt.paid_by === c.user_id && { color: '#fff' }]}>
+                          {getDisplayName(c.profile)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
 
               {/* Items */}
               <Text style={styles.sectionLabel}>Positionen</Text>
@@ -673,8 +698,15 @@ const styles = StyleSheet.create({
   badgeText: { ...typography.caption, fontWeight: '700', fontSize: 10 },
   metaRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 2, flexWrap: 'wrap' },
   date: { ...typography.caption },
-  share: { ...typography.caption, color: colors.secondary, fontWeight: '600' },
-  total: { ...typography.body, fontWeight: '700', color: colors.primary },
+  metaCatBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: borderRadius.full },
+  metaCatText: { ...typography.caption, fontSize: 10, fontWeight: '600' },
+  metaPaidBy: { ...typography.caption, color: colors.textSecondary },
+  amountCol: { alignItems: 'flex-end', gap: 1 },
+  shareAmount: { ...typography.body, fontWeight: '700' },
+  sharePositive: { color: colors.success },
+  shareNegative: { color: colors.error },
+  totalSmall: { ...typography.caption, color: colors.textLight, fontSize: 10 },
+  total: { ...typography.body, fontWeight: '700', color: colors.text },
   progressBar: { height: 3, backgroundColor: colors.border, borderRadius: 2, marginTop: 4 },
   progressFill: { height: 3, backgroundColor: colors.secondary, borderRadius: 2 },
 
@@ -726,6 +758,10 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   metaReadOnly: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xs },
+  readOnlyMetaRow: { flexDirection: 'row', gap: spacing.lg, marginBottom: spacing.md, flexWrap: 'wrap' },
+  readOnlyMetaItem: { gap: 2 },
+  readOnlyMetaLabel: { ...typography.caption, color: colors.textLight, fontSize: 10 },
+  readOnlyMetaValue: { ...typography.bodySmall, fontWeight: '600' },
   categoryBadge: {
     ...typography.caption,
     fontWeight: '600',

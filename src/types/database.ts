@@ -225,7 +225,7 @@ export interface BudgetCategory {
 export interface Expense {
   id: string;
   trip_id: string;
-  category_id: string;
+  category_id: string | null;
   user_id: string | null;
   description: string;
   amount: number;

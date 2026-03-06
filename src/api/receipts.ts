@@ -85,21 +85,26 @@ export const generateExpensesFromReceipt = async (
 
     const effectiveAmount = Math.max(0, Math.round((item.total_price + itemDiscount) * 100) / 100);
 
-    expensesToCreate.push({
-      trip_id: receipt.trip_id,
-      category_id: receipt.category_id || '',
-      user_id: userId,
-      description: item.name + (item.is_tip ? ' (Trinkgeld)' : ''),
-      amount: effectiveAmount,
-      currency: receipt.currency,
-      date: receipt.date || new Date().toISOString().split('T')[0],
-      scope: 'group',
-      paid_by: receipt.paid_by,
-      split_with: item.assigned_to.map(a => a.user_id),
-      visible_to: [],
-      creator_name: null,
-      receipt_id: receipt.id,
-    });
+    // Create one expense per user with their exact share (quantity-based)
+    const totalQty = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
+    for (const assignment of item.assigned_to) {
+      const userShare = Math.round((effectiveAmount * assignment.quantity / totalQty) * 100) / 100;
+      expensesToCreate.push({
+        trip_id: receipt.trip_id,
+        category_id: receipt.category_id || null,
+        user_id: userId,
+        description: item.name + (item.is_tip ? ' (Trinkgeld)' : ''),
+        amount: userShare,
+        currency: receipt.currency,
+        date: receipt.date || new Date().toISOString().split('T')[0],
+        scope: 'group',
+        paid_by: receipt.paid_by,
+        split_with: [assignment.user_id],
+        visible_to: [],
+        creator_name: null,
+        receipt_id: receipt.id,
+      });
+    }
   }
 
   if (expensesToCreate.length === 0) return;

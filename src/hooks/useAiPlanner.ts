@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
-import { executePlan, parsePlanJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
+import { executePlan, parsePlanJson, safeParseAgentJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
 import { getTrip, updateTrip } from '../api/trips';
 import { Trip } from '../types/database';
 import { getCollaborators } from '../api/invitations';
@@ -708,7 +708,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         debouncedSave('conversing', meta, null);
       }
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'startConversation' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'startConversation', task: 'greeting', status: e?.status, detail: e?.message } });
       setError(e.message || 'Verbindung zum AI-Service fehlgeschlagen');
     } finally {
       setSending(false);
@@ -957,7 +957,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       debouncedSave('conversing', meta, null);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage', task: 'conversation', status: e?.status, detail: e?.message } });
       setError(e.message || 'Nachricht konnte nicht gesendet werden');
     } finally {
       setSending(false);
@@ -1069,7 +1069,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setPhase('structure_overview');
       setProgressStep(null);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure', status: e?.status, detail: e?.message } });
       setError('Struktur konnte nicht erstellt werden – bitte versuche es erneut');
       setPhase('conversing');
       setProgressStep(null);
@@ -1104,7 +1104,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => [...prev, infoMsg]);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateAllViaServer' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateAllViaServer', status: e?.status, detail: e?.message } });
       setError('Server-Generierung konnte nicht gestartet werden');
       setPhase('structure_overview');
       setProgressStep(null);
@@ -1178,7 +1178,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setPhase('plan_review');
       setProgressStep(null);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateActivitiesClientSide' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateActivitiesClientSide', status: e?.status, detail: e?.message } });
       setError('Aktivitäten konnten nicht erstellt werden – bitte versuche es erneut');
       setPhase('structure_overview');
       setProgressStep(null);
@@ -1236,7 +1236,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         deleteAiConversation(tripId).catch(() => {});
       }
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'executePlan' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'executePlan', status: e?.status, detail: e?.message } });
       setError(e.message || 'Plan konnte nicht ausgeführt werden');
       setPhase('previewing_plan');
     }
@@ -1302,7 +1302,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       });
       setPhase('plan_review');
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'adjustPlan' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'adjustPlan', status: e?.status, detail: e?.message } });
       console.error('Plan adjustment failed:', e.message);
       setError('Anpassung fehlgeschlagen – bitte versuche es erneut');
       setPhase('plan_review');
@@ -1382,10 +1382,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         onCreditsUpdate?.(response.credits_remaining);
       }
 
-      // Parse JSON from response
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Ungueltige Antwort vom AI-Service');
-      const parsed = JSON.parse(jsonMatch[0]) as { items: Array<{ name: string; category: string; quantity: number }> };
+      // Parse JSON from response (with repair for truncated responses)
+      const parsed = safeParseAgentJson<{ items: Array<{ name: string; category: string; quantity: number }> }>(
+        response.content, 'generatePackingList'
+      );
 
       if (!parsed.items?.length) throw new Error('Keine Items erhalten');
 
@@ -1404,7 +1404,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generatePackingList' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generatePackingList', status: e?.status, detail: e?.message } });
       setError(e.message || 'Packliste konnte nicht erstellt werden');
     } finally {
       setSending(false);
@@ -1437,10 +1437,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         onCreditsUpdate?.(response.credits_remaining);
       }
 
-      // Parse JSON from response
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Ungültige Antwort vom AI-Service');
-      const parsed = JSON.parse(jsonMatch[0]) as { activities: Array<{ date: string; title: string; description: string | null; category: string; start_time: string | null; end_time: string | null; location_name: string | null; location_lat: number | null; location_lng: number | null; location_address: string | null; cost: number | null; sort_order: number; check_in_date: string | null; check_out_date: string | null; category_data: Record<string, any> }> };
+      // Parse JSON from response (with repair for truncated responses)
+      const parsed = safeParseAgentJson<{ activities: Array<{ date: string; title: string; description: string | null; category: string; start_time: string | null; end_time: string | null; location_name: string | null; location_lat: number | null; location_lng: number | null; location_address: string | null; cost: number | null; sort_order: number; check_in_date: string | null; check_out_date: string | null; category_data: Record<string, any> }> }>(
+        response.content, 'generateDayPlan'
+      );
 
       if (!parsed.activities?.length) throw new Error('Keine Aktivitäten erhalten');
 
@@ -1492,7 +1492,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateDayPlan' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateDayPlan', status: e?.status, detail: e?.message } });
       setError(e.message || 'Tagesplan konnte nicht erstellt werden');
     } finally {
       setSending(false);
@@ -1518,10 +1518,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         onCreditsUpdate?.(response.credits_remaining);
       }
 
-      // Parse JSON from response
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Ungueltige Antwort vom AI-Service');
-      const parsed = JSON.parse(jsonMatch[0]) as { categories: Array<{ name: string; color: string; budget_limit: number }> };
+      // Parse JSON from response (with repair for truncated responses)
+      const parsed = safeParseAgentJson<{ categories: Array<{ name: string; color: string; budget_limit: number }> }>(
+        response.content, 'generateBudgetCategories'
+      );
 
       if (!parsed.categories?.length) throw new Error('Keine Kategorien erhalten');
 
@@ -1543,7 +1543,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       };
       setMessages(prev => [...prev, successMsg]);
     } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateBudgetCategories' } });
+      logError(e, { component: 'useAiPlanner', context: { action: 'generateBudgetCategories', status: e?.status, detail: e?.message } });
       setError(e.message || 'Budget-Kategorien konnten nicht erstellt werden');
     } finally {
       setSending(false);

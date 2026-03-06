@@ -141,21 +141,26 @@ export const sendAiMessage = async (
 
     if (error) {
       // Try to extract response body from FunctionsHttpError
+      let status: number | undefined;
       if (error.context instanceof Response) {
+        status = error.context.status;
         try {
           const body = await error.context.json();
-          console.error('AI-Chat error body:', body);
+          console.error(`AI-Chat[${task}] error ${status}:`, body);
           if (body?.error) {
             const err = new Error(body.error) as any;
             err.retryable = body.retryable || false;
-            err.status = error.context.status;
+            err.status = status;
             throw err;
           }
         } catch (parseErr) {
           if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
         }
       }
-      throw new Error(error.message || 'AI-Anfrage fehlgeschlagen');
+      const err = new Error(error.message || 'AI-Anfrage fehlgeschlagen') as any;
+      err.task = task;
+      err.status = status;
+      throw err;
     }
 
     return { content: data.content, usage: data.usage, credits_remaining: data.credits_remaining };

@@ -125,10 +125,29 @@ export const useBudget = (tripId: string) => {
     [categories]
   );
 
-  const byCategory = useMemo(() => categories.map(cat => ({
-    ...cat,
-    spent: expenses.filter(e => e.category_id === cat.id).reduce((sum, e) => sum + e.amount, 0),
-  })), [categories, expenses]);
+  const byCategory = useMemo(() => {
+    const catIds = new Set(categories.map(c => c.id));
+    const result = categories.map(cat => ({
+      ...cat,
+      spent: expenses.filter(e => e.category_id === cat.id).reduce((sum, e) => sum + e.amount, 0),
+    }));
+    // Add uncategorized bucket if there are expenses without valid category
+    const uncategorizedSpent = expenses
+      .filter(e => !e.category_id || !catIds.has(e.category_id))
+      .reduce((sum, e) => sum + e.amount, 0);
+    if (uncategorizedSpent > 0) {
+      result.push({
+        id: '__uncategorized__',
+        trip_id: tripId,
+        name: 'Unkategorisiert',
+        color: '#9E9E9E',
+        budget_limit: null,
+        created_at: '',
+        spent: uncategorizedSpent,
+      });
+    }
+    return result;
+  }, [categories, expenses, tripId]);
 
   return {
     categories,

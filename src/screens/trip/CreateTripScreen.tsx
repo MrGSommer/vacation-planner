@@ -112,6 +112,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         destination_lat: destinationLat,
         destination_lng: destinationLng,
         cover_image_url: null,
+        cover_image_attribution: null,
         theme_color: null,
         start_date: startDate,
         end_date: endDate,
@@ -120,6 +121,13 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         travelers_count: travelersCount,
         group_type: groupType,
         notes: notes.trim() || null,
+        fable_enabled: true,
+        fable_budget_visible: true,
+        fable_packing_visible: true,
+        fable_web_search: true,
+        fable_memory_enabled: true,
+        fable_instruction: null,
+        fable_recap: null,
       });
       navigation.replace('TripDetail', { tripId: trip.id });
     } catch (e) {
