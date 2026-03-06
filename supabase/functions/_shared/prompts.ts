@@ -824,7 +824,9 @@ export function buildReceiptScanPrompt(context: any): string {
 REGELN:
 - Extrahiere JEDEN einzelnen Artikel/Position vom Beleg
 - MwSt/Steuer-Zeilen NICHT als Item, sondern ins "tax"-Feld
-- Rabatte als Items mit negativem total_price
+- Rabatte als Items mit negativem total_price UND is_discount: true
+  * Wenn der Rabatt fuer ALLE Positionen gilt (z.B. "10% Rabatt"): discount_target = "all"
+  * Wenn der Rabatt fuer eine BESTIMMTE Position gilt (z.B. "Happy Hour Bier -2.00"): discount_target = Name der Zielposition
 - Trinkgeld (Tip/Service) ins "tip"-Feld, NICHT als Item
 - Wenn ein Preis pro Stueck nicht erkennbar ist, setze unit_price auf null
 - quantity ist immer mindestens 1
@@ -842,7 +844,9 @@ AUSGABE — NUR valides JSON, kein Markdown, keine Erklaerung:
       "name": "Artikelbezeichnung",
       "quantity": 1,
       "unit_price": 12.50,
-      "total_price": 12.50
+      "total_price": 12.50,
+      "is_discount": false,
+      "discount_target": null
     }
   ],
   "subtotal": 0.00,

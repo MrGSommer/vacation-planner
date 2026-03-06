@@ -280,15 +280,6 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 categories={byCategory.map(c => ({ name: c.name, color: c.color, spent: c.spent }))}
               />
 
-              {groupExpenses.length > 0 && (
-                <SettlementCard
-                  expenses={groupExpenses}
-                  collaborators={collaborators}
-                  currency={currency}
-                  currentUserId={user?.id || ''}
-                />
-              )}
-
               {byCategory.map(cat => (
                 <BudgetCategoryCard
                   key={cat.id}
@@ -327,10 +318,12 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                     currency={currency}
                     collaborators={collaborators}
                     currentUserId={user?.id || ''}
+                    categories={categories}
                     onUpdate={handleReceiptUpdate}
                     onComplete={handleReceiptComplete}
                     onReopen={handleReceiptReopen}
                     onDelete={handleReceiptDelete}
+                    onCategoryCreated={(cat) => refresh()}
                   />
                 ))
               }
@@ -357,6 +350,15 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                     />
                   </SwipeableRow>
                 ))
+              )}
+
+              {groupExpenses.length > 0 && (
+                <SettlementCard
+                  expenses={groupExpenses}
+                  collaborators={collaborators}
+                  currency={currency}
+                  currentUserId={user?.id || ''}
+                />
               )}
             </>
           )}
@@ -449,6 +451,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         collaborators={collaborators}
         currentUserId={user?.id || ''}
         currency={currency}
+        onCategoryCreated={() => refresh()}
       />
 
       {showAiModal && user && (

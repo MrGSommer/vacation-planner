@@ -1,87 +1,151 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView,
-  Alert, Platform,
+  Alert, Platform, TextInput,
 } from 'react-native';
 import { Card, Avatar, Button } from '../common';
-import { Receipt, ReceiptItem } from '../../types/database';
+import { Receipt, ReceiptItem, BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 
+const CATEGORY_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8C42', '#6C5CE7'];
+
 interface ReceiptCardProps {
   receipt: Receipt;
   currency: string;
   collaborators: CollaboratorWithProfile[];
   currentUserId: string;
-  onUpdate: (id: string, updates: Partial<Pick<Receipt, 'items' | 'status' | 'paid_by' | 'tip'>>) => void;
+  categories: BudgetCategory[];
+  onUpdate: (id: string, updates: Partial<Pick<Receipt, 'items' | 'status' | 'paid_by' | 'tip' | 'restaurant_name' | 'date' | 'category_id'>>) => void;
   onComplete: (receipt: Receipt) => void;
   onReopen: (id: string) => void;
   onDelete: (id: string) => void;
+  onCategoryCreated?: (category: BudgetCategory) => void;
 }
 
 export const ReceiptCard: React.FC<ReceiptCardProps> = ({
-  receipt, currency, collaborators, currentUserId,
-  onUpdate, onComplete, onReopen, onDelete,
+  receipt, currency, collaborators, currentUserId, categories,
+  onUpdate, onComplete, onReopen, onDelete, onCategoryCreated,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [showImage, setShowImage] = useState(false);
-  const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  // Inline category creation
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0]);
 
-  const assignedCount = receipt.items.filter(i => i.assigned_to.length > 0 && !i.is_tip).length;
-  const totalNonTipItems = receipt.items.filter(i => !i.is_tip).length;
+  const isEditable = receipt.status !== 'completed';
+  const isOwner = receipt.scanned_by === currentUserId;
+
+  const nonTipNonDiscountItems = receipt.items.filter(i => !i.is_tip && !i.is_discount);
+  const assignedCount = nonTipNonDiscountItems.filter(i => i.assigned_to.length > 0).length;
+  const totalNonTipItems = nonTipNonDiscountItems.length;
   const progressPct = totalNonTipItems > 0 ? assignedCount / totalNonTipItems : 0;
+
+  const discountItems = receipt.items.filter(i => i.is_discount);
+  const generalDiscountTotal = discountItems
+    .filter(i => i.discount_target === 'all')
+    .reduce((s, i) => s + i.total_price, 0); // negative values
 
   const paidByCollab = receipt.paid_by
     ? collaborators.find(c => c.user_id === receipt.paid_by)
     : null;
 
-  // Calculate personal share
+  // Calculate personal share with discount support
   const myShare = useMemo(() => {
     let total = 0;
+    let totalBeforeDiscount = 0;
     for (const item of receipt.items) {
+      if (item.is_discount) continue;
       const totalQty = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
       const myAssignment = item.assigned_to.find(a => a.user_id === currentUserId);
       if (myAssignment && totalQty > 0) {
-        total += (item.total_price / totalQty) * myAssignment.quantity;
+        const share = (item.total_price / totalQty) * myAssignment.quantity;
+        total += share;
+      }
+      if (totalQty > 0) {
+        totalBeforeDiscount += item.total_price;
       }
     }
-    return Math.round(total * 100) / 100;
-  }, [receipt.items, currentUserId]);
+    // Apply position-specific discounts
+    for (const disc of discountItems) {
+      if (disc.discount_target && disc.discount_target !== 'all') {
+        const targetItem = receipt.items.find(i => i.name === disc.discount_target);
+        if (targetItem) {
+          const totalQty = targetItem.assigned_to.reduce((s, a) => s + a.quantity, 0);
+          const myAssignment = targetItem.assigned_to.find(a => a.user_id === currentUserId);
+          if (myAssignment && totalQty > 0) {
+            total += (disc.total_price / totalQty) * myAssignment.quantity;
+          }
+        }
+      }
+    }
+    // Apply general discounts proportionally
+    if (generalDiscountTotal < 0 && totalBeforeDiscount > 0 && total > 0) {
+      total += generalDiscountTotal * (total / totalBeforeDiscount);
+    }
+    return Math.round(Math.max(0, total) * 100) / 100;
+  }, [receipt.items, currentUserId, discountItems, generalDiscountTotal]);
 
   const statusColor = receipt.status === 'completed' ? colors.success
     : receipt.status === 'in_progress' ? colors.sky : colors.warning;
   const statusLabel = receipt.status === 'completed' ? 'Abgeschlossen'
     : receipt.status === 'in_progress' ? 'In Bearbeitung' : 'Offen';
 
-  const updateAssignment = useCallback((itemId: string, userId: string, delta: number) => {
+  const toggleUserAssignment = useCallback((itemId: string, userId: string) => {
     const updatedItems = receipt.items.map(item => {
       if (item.id !== itemId) return item;
       const existing = item.assigned_to.find(a => a.user_id === userId);
       if (existing) {
-        const newQty = existing.quantity + delta;
-        if (newQty <= 0) {
-          return { ...item, assigned_to: item.assigned_to.filter(a => a.user_id !== userId) };
-        }
-        return { ...item, assigned_to: item.assigned_to.map(a => a.user_id === userId ? { ...a, quantity: newQty } : a) };
-      } else if (delta > 0) {
+        return { ...item, assigned_to: item.assigned_to.filter(a => a.user_id !== userId) };
+      } else {
         return { ...item, assigned_to: [...item.assigned_to, { user_id: userId, quantity: 1 }] };
       }
-      return item;
+    });
+    onUpdate(receipt.id, { items: updatedItems, status: receipt.status === 'scanned' ? 'in_progress' : receipt.status });
+  }, [receipt, onUpdate]);
+
+  const updateQuantityAssignment = useCallback((itemId: string, userId: string, delta: number) => {
+    const updatedItems = receipt.items.map(item => {
+      if (item.id !== itemId) return item;
+      const existing = item.assigned_to.find(a => a.user_id === userId);
+      if (!existing) return item;
+
+      // Max validation: sum of all assignments must not exceed item.quantity
+      if (delta > 0) {
+        const currentTotal = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
+        if (currentTotal >= item.quantity) return item;
+      }
+
+      const newQty = existing.quantity + delta;
+      if (newQty <= 0) {
+        return { ...item, assigned_to: item.assigned_to.filter(a => a.user_id !== userId) };
+      }
+      return { ...item, assigned_to: item.assigned_to.map(a => a.user_id === userId ? { ...a, quantity: newQty } : a) };
     });
     onUpdate(receipt.id, { items: updatedItems, status: receipt.status === 'scanned' ? 'in_progress' : receipt.status });
   }, [receipt, onUpdate]);
 
   const handleComplete = useCallback(() => {
     if (!receipt.paid_by) {
-      Alert.alert('Fehlt', 'Bitte wähle zuerst, wer bezahlt hat.');
+      if (Platform.OS === 'web') {
+        window.alert('Bitte wähle zuerst, wer bezahlt hat.');
+      } else {
+        Alert.alert('Fehlt', 'Bitte wähle zuerst, wer bezahlt hat.');
+      }
       return;
     }
-    const unassigned = receipt.items.filter(i => !i.is_tip && i.assigned_to.length === 0);
+    const unassigned = receipt.items.filter(i => !i.is_tip && !i.is_discount && i.assigned_to.length === 0);
     if (unassigned.length > 0) {
-      Alert.alert('Nicht zugewiesen', `${unassigned.length} Position(en) sind noch niemandem zugewiesen.`);
+      if (Platform.OS === 'web') {
+        window.alert(`${unassigned.length} Position(en) sind noch niemandem zugewiesen.`);
+      } else {
+        Alert.alert('Nicht zugewiesen', `${unassigned.length} Position(en) sind noch niemandem zugewiesen.`);
+      }
       return;
     }
     onComplete(receipt);
@@ -90,6 +154,45 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
   const handleSetPaidBy = useCallback((userId: string) => {
     onUpdate(receipt.id, { paid_by: userId } as any);
   }, [receipt.id, onUpdate]);
+
+  const handleMetadataUpdate = useCallback((field: 'restaurant_name' | 'date' | 'category_id', value: string | null) => {
+    onUpdate(receipt.id, { [field]: value } as any);
+  }, [receipt.id, onUpdate]);
+
+  // Calculate summary shares with discount support
+  const calcShareForUser = useCallback((userId: string) => {
+    let share = 0;
+    let totalBeforeDiscount = 0;
+    for (const item of receipt.items) {
+      if (item.is_discount) continue;
+      const totalQty = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
+      const assignment = item.assigned_to.find(a => a.user_id === userId);
+      if (assignment && totalQty > 0) {
+        share += (item.total_price / totalQty) * assignment.quantity;
+      }
+      if (totalQty > 0) totalBeforeDiscount += item.total_price;
+    }
+    // Position-specific discounts
+    for (const disc of discountItems) {
+      if (disc.discount_target && disc.discount_target !== 'all') {
+        const targetItem = receipt.items.find(i => i.name === disc.discount_target);
+        if (targetItem) {
+          const totalQty = targetItem.assigned_to.reduce((s, a) => s + a.quantity, 0);
+          const assignment = targetItem.assigned_to.find(a => a.user_id === userId);
+          if (assignment && totalQty > 0) {
+            share += (disc.total_price / totalQty) * assignment.quantity;
+          }
+        }
+      }
+    }
+    // General discounts proportionally
+    if (generalDiscountTotal < 0 && totalBeforeDiscount > 0 && share > 0) {
+      share += generalDiscountTotal * (share / totalBeforeDiscount);
+    }
+    return Math.round(Math.max(0, share) * 100) / 100;
+  }, [receipt.items, discountItems, generalDiscountTotal]);
+
+  const currentCategory = categories.find(c => c.id === receipt.category_id);
 
   return (
     <>
@@ -140,8 +243,18 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
         <View style={styles.overlay}>
           <View style={styles.expandedContent}>
             <View style={styles.expandedHeader}>
-              <Text style={styles.expandedTitle}>{receipt.restaurant_name || 'Beleg'}</Text>
-              <TouchableOpacity onPress={() => { setExpanded(false); setAssigningItemId(null); }}>
+              {isEditable ? (
+                <TextInput
+                  style={[styles.expandedTitle, styles.editableInput]}
+                  value={receipt.restaurant_name || ''}
+                  onChangeText={(v) => handleMetadataUpdate('restaurant_name', v || null)}
+                  placeholder="Beleg-Name"
+                  placeholderTextColor={colors.textLight}
+                />
+              ) : (
+                <Text style={styles.expandedTitle}>{receipt.restaurant_name || 'Beleg'}</Text>
+              )}
+              <TouchableOpacity onPress={() => { setExpanded(false); setExpandedItemId(null); }}>
                 <Icon name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -155,6 +268,104 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                 </TouchableOpacity>
               )}
 
+              {/* Editable metadata: Date + Category (TODO 1) */}
+              {isEditable && (
+                <View style={styles.metadataSection}>
+                  <View style={styles.fieldRow}>
+                    <View style={styles.fieldHalf}>
+                      <Text style={styles.fieldLabel}>Datum</Text>
+                      <TextInput
+                        style={styles.metaInput}
+                        value={receipt.date || ''}
+                        onChangeText={(v) => handleMetadataUpdate('date', v || null)}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={colors.textLight}
+                      />
+                    </View>
+                    {currentCategory && (
+                      <View style={styles.fieldHalf}>
+                        <Text style={styles.fieldLabel}>Kategorie</Text>
+                        <Text style={[styles.categoryBadge, { backgroundColor: currentCategory.color + '30', color: currentCategory.color }]}>
+                          {currentCategory.name}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.fieldLabel}>Kategorie</Text>
+                  <View style={styles.chipRow}>
+                    {categories.map(cat => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[styles.chip, receipt.category_id === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
+                        onPress={() => handleMetadataUpdate('category_id', cat.id)}
+                      >
+                        <Text style={[styles.chipText, receipt.category_id === cat.id && { color: '#fff' }]}>{cat.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {onCategoryCreated && (
+                      <TouchableOpacity
+                        style={[styles.chip, { borderStyle: 'dashed' as any }]}
+                        onPress={() => setShowNewCategory(!showNewCategory)}
+                      >
+                        <Icon name={showNewCategory ? 'close' : 'add'} size={14} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {showNewCategory && onCategoryCreated && (
+                    <View style={styles.newCatRow}>
+                      <TextInput
+                        style={[styles.metaInput, { flex: 1 }]}
+                        value={newCatName}
+                        onChangeText={setNewCatName}
+                        placeholder="Kategorie-Name"
+                        placeholderTextColor={colors.textLight}
+                      />
+                      <View style={styles.colorPickerRow}>
+                        {CATEGORY_COLORS.map(c => (
+                          <TouchableOpacity
+                            key={c}
+                            style={[styles.colorDot, { backgroundColor: c }, newCatColor === c && styles.colorDotActive]}
+                            onPress={() => setNewCatColor(c)}
+                          />
+                        ))}
+                      </View>
+                      <Button
+                        title="Erstellen"
+                        onPress={async () => {
+                          if (!newCatName.trim()) return;
+                          try {
+                            const { createBudgetCategory } = await import('../../api/budgets');
+                            const created = await createBudgetCategory(receipt.trip_id, newCatName.trim(), newCatColor, null);
+                            onCategoryCreated!(created);
+                            handleMetadataUpdate('category_id', created.id);
+                            setNewCatName('');
+                            setShowNewCategory(false);
+                          } catch {}
+                        }}
+                        disabled={!newCatName.trim()}
+                        style={{ marginTop: spacing.xs }}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Read-only metadata for completed status */}
+              {!isEditable && receipt.date && (
+                <View style={styles.metadataSection}>
+                  <Text style={styles.fieldLabel}>Datum</Text>
+                  <Text style={styles.metaReadOnly}>{formatDate(receipt.date)}</Text>
+                  {currentCategory && (
+                    <>
+                      <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>Kategorie</Text>
+                      <Text style={[styles.categoryBadge, { backgroundColor: currentCategory.color + '30', color: currentCategory.color }]}>
+                        {currentCategory.name}
+                      </Text>
+                    </>
+                  )}
+                </View>
+              )}
+
               {/* Paid By */}
               <Text style={styles.sectionLabel}>Bezahlt von</Text>
               <View style={styles.chipRow}>
@@ -166,7 +377,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                       receipt.paid_by === c.user_id && { backgroundColor: colors.secondary, borderColor: colors.secondary },
                     ]}
                     onPress={() => handleSetPaidBy(c.user_id)}
-                    disabled={receipt.status === 'completed'}
+                    disabled={!isEditable}
                   >
                     <Text style={[styles.chipText, receipt.paid_by === c.user_id && { color: '#fff' }]}>
                       {getDisplayName(c.profile)}
@@ -177,10 +388,10 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
 
               {/* Items */}
               <Text style={styles.sectionLabel}>Positionen</Text>
-              {receipt.items.map(item => (
+              {receipt.items.filter(i => !i.is_discount).map(item => (
                 <View key={item.id} style={[
                   styles.itemCard,
-                  !item.is_tip && item.assigned_to.length === 0 && receipt.status !== 'completed' && styles.itemCardUnassigned,
+                  !item.is_tip && item.assigned_to.length === 0 && isEditable && styles.itemCardUnassigned,
                 ]}>
                   <View style={styles.itemHeader}>
                     <View style={styles.itemInfo}>
@@ -190,43 +401,92 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                     <Text style={styles.itemPrice}>{currency} {item.total_price.toFixed(2)}</Text>
                   </View>
                   {item.quantity > 1 && item.unit_price && (
-                    <Text style={styles.itemQty}>{item.quantity}x {currency} {item.unit_price.toFixed(2)}</Text>
+                    <View style={styles.qtyHeaderRow}>
+                      <Text style={styles.itemQty}>{item.quantity}x {currency} {item.unit_price.toFixed(2)}</Text>
+                      {isEditable && item.assigned_to.length > 0 && (
+                        <TouchableOpacity onPress={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}>
+                          <Icon
+                            name={expandedItemId === item.id ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color={colors.textSecondary}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
 
-                  {/* Assignment chips */}
+                  {/* Assignment: 2-Level UI (TODO 3) */}
                   <View style={styles.assignmentRow}>
                     {item.is_tip ? (
                       <Text style={styles.assignmentHint}>Wird auf alle aufgeteilt</Text>
-                    ) : receipt.status !== 'completed' ? (
+                    ) : isEditable ? (
                       <>
+                        {/* Level 1: Avatar toggles */}
                         {collaborators.map(c => {
                           const assignment = item.assigned_to.find(a => a.user_id === c.user_id);
-                          return assignment ? (
-                            <View key={c.user_id} style={[styles.assignChip, styles.assignChipActive]}>
-                              <Avatar uri={c.profile.avatar_url} name={getDisplayName(c.profile)} size={20} />
-                              <Text style={styles.assignChipText}>{getDisplayName(c.profile).split(' ')[0]}</Text>
-                              <TouchableOpacity onPress={() => updateAssignment(item.id, c.user_id, -1)} style={styles.stepperBtn}>
-                                <Text style={styles.stepperBtnText}>−</Text>
-                              </TouchableOpacity>
-                              <Text style={styles.stepperQty}>{assignment.quantity}</Text>
-                              <TouchableOpacity onPress={() => updateAssignment(item.id, c.user_id, 1)} style={styles.stepperBtn}>
-                                <Text style={styles.stepperBtnText}>+</Text>
-                              </TouchableOpacity>
-                            </View>
-                          ) : (
+                          const isSelected = !!assignment;
+                          return (
                             <TouchableOpacity
                               key={c.user_id}
-                              style={styles.assignChip}
-                              onPress={() => updateAssignment(item.id, c.user_id, 1)}
+                              style={[styles.assignChip, isSelected && styles.assignChipActive]}
+                              onPress={() => toggleUserAssignment(item.id, c.user_id)}
                             >
                               <Avatar uri={c.profile.avatar_url} name={getDisplayName(c.profile)} size={20} />
+                              {isSelected && (
+                                <Text style={styles.assignChipText}>{getDisplayName(c.profile).split(' ')[0]}</Text>
+                              )}
                             </TouchableOpacity>
                           );
                         })}
-                        {item.quantity > 1 && item.assigned_to.length > 0 && (
+                        {/* Per-person share info */}
+                        {item.assigned_to.length > 1 && item.quantity <= 1 && (
                           <Text style={styles.assignmentHint}>
-                            Zugewiesen: {item.assigned_to.reduce((s, a) => s + a.quantity, 0)} von {item.quantity}
+                            je {currency} {(item.total_price / item.assigned_to.length).toFixed(2)}
                           </Text>
+                        )}
+                        {/* Multi-quantity: assigned count + stepper hint */}
+                        {item.quantity > 1 && item.assigned_to.length > 0 && (() => {
+                          const totalAssigned = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
+                          const isFull = totalAssigned >= item.quantity;
+                          return (
+                            <Text style={[styles.assignmentHint, { color: isFull ? colors.success : colors.warning }]}>
+                              Zugewiesen: {totalAssigned} von {item.quantity}
+                            </Text>
+                          );
+                        })()}
+
+                        {/* Level 2: Quantity steppers (only for multi-quantity, only when expanded) */}
+                        {item.quantity > 1 && expandedItemId === item.id && item.assigned_to.length > 0 && (
+                          <View style={styles.stepperSection}>
+                            {item.assigned_to.map(a => {
+                              const collab = collaborators.find(c => c.user_id === a.user_id);
+                              if (!collab) return null;
+                              const totalAssigned = item.assigned_to.reduce((s, ass) => s + ass.quantity, 0);
+                              const isMaxReached = totalAssigned >= item.quantity;
+                              return (
+                                <View key={a.user_id} style={styles.stepperRow}>
+                                  <Avatar uri={collab.profile.avatar_url} name={getDisplayName(collab.profile)} size={20} />
+                                  <Text style={styles.stepperName}>{getDisplayName(collab.profile).split(' ')[0]}</Text>
+                                  <View style={styles.stepperControls}>
+                                    <TouchableOpacity
+                                      onPress={() => updateQuantityAssignment(item.id, a.user_id, -1)}
+                                      style={styles.stepperBtn}
+                                    >
+                                      <Text style={styles.stepperBtnText}>−</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.stepperQty}>{a.quantity}</Text>
+                                    <TouchableOpacity
+                                      onPress={() => updateQuantityAssignment(item.id, a.user_id, 1)}
+                                      style={[styles.stepperBtn, isMaxReached && styles.stepperBtnDisabled]}
+                                      disabled={isMaxReached}
+                                    >
+                                      <Text style={[styles.stepperBtnText, isMaxReached && { color: colors.textLight }]}>+</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
                         )}
                       </>
                     ) : (
@@ -251,21 +511,38 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                 </View>
               ))}
 
-              {/* Summary per person */}
-              {receipt.items.some(i => i.assigned_to.length > 0) && (
+              {/* Discount items (TODO 2c) */}
+              {discountItems.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: spacing.sm }]}>Rabatte</Text>
+                  {discountItems.map(item => (
+                    <View key={item.id} style={[styles.itemCard, styles.discountCard]}>
+                      <View style={styles.itemHeader}>
+                        <View style={styles.itemInfo}>
+                          <Icon name="pricetag-outline" size={14} color={colors.success} />
+                          <Text style={[styles.itemName, { color: colors.success }]}>{item.name}</Text>
+                        </View>
+                        <Text style={[styles.itemPrice, { color: colors.success }]}>{currency} {item.total_price.toFixed(2)}</Text>
+                      </View>
+                      <Text style={styles.assignmentHint}>
+                        {item.discount_target === 'all'
+                          ? 'Wird proportional aufgeteilt'
+                          : item.discount_target
+                            ? `Für: ${item.discount_target}`
+                            : 'Wird proportional aufgeteilt'}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              {/* Summary per person (TODO 2d — with discount support) */}
+              {receipt.items.some(i => !i.is_discount && i.assigned_to.length > 0) && (
                 <>
                   <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Aufteilung</Text>
                   {collaborators.map(c => {
-                    let share = 0;
-                    for (const item of receipt.items) {
-                      const totalQty = item.assigned_to.reduce((s, a) => s + a.quantity, 0);
-                      const assignment = item.assigned_to.find(a => a.user_id === c.user_id);
-                      if (assignment && totalQty > 0) {
-                        share += (item.total_price / totalQty) * assignment.quantity;
-                      }
-                    }
+                    const share = calcShareForUser(c.user_id);
                     if (share === 0) return null;
-                    share = Math.round(share * 100) / 100;
                     const isPayer = receipt.paid_by === c.user_id;
                     return (
                       <View key={c.user_id} style={styles.summaryRow}>
@@ -307,6 +584,12 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                     <Text style={styles.totalValue}>{currency} {receipt.tip.toFixed(2)}</Text>
                   </View>
                 )}
+                {generalDiscountTotal < 0 && (
+                  <View style={styles.totalRow}>
+                    <Text style={[styles.totalLabel, { color: colors.success }]}>Rabatt</Text>
+                    <Text style={[styles.totalValue, { color: colors.success }]}>{currency} {generalDiscountTotal.toFixed(2)}</Text>
+                  </View>
+                )}
                 <View style={[styles.totalRow, styles.totalRowFinal]}>
                   <Text style={styles.totalLabelBold}>Total</Text>
                   <Text style={styles.totalValueBold}>{currency} {(receipt.total || 0).toFixed(2)}</Text>
@@ -314,11 +597,13 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
               </View>
             </ScrollView>
 
-            {/* Action buttons */}
+            {/* Action buttons (TODO 5b: owner-based reopen) */}
             <View style={styles.expandedFooter}>
               {receipt.status === 'completed' ? (
                 <View style={styles.footerButtons}>
-                  <Button title="Bearbeiten" variant="ghost" onPress={() => onReopen(receipt.id)} style={styles.footerBtn} />
+                  {isOwner && (
+                    <Button title="Bearbeiten" variant="ghost" onPress={() => onReopen(receipt.id)} style={styles.footerBtn} />
+                  )}
                   <Button
                     title="Löschen"
                     variant="ghost"
@@ -356,7 +641,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                     title="Abschliessen"
                     onPress={handleComplete}
                     style={styles.footerBtn}
-                    disabled={!receipt.paid_by || receipt.items.some(i => !i.is_tip && i.assigned_to.length === 0)}
+                    disabled={!receipt.paid_by || receipt.items.some(i => !i.is_tip && !i.is_discount && i.assigned_to.length === 0)}
                   />
                 </View>
               )}
@@ -410,7 +695,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  expandedTitle: { ...typography.h2 },
+  expandedTitle: { ...typography.h2, flex: 1, marginRight: spacing.sm },
+  editableInput: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 2 },
   expandedScroll: { flex: 1 },
   expandedScrollContent: { padding: spacing.xl, paddingTop: spacing.md },
   expandedFooter: {
@@ -426,6 +712,29 @@ const styles = StyleSheet.create({
   receiptImage: { width: '100%', height: 150, borderRadius: borderRadius.md, marginBottom: spacing.xs },
   tapToEnlarge: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginBottom: spacing.md },
 
+  // Metadata section (TODO 1)
+  metadataSection: { marginBottom: spacing.md },
+  fieldRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
+  fieldHalf: { flex: 1 },
+  fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.xs },
+  metaInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.sm,
+    padding: spacing.sm,
+    ...typography.body,
+    color: colors.text,
+  },
+  metaReadOnly: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.xs },
+  categoryBadge: {
+    ...typography.caption,
+    fontWeight: '600',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    alignSelf: 'flex-start',
+  },
+
   // Sections
   sectionLabel: { ...typography.bodySmall, fontWeight: '700', marginBottom: spacing.sm },
 
@@ -437,14 +746,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   itemCardUnassigned: { borderWidth: 1, borderColor: colors.warning, borderStyle: 'dashed' },
+  discountCard: { borderWidth: 1, borderColor: colors.success, borderStyle: 'dashed', backgroundColor: `${colors.success}08` },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 },
   itemName: { ...typography.bodySmall, fontWeight: '500' },
   itemPrice: { ...typography.bodySmall, fontWeight: '700' },
   itemQty: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  qtyHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
 
   // Assignment
-  assignmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  assignmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, alignItems: 'center' },
   assignmentHint: { ...typography.caption, color: colors.textSecondary, fontStyle: 'italic' },
   assignChip: {
     flexDirection: 'row',
@@ -459,7 +770,14 @@ const styles = StyleSheet.create({
   },
   assignChipActive: { borderColor: colors.secondary, backgroundColor: `${colors.secondary}15` },
   assignChipText: { ...typography.caption, fontSize: 11, color: colors.secondary, fontWeight: '600' },
+
+  // Stepper section (Level 2)
+  stepperSection: { width: '100%', marginTop: spacing.xs, gap: spacing.xs },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
+  stepperName: { ...typography.caption, fontSize: 11, color: colors.text, flex: 1 },
+  stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   stepperBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.secondary + '20', alignItems: 'center', justifyContent: 'center' },
+  stepperBtnDisabled: { backgroundColor: colors.border + '40' },
   stepperBtnText: { fontSize: 14, fontWeight: '700', color: colors.secondary, lineHeight: 16 },
   stepperQty: { ...typography.caption, fontSize: 12, fontWeight: '700', color: colors.secondary, minWidth: 14, textAlign: 'center' },
   completedAvatarWrap: { position: 'relative' },
@@ -477,6 +795,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipText: { ...typography.caption, fontWeight: '600' },
+
+  // Inline category creation
+  newCatRow: { marginBottom: spacing.md, gap: spacing.xs },
+  colorPickerRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs, flexWrap: 'wrap' },
+  colorDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
+  colorDotActive: { borderColor: colors.text, transform: [{ scale: 1.15 }] },
 
   // Summary
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },

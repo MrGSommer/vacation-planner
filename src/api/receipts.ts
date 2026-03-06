@@ -58,15 +58,39 @@ export const generateExpensesFromReceipt = async (
 
   const expensesToCreate: Array<Omit<Expense, 'id' | 'created_at' | 'budget_categories'>> = [];
 
-  for (const item of receipt.items) {
+  // Separate discounts from regular items
+  const regularItems = receipt.items.filter(i => !i.is_discount);
+  const discountItems = receipt.items.filter(i => i.is_discount);
+  const generalDiscountTotal = discountItems
+    .filter(i => i.discount_target === 'all')
+    .reduce((s, i) => s + i.total_price, 0); // negative
+  const totalBeforeDiscount = regularItems
+    .filter(i => i.assigned_to.length > 0)
+    .reduce((s, i) => s + i.total_price, 0);
+
+  for (const item of regularItems) {
     if (item.assigned_to.length === 0) continue;
+
+    // Apply position-specific discount
+    let itemDiscount = 0;
+    for (const disc of discountItems) {
+      if (disc.discount_target && disc.discount_target !== 'all' && disc.discount_target === item.name) {
+        itemDiscount += disc.total_price; // negative value
+      }
+    }
+    // Apply proportional share of general discounts
+    if (generalDiscountTotal < 0 && totalBeforeDiscount > 0) {
+      itemDiscount += generalDiscountTotal * (item.total_price / totalBeforeDiscount);
+    }
+
+    const effectiveAmount = Math.max(0, Math.round((item.total_price + itemDiscount) * 100) / 100);
 
     expensesToCreate.push({
       trip_id: receipt.trip_id,
       category_id: receipt.category_id || '',
       user_id: userId,
       description: item.name + (item.is_tip ? ' (Trinkgeld)' : ''),
-      amount: item.total_price,
+      amount: effectiveAmount,
       currency: receipt.currency,
       date: receipt.date || new Date().toISOString().split('T')[0],
       scope: 'group',

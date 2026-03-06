@@ -249,6 +249,8 @@ export interface ReceiptItem {
   total_price: number;
   assigned_to: { user_id: string; quantity: number }[];
   is_tip: boolean;
+  is_discount?: boolean;
+  discount_target?: string; // "all" or item-name for position-specific discounts
 }
 
 export interface Receipt {

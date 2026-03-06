@@ -13,6 +13,8 @@ import { compressForReceipt, CompressedImage } from '../../utils/imageUtils';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 
+const CATEGORY_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8C42', '#6C5CE7'];
+
 type Step = 'capture' | 'processing' | 'review';
 
 interface OcrItem {
@@ -20,6 +22,8 @@ interface OcrItem {
   quantity: number;
   unit_price: number | null;
   total_price: number;
+  is_discount?: boolean;
+  discount_target?: string | null;
 }
 
 interface OcrResult {
@@ -49,6 +53,8 @@ interface ReceiptScanModalProps {
       total_price: number;
       assigned_to: { user_id: string; quantity: number }[];
       is_tip: boolean;
+      is_discount?: boolean;
+      discount_target?: string;
     }>;
     subtotal: number | null;
     tax: number | null;
@@ -62,13 +68,14 @@ interface ReceiptScanModalProps {
   collaborators: CollaboratorWithProfile[];
   currentUserId: string;
   currency: string;
+  onCategoryCreated?: (category: BudgetCategory) => void;
 }
 
 let itemIdCounter = 0;
 const nextId = () => `item_${Date.now()}_${++itemIdCounter}`;
 
 export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
-  visible, onClose, onSave, tripId, categories, collaborators, currentUserId, currency,
+  visible, onClose, onSave, tripId, categories, collaborators, currentUserId, currency, onCategoryCreated,
 }) => {
   const [step, setStep] = useState<Step>('capture');
   const [compressed, setCompressed] = useState<CompressedImage | null>(null);
@@ -87,6 +94,9 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
   const [detectedCurrency, setDetectedCurrency] = useState(currency);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paidBy, setPaidBy] = useState<string | null>(currentUserId);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -106,6 +116,9 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
     setDetectedCurrency(currency);
     setCategoryId(null);
     setPaidBy(currentUserId);
+    setShowNewCategory(false);
+    setNewCatName('');
+    setNewCatColor(CATEGORY_COLORS[0]);
   }, [currency, currentUserId]);
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -135,7 +148,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
       setRestaurantName(ocr.restaurant_name || '');
       setReceiptDate(ocr.date || '');
       setDetectedCurrency(ocr.currency_detected || currency);
-      setItems(ocr.items.map(item => ({ ...item, id: nextId() })));
+      setItems(ocr.items.map(item => ({ ...item, id: nextId(), is_discount: item.is_discount || false, discount_target: item.discount_target || null })));
       setSubtotal(ocr.subtotal || 0);
       setTax(ocr.tax || 0);
       setTip(ocr.tip || 0);
@@ -164,6 +177,8 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
       total_price: item.total_price,
       assigned_to: [] as { user_id: string; quantity: number }[],
       is_tip: false,
+      is_discount: item.is_discount || false,
+      discount_target: item.discount_target || undefined,
     }));
 
     // Add tip as a special item if present
@@ -176,6 +191,8 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
         total_price: tip,
         assigned_to: collaborators.map(c => ({ user_id: c.user_id, quantity: 1 })),
         is_tip: true,
+        is_discount: false,
+        discount_target: undefined,
       });
     }
 
@@ -331,10 +348,10 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                 {/* Items */}
                 <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Positionen</Text>
                 {items.map((item) => (
-                  <View key={item.id} style={styles.itemRow}>
+                  <View key={item.id} style={[styles.itemRow, item.is_discount && { backgroundColor: `${colors.success}10`, borderRadius: borderRadius.xs }]}>
                     <View style={styles.itemNameCol}>
                       <TextInput
-                        style={styles.itemInput}
+                        style={[styles.itemInput, item.is_discount && { color: colors.success }]}
                         value={item.name}
                         onChangeText={(v) => updateItem(item.id, 'name', v)}
                         placeholder="Bezeichnung"
@@ -412,7 +429,51 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                       <Text style={[styles.chipText, categoryId === cat.id && { color: '#fff' }]}>{cat.name}</Text>
                     </TouchableOpacity>
                   ))}
+                  {onCategoryCreated && (
+                    <TouchableOpacity
+                      style={[styles.chip, { borderStyle: 'dashed' as any }]}
+                      onPress={() => setShowNewCategory(!showNewCategory)}
+                    >
+                      <Icon name={showNewCategory ? 'close' : 'add'} size={14} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
                 </View>
+                {showNewCategory && onCategoryCreated && (
+                  <View style={styles.newCatRow}>
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      value={newCatName}
+                      onChangeText={setNewCatName}
+                      placeholder="Kategorie-Name"
+                      placeholderTextColor={colors.textLight}
+                    />
+                    <View style={styles.colorPickerRow}>
+                      {CATEGORY_COLORS.map(c => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.colorDot, { backgroundColor: c }, newCatColor === c && styles.colorDotActive]}
+                          onPress={() => setNewCatColor(c)}
+                        />
+                      ))}
+                    </View>
+                    <Button
+                      title="Erstellen"
+                      onPress={async () => {
+                        if (!newCatName.trim()) return;
+                        try {
+                          const { createBudgetCategory } = await import('../../api/budgets');
+                          const created = await createBudgetCategory(tripId, newCatName.trim(), newCatColor, null);
+                          onCategoryCreated(created);
+                          setCategoryId(created.id);
+                          setNewCatName('');
+                          setShowNewCategory(false);
+                        } catch {}
+                      }}
+                      disabled={!newCatName.trim()}
+                      style={{ marginTop: spacing.xs }}
+                    />
+                  </View>
+                )}
 
                 {/* Paid By */}
                 {collaborators.length > 0 && (
@@ -577,4 +638,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   chipText: { ...typography.caption, fontWeight: '600' },
+
+  // Inline category creation
+  newCatRow: { marginBottom: spacing.md, gap: spacing.xs },
+  colorPickerRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs, flexWrap: 'wrap' },
+  colorDot: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
+  colorDotActive: { borderColor: colors.text, transform: [{ scale: 1.15 }] },
 });
