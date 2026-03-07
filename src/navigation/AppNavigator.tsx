@@ -38,6 +38,7 @@ import { AdminEmailTestScreen } from '../screens/admin/AdminEmailTestScreen';
 import { AdminAnnouncementsScreen } from '../screens/admin/AdminAnnouncementsScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
+import { SlideshowViewScreen } from '../screens/slideshow/SlideshowViewScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
 import { AnnouncementModal } from '../components/common/AnnouncementModal';
 import { PlanGenerationBar } from '../components/common/PlanGenerationBar';
@@ -53,6 +54,7 @@ const linking = {
     screens: {
       AcceptInvite: 'invite/:token',
       TripShare: 'share/:token',
+      SlideshowView: 'slideshow/:token',
       SubscriptionSuccess: 'subscription-success',
       SubscriptionCancel: 'subscription-cancel',
       TripDetail: {
@@ -114,6 +116,9 @@ export const AppNavigator: React.FC = () => {
     const inviteMatch = path.match(/^\/invite\/(.+)$/);
     if (inviteMatch) {
       setPendingInviteToken(inviteMatch[1]);
+    } else if (path.match(/^\/slideshow\/.+$/)) {
+      // Slideshow is public — don't require auth, let linking handle it
+      return;
     } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
       // Save any deep link path for redirect after login
       setPendingRedirectPath(path);
@@ -229,6 +234,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Auth" component={AuthNavigator} />
           )}
           <Stack.Screen name="TripShare" component={TripShareScreen} />
+          <Stack.Screen name="SlideshowView" component={SlideshowViewScreen} />
         </Stack.Navigator>
         {showFab && <FloatingFeedbackButton />}
         {session && <AnnouncementModal />}

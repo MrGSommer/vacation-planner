@@ -36,6 +36,7 @@ export type RootStackParamList = {
   AdminAnnouncements: undefined;
   BetaDashboard: undefined;
   ResetPassword: undefined;
+  SlideshowView: { token: string };
 };
 
 export type MainTabParamList = {
