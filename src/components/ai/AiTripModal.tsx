@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
-import { useAiPlanner, AiPhase } from '../../hooks/useAiPlanner';
+import { useAiPlanner, AiPhase, ConflictResolution } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
@@ -123,12 +123,12 @@ export const AiTripModal: React.FC<Props> = ({
   const {
     phase, messages, metadata, plan, structure, error, sending,
     progressStep, executionResult, tokenWarning, conflicts,
-    restored, creditsBalance, estimatedSeconds, activeJobId, batchProgress,
+    restored, creditsBalance,
     contextReady, webSearching, typingUsers, lockUserName, fableDisabled,
     startConversation, sendMessage, generatePlan,
-    generateStructure, generateAllViaServer, generateActivitiesClientSide,
+    generateStructure, checkConflictsAndGenerate, conflictInfo, resolveConflicts,
     confirmPlan, rejectPlan, showPreview, hidePreview, adjustPlan,
-    dismissConflicts, confirmWithConflicts, reset, saveConversationNow,
+    dismissConflicts, confirmWithConflicts, retryLastAction, reset, saveConversationNow,
     generatePackingList, generateBudgetCategories, generateDayPlan,
     broadcastTyping,
   } = useAiPlanner({ mode, tripId, userId, initialContext, initialCredits: profile?.ai_credits_balance, onCreditsUpdate: updateCreditsBalance });
@@ -136,6 +136,8 @@ export const AiTripModal: React.FC<Props> = ({
   const [pendingAction, setPendingAction] = useState<'packing_list' | 'budget_categories' | 'day_plan' | null>(null);
   const [creditPurchased, setCreditPurchased] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
+  const [localConflictResolution, setLocalConflictResolution] = useState<ConflictResolution>('merge');
+  const [localKeepAccommodations, setLocalKeepAccommodations] = useState(true);
   const shownSuggestionsRef = useRef<Set<string>>(new Set());
   const autoMessageSentRef = useRef(false);
 
@@ -257,14 +259,8 @@ export const AiTripModal: React.FC<Props> = ({
               {dayCount} Tage, {structure.stops?.length || 0} Stops, {structure.budget_categories?.length || 0} Budget-Kategorien
             </Text>
 
-            {estimatedSeconds && (
-              <Text style={styles.structureEstimate}>
-                Geschätzte Dauer: ~{estimatedSeconds} Sekunden
-              </Text>
-            )}
-
             <View style={styles.granularityButtons}>
-              <TouchableOpacity style={styles.granularityBtn} onPress={generateAllViaServer} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.granularityBtn} onPress={checkConflictsAndGenerate} activeOpacity={0.8}>
                 <LinearGradient
                   colors={[...gradients.ocean]}
                   start={{ x: 0, y: 0 }}
@@ -272,19 +268,83 @@ export const AiTripModal: React.FC<Props> = ({
                   style={styles.granularityBtnGradient}
                 >
                   <Text style={styles.granularityBtnTextPrimary}>
-                    Alles generieren {estimatedSeconds ? `(~${estimatedSeconds}s)` : ''}
+                    Plan erstellen
                   </Text>
-                  <Text style={styles.granularityBtnHint}>Im Hintergrund — App kann geschlossen werden</Text>
+                  <Text style={styles.granularityBtnHint}>Fable erstellt deinen Plan Tag für Tag</Text>
                 </LinearGradient>
               </TouchableOpacity>
+              <Text style={styles.granularityHintText}>
+                Du kannst das Modal schliessen — der Fortschritt wird oben angezeigt.
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
 
+    if (phase === 'conflict_review' && conflictInfo) {
+      return (
+        <View style={styles.structureOverview}>
+          <ScrollView contentContainerStyle={styles.structureContent}>
+            <Text style={styles.structureTitle}>Bestehende Aktivitäten</Text>
+            <Text style={[styles.structureStats, { marginBottom: spacing.md }]}>
+              {conflictInfo.daysWithActivities.length} Tage haben bereits Aktivitäten:
+            </Text>
+            {conflictInfo.daysWithActivities.map((d, i) => (
+              <View key={i} style={styles.conflictRow}>
+                <Text style={styles.conflictDate}>{d.date}</Text>
+                <Text style={styles.conflictCount}>{d.activityCount} Aktivitäten</Text>
+              </View>
+            ))}
+
+            <Text style={[styles.structureTitle, { marginTop: spacing.lg }]}>Was soll Fable tun?</Text>
+
+            {(['merge', 'overwrite', 'skip'] as ConflictResolution[]).map((option) => {
+              const labels: Record<ConflictResolution, { title: string; hint: string }> = {
+                merge: { title: 'Ergänzen', hint: 'Bestehende beibehalten, neue hinzufügen' },
+                overwrite: { title: 'Überschreiben', hint: 'Alle bestehenden ersetzen' },
+                skip: { title: 'Überspringen', hint: 'Diese Tage nicht generieren' },
+              };
+              const isSelected = localConflictResolution === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.conflictOption, isSelected && styles.conflictOptionSelected]}
+                  onPress={() => setLocalConflictResolution(option)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={20} color={isSelected ? colors.primary : colors.textLight} />
+                  <View style={{ marginLeft: spacing.sm, flex: 1 }}>
+                    <Text style={[styles.conflictOptionTitle, isSelected && { color: colors.primary }]}>{labels[option].title}</Text>
+                    <Text style={styles.conflictOptionHint}>{labels[option].hint}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={[styles.conflictOption, { marginTop: spacing.sm }]}
+              onPress={() => setLocalKeepAccommodations(!localKeepAccommodations)}
+              activeOpacity={0.7}
+            >
+              <Icon name={localKeepAccommodations ? 'checkbox' : 'square-outline'} size={20} color={colors.primary} />
+              <Text style={[styles.conflictOptionTitle, { marginLeft: spacing.sm }]}>Unterkünfte beibehalten</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.granularityButtons, { marginTop: spacing.lg }]}>
               <TouchableOpacity
-                style={styles.granularityBtnSecondary}
-                onPress={() => generateActivitiesClientSide()}
+                style={styles.granularityBtn}
+                onPress={() => resolveConflicts(localConflictResolution, localKeepAccommodations)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.granularityBtnTextSecondary}>Direkt generieren</Text>
-                <Text style={styles.granularityBtnHintSecondary}>Schneller, aber App muss offen bleiben</Text>
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.granularityBtnGradient}
+                >
+                  <Text style={styles.granularityBtnTextPrimary}>Plan erstellen</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -296,16 +356,9 @@ export const AiTripModal: React.FC<Props> = ({
       return (
         <View style={styles.executingContainer}>
           <AiPlanningAnimation />
-          {batchProgress && (
-            <Text style={styles.backgroundHint}>
-              Woche {batchProgress.current} von {batchProgress.total} wird erstellt...
-            </Text>
-          )}
-          {activeJobId && (
-            <Text style={styles.backgroundHint}>
-              Generierung läuft im Hintergrund — du kannst die App schliessen
-            </Text>
-          )}
+          <Text style={styles.backgroundHint}>
+            Fable erstellt deinen Plan Tag für Tag.{'\n'}Du kannst dieses Fenster schliessen.
+          </Text>
         </View>
       );
     }
@@ -541,7 +594,7 @@ export const AiTripModal: React.FC<Props> = ({
             ) : (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity onPress={() => sendMessage('Weiter')}>
+                <TouchableOpacity onPress={retryLastAction}>
                   <Text style={styles.errorRetry}>Erneut versuchen</Text>
                 </TouchableOpacity>
               </View>
@@ -813,7 +866,7 @@ export const AiTripModal: React.FC<Props> = ({
   };
 
   // Show "Neu starten" button only in conversing/plan_review/structure_overview
-  const showRestartButton = phase === 'conversing' || phase === 'plan_review' || phase === 'structure_overview';
+  const showRestartButton = phase === 'conversing' || phase === 'plan_review' || phase === 'structure_overview' || phase === 'conflict_review';
 
   return (
     <Modal
@@ -1235,17 +1288,47 @@ const styles = StyleSheet.create({
   },
   granularityBtnTextPrimary: { ...typography.button, color: '#FFFFFF' },
   granularityBtnHint: { ...typography.caption, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  granularityBtnSecondary: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+  granularityHintText: {
+    ...typography.caption,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
-  granularityBtnTextSecondary: { ...typography.button, color: colors.text },
-  granularityBtnHintSecondary: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  conflictRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  conflictDate: {
+    ...typography.bodySmall,
+    color: colors.text,
+  },
+  conflictCount: {
+    ...typography.caption,
+    color: colors.textLight,
+  },
+  conflictOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.xs,
+  },
+  conflictOptionSelected: {
+    backgroundColor: `${colors.primary}10`,
+  },
+  conflictOptionTitle: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  conflictOptionHint: {
+    ...typography.caption,
+    color: colors.textLight,
+    marginTop: 1,
+  },
   backgroundHint: {
     ...typography.bodySmall,
     color: colors.textLight,

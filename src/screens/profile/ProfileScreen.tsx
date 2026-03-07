@@ -10,6 +10,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAdmin } from '../../hooks/useAdmin';
 import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useToast } from '../../contexts/ToastContext';
 import { createPortalSession } from '../../api/stripe';
 import { deleteAccount } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
@@ -25,6 +26,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { isAdmin } = useAdmin();
   const { trips } = useTrips();
   const { isPremium, aiCredits, isFeatureAllowed, paymentWarning, paymentErrorMessage } = useSubscription();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
@@ -73,13 +75,17 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const handleSignOut = async () => {
+    const doSignOut = async () => {
+      await signOut();
+      showToast('Erfolgreich abgemeldet', 'success');
+    };
     if (Platform.OS === 'web') {
       if (!window.confirm('Möchtest du dich wirklich abmelden?')) return;
-      await signOut();
+      await doSignOut();
     } else {
       Alert.alert('Abmelden', 'Möchtest du dich wirklich abmelden?', [
         { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Abmelden', style: 'destructive', onPress: signOut },
+        { text: 'Abmelden', style: 'destructive', onPress: doSignOut },
       ]);
     }
   };

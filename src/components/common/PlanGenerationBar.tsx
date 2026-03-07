@@ -6,7 +6,7 @@ import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 
 export const PlanGenerationBar: React.FC = () => {
-  const { isGenerating, completed, progress, tripId, destination, cancelGeneration, dismissCompleted } = usePlanGeneration();
+  const { isGenerating, completed, progress, tripId, destination, cancelGeneration, dismissCompleted, clientProgress } = usePlanGeneration();
   const navigation = useNavigation<any>();
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -21,7 +21,6 @@ export const PlanGenerationBar: React.FC = () => {
         useNativeDriver: false,
       }).start();
     } else if (progress?.phase === 'structure') {
-      // Indeterminate during structure phase
       Animated.timing(progressAnim, {
         toValue: 0.05,
         duration: 600,
@@ -56,19 +55,18 @@ export const PlanGenerationBar: React.FC = () => {
   };
 
   const getStatusText = () => {
-    if (completed) return 'Reiseplan fertig!';
+    if (completed) {
+      return destination ? `${destination} — Reiseplan fertig!` : 'Reiseplan fertig!';
+    }
     if (!progress) return 'Generierung wird gestartet...';
     if (progress.phase === 'structure') return 'Struktur wird erstellt...';
     if (progress.phase === 'activities') {
       if (progress.current_day === 0) return 'Aktivitäten werden geplant...';
-      return `Tag ${progress.current_day}/${progress.total_days} wird erstellt...`;
+      const pct = Math.round((progress.current_day / progress.total_days) * 100);
+      return `Tag ${progress.current_day}/${progress.total_days} (${pct}%)`;
     }
     return 'Generierung läuft...';
   };
-
-  const progressFraction = progress && progress.total_days > 0
-    ? progress.current_day / progress.total_days
-    : 0;
 
   return (
     <TouchableOpacity
@@ -76,17 +74,23 @@ export const PlanGenerationBar: React.FC = () => {
       onPress={handlePress}
       activeOpacity={0.8}
     >
-      <Animated.Text style={[styles.icon, { opacity: pulseAnim }]}>
-        {completed ? '\u2728' : '\u2728'}
-      </Animated.Text>
+      <Animated.View style={{ opacity: pulseAnim, marginRight: spacing.sm }}>
+        <Icon
+          name={completed ? 'checkmark-circle' : 'sparkles'}
+          size={18}
+          color="#FFFFFF"
+        />
+      </Animated.View>
 
       <View style={styles.content}>
-        <Text style={styles.statusText} numberOfLines={1}>
-          {getStatusText()}
-        </Text>
-        {destination && !completed && (
-          <Text style={styles.destinationText} numberOfLines={1}>{destination}</Text>
-        )}
+        <View style={styles.statusRow}>
+          <Text style={styles.statusText} numberOfLines={1}>
+            {getStatusText()}
+          </Text>
+          {destination && !completed && (
+            <Text style={styles.destinationText} numberOfLines={1}> — {destination}</Text>
+          )}
+        </View>
         {isGenerating && (
           <View style={styles.progressTrack}>
             <Animated.View
@@ -114,8 +118,19 @@ export const PlanGenerationBar: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      {completed && tripId && (
-        <Text style={styles.arrowText}>›</Text>
+      {completed && (
+        <View style={styles.completedActions}>
+          {tripId && (
+            <Text style={styles.arrowText}>›</Text>
+          )}
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={dismissCompleted}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="close" size={14} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -133,25 +148,26 @@ const styles = StyleSheet.create({
   containerCompleted: {
     backgroundColor: colors.success,
   },
-  icon: {
-    fontSize: 18,
-    marginRight: spacing.sm,
-  },
   content: {
     flex: 1,
     marginRight: spacing.sm,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusText: {
     ...typography.bodySmall,
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 13,
+    flexShrink: 0,
   },
   destinationText: {
     ...typography.caption,
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 11,
-    marginTop: 1,
+    fontSize: 12,
+    flexShrink: 1,
   },
   progressTrack: {
     height: 3,
@@ -173,15 +189,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  completedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   arrowText: {
     color: '#FFFFFF',
     fontSize: 22,
     fontWeight: '300',
-    marginLeft: spacing.sm,
+  },
+  dismissButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

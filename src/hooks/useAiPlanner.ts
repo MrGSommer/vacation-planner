@@ -13,7 +13,7 @@ import { getAiConversation, saveAiConversation, deleteAiConversation } from '../
 import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
 import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
 import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
-import { startPlanGeneration, getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
+import { getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
 import { usePlanGeneration } from '../contexts/PlanGenerationContext';
 import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
 import { searchWeb, WebSearchResult } from '../api/webSearch';
@@ -23,7 +23,15 @@ import { fetchWeatherData } from './useWeather';
 import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
 
-export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
+export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'conflict_review' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
+
+export type ConflictResolution = 'overwrite' | 'merge' | 'skip';
+
+export interface ConflictInfo {
+  daysWithActivities: Array<{ date: string; activityCount: number }>;
+  resolution: ConflictResolution;
+  keepAccommodations: boolean;
+}
 
 export interface AiChatMessage {
   id: string;
@@ -229,6 +237,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [tokenWarning, setTokenWarning] = useState(false);
   const [conflicts, setConflicts] = useState<string[]>([]);
+  const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
   const [restored, setRestored] = useState(false);
   const [creditsBalance, setCreditsBalance] = useState<number | null>(initialCredits ?? null);
   const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
@@ -237,6 +246,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [lockUserName, setLockUserName] = useState<string | null>(null);
+  const lastFailedActionRef = useRef<{ type: 'greeting' | 'message' | 'structure' | 'plan'; text?: string } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [contextReady, setContextReady] = useState(false);
   const contextRef = useRef<AiContext>({
@@ -710,6 +720,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'startConversation', task: 'greeting', status: e?.status, detail: e?.message } });
       setError(e.message || 'Verbindung zum AI-Service fehlgeschlagen');
+      lastFailedActionRef.current = { type: 'greeting' };
     } finally {
       setSending(false);
       // Release processing lock
@@ -959,6 +970,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'sendMessage', task: 'conversation', status: e?.status, detail: e?.message } });
       setError(e.message || 'Nachricht konnte nicht gesendet werden');
+      lastFailedActionRef.current = { type: 'message', text: text.trim() };
     } finally {
       setSending(false);
       setWebSearching(false);
@@ -993,37 +1005,59 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     return `Route: **${route}**\n${days} Tage, ${stops} Stops, ${budgetCats} Budget-Kategorien`;
   }, []);
 
-  // Sync with global PlanGenerationContext for job completion/failure
+  // Sync with global PlanGenerationContext for job/client-generation completion/failure
   useEffect(() => {
-    if (!activeJobId) return;
+    // Server job tracking
+    if (activeJobId) {
+      if (planGeneration.completed && planGeneration.activeJobId === activeJobId) {
+        setActiveJobId(null);
+        setProgressStep(null);
 
-    // When PlanGenerationContext signals completion, update local state
-    if (planGeneration.completed && planGeneration.activeJobId === activeJobId) {
-      setActiveJobId(null);
-      setProgressStep(null);
+        const completedMsg: AiChatMessage = {
+          id: nextId(),
+          role: 'assistant',
+          content: restored
+            ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
+            : 'Dein Reiseplan ist fertig! Alle Tage und Aktivitäten wurden erstellt. Schau im Tagesplan nach.',
+          timestamp: Date.now(),
+          senderName: 'Fable',
+        };
+        setMessages(prev => [...prev, completedMsg]);
+        setPhase('completed');
+      }
 
-      const completedMsg: AiChatMessage = {
-        id: nextId(),
-        role: 'assistant',
-        content: restored
-          ? 'Willkommen zurück! Dein Reiseplan ist fertig.'
-          : 'Dein Reiseplan ist fertig! Alle Tage und Aktivitäten wurden erstellt. Schau im Tagesplan nach.',
-        timestamp: Date.now(),
-        senderName: 'Fable',
-      };
-      setMessages(prev => [...prev, completedMsg]);
-      setPhase('completed');
+      if (planGeneration.error && !planGeneration.isGenerating && planGeneration.activeJobId === null) {
+        setActiveJobId(null);
+        setProgressStep(null);
+        setError(planGeneration.error);
+        setPhase('conversing');
+        planGeneration.dismissError();
+      }
     }
 
-    // Handle error from context
-    if (planGeneration.error && !planGeneration.isGenerating && planGeneration.activeJobId === null) {
-      setActiveJobId(null);
-      setProgressStep(null);
-      setError(planGeneration.error);
-      setPhase('conversing');
-      planGeneration.dismissError();
+    // Client-side generation tracking
+    if (phase === 'generating_plan' && !activeJobId) {
+      if (planGeneration.completed && !planGeneration.clientGenerating) {
+        setProgressStep(null);
+        const completedMsg: AiChatMessage = {
+          id: nextId(),
+          role: 'assistant',
+          content: 'Dein Reiseplan ist fertig! Alle Tage und Aktivitäten wurden erstellt. Schau im Tagesplan nach.',
+          timestamp: Date.now(),
+          senderName: 'Fable',
+        };
+        setMessages(prev => [...prev, completedMsg]);
+        setPhase('completed');
+      }
+
+      if (planGeneration.error && !planGeneration.isGenerating) {
+        setProgressStep(null);
+        setError(planGeneration.error);
+        setPhase('structure_overview');
+        planGeneration.dismissError();
+      }
     }
-  }, [activeJobId, planGeneration.completed, planGeneration.error, planGeneration.isGenerating, planGeneration.activeJobId, restored]);
+  }, [activeJobId, phase, planGeneration.completed, planGeneration.error, planGeneration.isGenerating, planGeneration.activeJobId, planGeneration.clientGenerating, restored]);
 
   // Phase 1: Generate structure only → show overview
   const generateStructure = useCallback(async () => {
@@ -1071,120 +1105,100 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure', status: e?.status, detail: e?.message } });
       setError('Struktur konnte nicht erstellt werden – bitte versuche es erneut');
+      lastFailedActionRef.current = { type: 'structure' };
       setPhase('conversing');
       setProgressStep(null);
     }
   }, [messages, estimateTime, buildStructureSummary]);
 
-  // Phase 2a: Generate all activities via server agent (background, day-by-day)
-  const generateAllViaServer = useCallback(async () => {
-    if (!structure) return;
-    setPhase('generating_plan');
-    setError(null);
-    setProgressStep('activities');
+  // Check for existing activities before generating — shows conflict_review if needed
+  const checkConflictsAndGenerate = useCallback(async () => {
+    if (!structure || !tripId) return;
 
-    try {
-      const preferences = extractPreferences(messages, contextRef.current);
-      const planContext: AiContext = { ...contextRef.current, preferences };
+    // In enhance mode, check for existing activities on planned days
+    if (mode === 'enhance') {
+      const existingData = contextRef.current.existingData;
+      if (existingData?.activities?.length) {
+        const planDates = new Set((structure.days || []).map(d => d.date));
+        const daysWithActivities = new Map<string, number>();
 
-      const { job_id } = await startPlanGeneration(planContext, [], structure);
-      setActiveJobId(job_id);
-
-      // Delegate tracking to global PlanGenerationContext
-      const dest = contextRef.current.destination || '';
-      planGeneration.startTracking(job_id, dest);
-
-      // Show info message so user can close modal
-      const infoMsg: AiChatMessage = {
-        id: nextId(),
-        role: 'assistant',
-        content: 'Dein Plan wird jetzt erstellt. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt. Sobald ein Tag fertig ist, erscheint er im Tagesplan.',
-        timestamp: Date.now(),
-        senderName: 'Fable',
-      };
-      setMessages(prev => [...prev, infoMsg]);
-    } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateAllViaServer', status: e?.status, detail: e?.message } });
-      setError('Server-Generierung konnte nicht gestartet werden');
-      setPhase('structure_overview');
-      setProgressStep(null);
-    }
-  }, [structure, messages, planGeneration]);
-
-  // Phase 2b: Generate activities client-side (original approach, used for incremental/fallback)
-  const generateActivitiesClientSide = useCallback(async (dayDatesToGenerate?: string[]) => {
-    if (!structure) return;
-    setPhase('generating_plan');
-    setError(null);
-    setProgressStep('activities');
-
-    try {
-      const preferences = extractPreferences(messages, contextRef.current);
-      const planContext: AiContext = { ...contextRef.current, preferences };
-
-      const dayDates = dayDatesToGenerate || (structure.days || []).map(d => d.date);
-      const activitiesContext: AiContext = { ...planContext, dayDates };
-
-      let allActivities: { days: Array<{ date: string; activities: any[] }> } = { days: [] };
-      const BATCH_SIZE = 7; // 1 week per batch
-
-      if (dayDates.length > BATCH_SIZE) {
-        const batches: string[][] = [];
-        for (let i = 0; i < dayDates.length; i += BATCH_SIZE) {
-          batches.push(dayDates.slice(i, i + BATCH_SIZE));
+        for (const act of existingData.activities) {
+          if (act.date && planDates.has(act.date)) {
+            daysWithActivities.set(act.date, (daysWithActivities.get(act.date) || 0) + 1);
+          }
         }
 
-        for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-          const batchDates = batches[batchIdx];
-          setBatchProgress({ current: batchIdx + 1, total: batches.length });
-
-          const batchMsg: AiMessage = {
-            role: 'user',
-            content: `Erstelle Aktivitäten für die Tage ${batchDates.join(', ')} als JSON.`,
-          };
-          const batchResponse = await sendAiMessage('plan_activities', [batchMsg], { ...activitiesContext, dayDates: batchDates });
-          const batch = parsePlanJson(batchResponse.content);
-          allActivities.days.push(...(batch.days || []));
-
-          // Progressive update: merge partial results into plan after each batch
-          const partialPlan = mergePlan(structure, allActivities);
-          setPlan(partialPlan);
+        if (daysWithActivities.size > 0) {
+          setConflictInfo({
+            daysWithActivities: Array.from(daysWithActivities.entries())
+              .map(([date, activityCount]) => ({ date, activityCount }))
+              .sort((a, b) => a.date.localeCompare(b.date)),
+            resolution: 'merge',
+            keepAccommodations: true,
+          });
+          setPhase('conflict_review');
+          return;
         }
-        setBatchProgress(null);
-      } else {
-        const activitiesMsg: AiMessage = {
-          role: 'user',
-          content: 'Erstelle die Aktivitäten für alle Tage als JSON.',
-        };
-        const activitiesResponse = await sendAiMessage('plan_activities', [activitiesMsg], activitiesContext);
-        allActivities = parsePlanJson(activitiesResponse.content);
       }
-
-      const mergedPlan = mergePlan(structure, allActivities);
-      setPlan(mergedPlan);
-
-      const summaryMsg: AiChatMessage = {
-        id: nextId(),
-        role: 'assistant',
-        content: buildPlanSummary(mergedPlan),
-        timestamp: Date.now(),
-        senderName: 'Fable',
-      };
-      setMessages(prev => {
-        const updated = [...prev, summaryMsg];
-        debouncedSave('plan_review', metadata, mergedPlan);
-        return updated;
-      });
-      setPhase('plan_review');
-      setProgressStep(null);
-    } catch (e: any) {
-      logError(e, { component: 'useAiPlanner', context: { action: 'generateActivitiesClientSide', status: e?.status, detail: e?.message } });
-      setError('Aktivitäten konnten nicht erstellt werden – bitte versuche es erneut');
-      setPhase('structure_overview');
-      setProgressStep(null);
-      setBatchProgress(null);
     }
-  }, [structure, messages, metadata, debouncedSave, buildPlanSummary]);
+
+    // No conflicts — start generation directly
+    startGeneration();
+  }, [structure, tripId, mode]);
+
+  // Start the actual generation (called after conflict resolution or directly)
+  const startGeneration = useCallback(() => {
+    if (!structure || !tripId) return;
+    setPhase('generating_plan');
+    setError(null);
+    setProgressStep('activities');
+
+    const preferences = extractPreferences(messages, contextRef.current);
+    const planContext: AiContext = { ...contextRef.current, preferences };
+
+    // Delegate to PlanGenerationContext (runs tag-by-tag, survives modal close)
+    planGeneration.startClientGeneration({
+      structure,
+      context: planContext,
+      tripId,
+      userId,
+      destination: contextRef.current.destination || '',
+    });
+
+    // Show info message so user can close modal
+    const infoMsg: AiChatMessage = {
+      id: nextId(),
+      role: 'assistant',
+      content: 'Fable erstellt deinen Plan Tag für Tag. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt.',
+      timestamp: Date.now(),
+      senderName: 'Fable',
+    };
+    setMessages(prev => [...prev, infoMsg]);
+  }, [structure, messages, planGeneration, tripId, userId]);
+
+  // Resolve conflicts and proceed with generation
+  const resolveConflicts = useCallback((resolution: ConflictResolution, keepAccommodations: boolean) => {
+    setConflictInfo(null);
+    if (resolution === 'skip') {
+      // Skip conflicting days — filter structure to only non-conflicting days
+      if (structure && conflictInfo) {
+        const conflictDates = new Set(conflictInfo.daysWithActivities.map(d => d.date));
+        const filteredStructure: AiTripPlan = {
+          ...structure,
+          days: (structure.days || []).filter(d => !conflictDates.has(d.date)),
+        };
+        if (filteredStructure.days.length === 0) {
+          setError('Alle Tage haben bereits Aktivitäten — nichts zu generieren');
+          setPhase('structure_overview');
+          return;
+        }
+        setStructure(filteredStructure);
+      }
+    }
+    // For 'overwrite' and 'merge', executePlan's dedup handles it
+    // (overwrite: existing activities get replaced; merge: dedup keeps both)
+    startGeneration();
+  }, [structure, conflictInfo, startGeneration]);
 
   // Legacy generatePlan — generates structure + activities in one go (for backward compat)
   const generatePlan = useCallback(async () => {
@@ -1327,6 +1341,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setExecutionResult(null);
     setTokenWarning(false);
     setConflicts([]);
+    setConflictInfo(null);
     setRestored(false);
     setCreditsBalance(null);
     setEstimatedSeconds(null);
@@ -1550,6 +1565,47 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     }
   }, [tripId, sending, onCreditsUpdate]);
 
+  // Retry the last failed action
+  const retryLastAction = useCallback(() => {
+    const failed = lastFailedActionRef.current;
+    setError(null);
+    lastFailedActionRef.current = null;
+
+    if (!failed) return;
+
+    switch (failed.type) {
+      case 'greeting':
+        // Reset state and restart conversation
+        setMessages([]);
+        setMetadata(null);
+        setPhase('idle');
+        // Small delay to allow state reset, then restart
+        setTimeout(() => startConversation(), 100);
+        break;
+      case 'message':
+        if (failed.text) {
+          // Remove the failed user message (last user msg) before resending
+          setMessages(prev => {
+            const lastUserIdx = [...prev].reverse().findIndex(m => m.role === 'user');
+            if (lastUserIdx >= 0) {
+              const idx = prev.length - 1 - lastUserIdx;
+              return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+            }
+            return prev;
+          });
+          // Small delay to allow state update, then resend
+          setTimeout(() => sendMessage(failed.text!), 100);
+        }
+        break;
+      case 'structure':
+        generateStructure();
+        break;
+      case 'plan':
+        checkConflictsAndGenerate();
+        break;
+    }
+  }, [startConversation, sendMessage, generateStructure, checkConflictsAndGenerate]);
+
   return {
     phase,
     messages,
@@ -1576,8 +1632,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     sendMessage,
     generatePlan,
     generateStructure,
-    generateAllViaServer,
-    generateActivitiesClientSide,
+    checkConflictsAndGenerate,
+    conflictInfo,
+    resolveConflicts,
     confirmPlan,
     rejectPlan,
     showPreview,
@@ -1585,6 +1642,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     adjustPlan,
     dismissConflicts,
     confirmWithConflicts,
+    retryLastAction,
     reset,
     saveConversationNow,
     generatePackingList,

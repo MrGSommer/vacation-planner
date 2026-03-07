@@ -172,6 +172,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true);
       }
+      if (event === 'SIGNED_OUT') {
+        // Prevent forceSignOut from showing "Konto nicht verfügbar" on normal logout
+        validatingRef.current = true;
+        setProfile(null);
+        setTimeout(() => { validatingRef.current = false; }, 1000);
+      }
     });
 
     return () => subscription.unsubscribe();
