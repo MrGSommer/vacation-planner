@@ -138,10 +138,16 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [updateCategory]);
 
   const handleDeleteCategory = useCallback((id: string, name: string) => {
-    Alert.alert('Kategorie löschen', `"${name}" wirklich löschen? Zugeordnete Ausgaben bleiben erhalten.`, [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Löschen', style: 'destructive', onPress: () => removeCategory(id) },
-    ]);
+    if (Platform.OS === 'web') {
+      if (window.confirm(`"${name}" wirklich löschen? Zugeordnete Ausgaben bleiben erhalten.`)) {
+        removeCategory(id);
+      }
+    } else {
+      Alert.alert('Kategorie löschen', `"${name}" wirklich löschen? Zugeordnete Ausgaben bleiben erhalten.`, [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => removeCategory(id) },
+      ]);
+    }
   }, [removeCategory]);
 
   const handleAddExpense = useCallback(async (data: {
@@ -176,10 +182,16 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [updateExpense]);
 
   const handleDeleteExpense = useCallback((id: string) => {
-    Alert.alert('Löschen', 'Ausgabe wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Löschen', style: 'destructive', onPress: () => removeExpense(id) },
-    ]);
+    if (Platform.OS === 'web') {
+      if (window.confirm('Ausgabe wirklich löschen?')) {
+        removeExpense(id);
+      }
+    } else {
+      Alert.alert('Löschen', 'Ausgabe wirklich löschen?', [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => removeExpense(id) },
+      ]);
+    }
   }, [removeExpense]);
 
   const handleSettle = useCallback(async (settlement: Settlement) => {
@@ -403,7 +415,6 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                           actions={[
                             { icon: 'trash-outline', color: colors.error, onPress: () => handleReceiptDelete(receipt.id) },
                           ]}
-                          disabled={Platform.OS === 'web'}
                         >
                           <ReceiptCard
                             receipt={receipt}
@@ -426,9 +437,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                         key={`e-${exp.id}`}
                         actions={[
                           { icon: 'create-outline', color: colors.primary, onPress: () => setEditingExpense(exp) },
-                          { icon: 'trash-outline', color: colors.error, onPress: () => removeExpense(exp.id) },
+                          { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteExpense(exp.id) },
                         ]}
-                        disabled={Platform.OS === 'web'}
                       >
                         <ExpenseItem
                           expense={exp}

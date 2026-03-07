@@ -3,6 +3,8 @@ import { View, StyleSheet, Animated, PanResponder, TouchableOpacity, Text, Platf
 import { Icon, IconName } from '../../utils/icons';
 import { colors, spacing, borderRadius, iconSize } from '../../utils/theme';
 
+const isWeb = Platform.OS === 'web';
+
 export interface SwipeAction {
   icon: IconName;
   color: string;
@@ -47,7 +49,9 @@ export const SwipeableRow: React.FC<SwipeableRowProps> = ({
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) =>
-        !disabled && Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 2,
+        !disabled && Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+      onMoveShouldSetPanResponderCapture: (_, gs) =>
+        !disabled && Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy) * 2,
       onPanResponderMove: (_, gs) => {
         const base = isOpen.current ? -totalWidth : 0;
         const val = Math.min(0, Math.max(-totalWidth - 20, base + gs.dx));
@@ -56,14 +60,14 @@ export const SwipeableRow: React.FC<SwipeableRowProps> = ({
       onPanResponderRelease: (_, gs) => {
         if (isOpen.current) {
           // Already open: swipe right to close, or stay open
-          if (gs.dx > 30) {
+          if (gs.dx > 20) {
             snapTo(0);
           } else {
             snapTo(-totalWidth);
           }
         } else {
           // Closed: swipe left to open
-          if (gs.dx < -30) {
+          if (gs.dx < -20) {
             snapTo(-totalWidth);
           } else {
             snapTo(0);
@@ -95,7 +99,7 @@ export const SwipeableRow: React.FC<SwipeableRowProps> = ({
 
       {/* Swipeable content */}
       <Animated.View
-        style={[styles.content, { transform: [{ translateX }] }]}
+        style={[styles.content, { transform: [{ translateX }] }, isWeb && { touchAction: 'pan-y' } as any]}
         {...panResponder.panHandlers}
       >
         {children}

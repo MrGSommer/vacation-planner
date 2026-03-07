@@ -97,13 +97,13 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const slideshowActiveRef = useRef(false);
   slideshowActiveRef.current = slideshowActive;
 
-  const SWIPE_THRESHOLD = 50;
+  const SWIPE_THRESHOLD = 30;
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gs) => {
         if (slideshowActiveRef.current) return false;
-        return Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy);
+        return Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.2;
       },
       onPanResponderRelease: (_, gs) => {
         if (gs.dx > SWIPE_THRESHOLD) viewerGoRef.current(-1);
