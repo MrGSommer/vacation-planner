@@ -27,6 +27,7 @@ const QUICK_CHIPS = [
   { label: 'Problem melden', value: 'Ich habe ein Problem mit der App.' },
   { label: 'Fable & Inspirationen', value: 'Wie funktionieren Fable und Inspirationen?' },
   { label: 'Abo & Preise', value: 'Was kostet WayFable und was ist in Premium enthalten?' },
+  { label: 'App installieren', value: 'Wie kann ich WayFable als App auf meinem Handy installieren?' },
 ];
 
 const GREETING: SupportMessage = {
