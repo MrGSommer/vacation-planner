@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const signUpWithEmail = async (email: string, password: string, firstName: string, lastName: string) => {
   const { data, error } = await supabase.auth.signUp({
@@ -74,7 +75,7 @@ export const deleteAccount = async (password?: string, confirmText?: string) => 
   await supabase.auth.signOut();
 };
 
-export const updateProfile = async (userId: string, updates: {
+type ProfileUpdates = {
   first_name?: string;
   last_name?: string;
   avatar_url?: string;
@@ -88,7 +89,9 @@ export const updateProfile = async (userId: string, updates: {
   notification_email_collaborators?: boolean;
   ai_trip_context_enabled?: boolean;
   ai_custom_instruction?: string | null;
-}) => {
+};
+
+const _updateProfile = async (userId: string, updates: ProfileUpdates) => {
   const { data, error } = await supabase
     .from('profiles')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -97,4 +100,13 @@ export const updateProfile = async (userId: string, updates: {
     .single();
   if (error) throw error;
   return data;
+};
+
+export const updateProfile = async (userId: string, updates: ProfileUpdates) => {
+  return offlineMutation({
+    operation: 'updateProfile', table: 'profiles',
+    args: [userId, updates], cacheKeys: [],
+    fn: _updateProfile,
+    optimisticResult: { id: userId, ...updates, updated_at: new Date().toISOString() } as any,
+  });
 };

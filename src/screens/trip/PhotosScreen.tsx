@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
 import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
+import { requireOnline } from '../../utils/offlineGate';
 import { extractExifDateFromUri, extractExifDateFromBuffer, extractExifDataFromBuffer } from '../../utils/exifReader';
 import { getDays } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
@@ -175,6 +176,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Upload with progress + EXIF extraction
   const handleUpload = async () => {
+    if (!requireOnline('Foto-Upload')) return;
     if (Platform.OS === 'web') {
       // Web: use native file input to access ORIGINAL files with EXIF intact
       // (expo-image-picker recompresses via Canvas, stripping EXIF)

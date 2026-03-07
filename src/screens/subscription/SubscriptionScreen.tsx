@@ -6,6 +6,7 @@ import { Header } from '../../components/common';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../hooks/useAuth';
 import { getSubscriptionUrl, getInspirationsUrl } from '../../api/stripe';
+import { requireOnline } from '../../utils/offlineGate';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
 
@@ -17,6 +18,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
 
   const handleSubscribe = () => {
+    if (!requireOnline('Zahlungen')) return;
     if (!user) return;
     if (Platform.OS === 'web') {
       window.location.href = getSubscriptionUrl(billing, user.id, user.email || '');
@@ -128,6 +130,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.inspirationButton}
             onPress={() => {
+              if (!requireOnline('Zahlungen')) return;
               if (!user) return;
               if (Platform.OS === 'web') {
                 window.location.href = getInspirationsUrl(user.id, user.email || '');

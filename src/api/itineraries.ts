@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { ItineraryDay, Activity } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
   const { data, error } = await supabase
@@ -12,7 +13,7 @@ export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
   return data || [];
 };
 
-export const createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
+const _createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
   const { data, error } = await supabase
     .from('itinerary_days')
     .insert({ trip_id: tripId, date })
@@ -20,6 +21,15 @@ export const createDay = async (tripId: string, date: string): Promise<Itinerary
     .single();
   if (error) throw error;
   return data;
+};
+
+export const createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
+  return offlineMutation({
+    operation: 'createDay', table: 'itinerary_days', args: [tripId, date],
+    cacheKeys: [`activities:${tripId}`],
+    fn: _createDay,
+    optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, date, created_at: new Date().toISOString() } as ItineraryDay,
+  });
 };
 
 export const getActivities = async (dayId: string): Promise<Activity[]> => {
@@ -46,7 +56,7 @@ export const getActivitiesForTrip = async (tripId: string): Promise<Activity[]> 
   });
 };
 
-export const createActivity = async (activity: Omit<Activity, 'id' | 'created_at' | 'updated_at'>): Promise<Activity> => {
+const _createActivity = async (activity: Omit<Activity, 'id' | 'created_at' | 'updated_at'>): Promise<Activity> => {
   const { data, error } = await supabase
     .from('activities')
     .insert(activity)
@@ -57,7 +67,16 @@ export const createActivity = async (activity: Omit<Activity, 'id' | 'created_at
   return data;
 };
 
-export const updateActivity = async (id: string, updates: Partial<Activity>): Promise<Activity> => {
+export const createActivity = async (activity: Omit<Activity, 'id' | 'created_at' | 'updated_at'>): Promise<Activity> => {
+  return offlineMutation({
+    operation: 'createActivity', table: 'activities', args: [activity],
+    cacheKeys: [`activities:${activity.trip_id}`],
+    fn: _createActivity,
+    optimisticResult: { ...activity, id: `temp_${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Activity,
+  });
+};
+
+const _updateActivity = async (id: string, updates: Partial<Activity>): Promise<Activity> => {
   const { data, error } = await supabase
     .from('activities')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -69,10 +88,27 @@ export const updateActivity = async (id: string, updates: Partial<Activity>): Pr
   return data;
 };
 
-export const deleteActivity = async (id: string): Promise<void> => {
+export const updateActivity = async (id: string, updates: Partial<Activity>): Promise<Activity> => {
+  return offlineMutation({
+    operation: 'updateActivity', table: 'activities', args: [id, updates],
+    cacheKeys: ['activities:'],
+    fn: _updateActivity,
+    optimisticResult: { id, ...updates, updated_at: new Date().toISOString() } as Activity,
+  });
+};
+
+const _deleteActivity = async (id: string): Promise<void> => {
   const { error } = await supabase.from('activities').delete().eq('id', id);
   if (error) throw error;
   invalidateCache('activities:');
+};
+
+export const deleteActivity = async (id: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteActivity', table: 'activities', args: [id],
+    cacheKeys: ['activities:'],
+    fn: _deleteActivity,
+  });
 };
 
 export const createActivities = async (activities: Omit<Activity, 'id' | 'created_at' | 'updated_at'>[]): Promise<Activity[]> => {
@@ -86,9 +122,17 @@ export const createActivities = async (activities: Omit<Activity, 'id' | 'create
   return data || [];
 };
 
-export const deleteDay = async (dayId: string): Promise<void> => {
+const _deleteDay = async (dayId: string): Promise<void> => {
   const { error } = await supabase.from('itinerary_days').delete().eq('id', dayId);
   if (error) throw error;
+};
+
+export const deleteDay = async (dayId: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteDay', table: 'itinerary_days', args: [dayId],
+    cacheKeys: ['activities:'],
+    fn: _deleteDay,
+  });
 };
 
 export const moveActivitiesToDay = async (activityIds: string[], newDayId: string): Promise<void> => {

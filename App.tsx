@@ -7,14 +7,24 @@ import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJa
 import { AuthProvider } from './src/contexts/AuthContext';
 import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
 import { TripProvider } from './src/contexts/TripContext';
-import { ToastProvider } from './src/contexts/ToastContext';
+import { ToastProvider, useToast } from './src/contexts/ToastContext';
 import { PlanGenerationProvider } from './src/contexts/PlanGenerationContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
+import { OfflineBanner } from './src/components/common/OfflineBanner';
 import { LoadingScreen } from './src/components/common';
 
 import { logCritical } from './src/services/errorLogger';
+import { setOfflineGateToast } from './src/utils/offlineGate';
+
+function OfflineGateInit() {
+  const { showToast } = useToast();
+  useEffect(() => {
+    setOfflineGateToast(showToast);
+  }, [showToast]);
+  return null;
+}
 
 function UnhandledRejectionHandler({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -48,6 +58,7 @@ export default function App() {
       <SafeAreaProvider>
         <ToastProvider>
           <ErrorBoundary>
+            <OfflineGateInit />
             <UnhandledRejectionHandler>
               <AuthProvider>
                 <SubscriptionProvider>
@@ -55,6 +66,7 @@ export default function App() {
                     <PlanGenerationProvider>
                       <StatusBar style="auto" />
                       <UpdateBanner />
+                      <OfflineBanner />
                       <AppNavigator />
                     </PlanGenerationProvider>
                   </TripProvider>

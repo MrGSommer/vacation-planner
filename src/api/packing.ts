@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { PackingList, PackingItem } from '../types/database';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getPackingLists = async (tripId: string): Promise<PackingList[]> => {
   const { data, error } = await supabase
@@ -10,7 +11,7 @@ export const getPackingLists = async (tripId: string): Promise<PackingList[]> =>
   return data || [];
 };
 
-export const createPackingList = async (tripId: string, name: string): Promise<PackingList> => {
+const _createPackingList = async (tripId: string, name: string): Promise<PackingList> => {
   const { data, error } = await supabase
     .from('packing_lists')
     .insert({ trip_id: tripId, name })
@@ -18,6 +19,14 @@ export const createPackingList = async (tripId: string, name: string): Promise<P
     .single();
   if (error) throw error;
   return data;
+};
+
+export const createPackingList = async (tripId: string, name: string): Promise<PackingList> => {
+  return offlineMutation({
+    operation: 'createPackingList', table: 'packing_lists', args: [tripId, name], cacheKeys: [],
+    fn: _createPackingList,
+    optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, name, created_at: new Date().toISOString() } as PackingList,
+  });
 };
 
 export const getPackingItems = async (listId: string): Promise<PackingItem[]> => {
@@ -31,11 +40,8 @@ export const getPackingItems = async (listId: string): Promise<PackingItem[]> =>
   return data || [];
 };
 
-export const createPackingItem = async (
-  listId: string,
-  name: string,
-  category: string,
-  quantity: number = 1
+const _createPackingItem = async (
+  listId: string, name: string, category: string, quantity: number = 1
 ): Promise<PackingItem> => {
   const { data, error } = await supabase
     .from('packing_items')
@@ -44,6 +50,17 @@ export const createPackingItem = async (
     .single();
   if (error) throw error;
   return data;
+};
+
+export const createPackingItem = async (
+  listId: string, name: string, category: string, quantity: number = 1
+): Promise<PackingItem> => {
+  return offlineMutation({
+    operation: 'createPackingItem', table: 'packing_items',
+    args: [listId, name, category, quantity], cacheKeys: [],
+    fn: _createPackingItem,
+    optimisticResult: { id: `temp_${Date.now()}`, list_id: listId, name, category, quantity, is_packed: false, created_at: new Date().toISOString() } as PackingItem,
+  });
 };
 
 export const createPackingItems = async (
@@ -65,7 +82,7 @@ export const createPackingItems = async (
   return data || [];
 };
 
-export const togglePackingItem = async (id: string, isPacked: boolean): Promise<PackingItem> => {
+const _togglePackingItem = async (id: string, isPacked: boolean): Promise<PackingItem> => {
   const { data, error } = await supabase
     .from('packing_items')
     .update({ is_packed: isPacked })
@@ -74,6 +91,15 @@ export const togglePackingItem = async (id: string, isPacked: boolean): Promise<
     .single();
   if (error) throw error;
   return data;
+};
+
+export const togglePackingItem = async (id: string, isPacked: boolean): Promise<PackingItem> => {
+  return offlineMutation({
+    operation: 'togglePackingItem', table: 'packing_items',
+    args: [id, isPacked], cacheKeys: [],
+    fn: _togglePackingItem,
+    optimisticResult: { id, is_packed: isPacked } as PackingItem,
+  });
 };
 
 export const togglePackingItems = async (ids: string[], isPacked: boolean): Promise<void> => {
@@ -84,9 +110,16 @@ export const togglePackingItems = async (ids: string[], isPacked: boolean): Prom
   if (error) throw error;
 };
 
-export const deletePackingItem = async (id: string): Promise<void> => {
+const _deletePackingItem = async (id: string): Promise<void> => {
   const { error } = await supabase.from('packing_items').delete().eq('id', id);
   if (error) throw error;
+};
+
+export const deletePackingItem = async (id: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deletePackingItem', table: 'packing_items', args: [id], cacheKeys: [],
+    fn: _deletePackingItem,
+  });
 };
 
 export const deletePackingItems = async (ids: string[]): Promise<void> => {
@@ -94,9 +127,8 @@ export const deletePackingItems = async (ids: string[]): Promise<void> => {
   if (error) throw error;
 };
 
-export const updatePackingItem = async (
-  id: string,
-  fields: { name?: string; category?: string; quantity?: number },
+const _updatePackingItem = async (
+  id: string, fields: { name?: string; category?: string; quantity?: number }
 ): Promise<PackingItem> => {
   const { data, error } = await supabase
     .from('packing_items')
@@ -106,6 +138,17 @@ export const updatePackingItem = async (
     .single();
   if (error) throw error;
   return data;
+};
+
+export const updatePackingItem = async (
+  id: string, fields: { name?: string; category?: string; quantity?: number }
+): Promise<PackingItem> => {
+  return offlineMutation({
+    operation: 'updatePackingItem', table: 'packing_items',
+    args: [id, fields], cacheKeys: [],
+    fn: _updatePackingItem,
+    optimisticResult: { id, ...fields } as PackingItem,
+  });
 };
 
 export const updatePackingItemAssignment = async (

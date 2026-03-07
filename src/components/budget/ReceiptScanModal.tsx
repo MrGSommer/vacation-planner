@@ -12,6 +12,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { sendReceiptScan, AiContext } from '../../api/aiChat';
 import { uploadReceiptImage } from '../../api/receipts';
 import { compressForReceipt, CompressedImage } from '../../utils/imageUtils';
+import { requireOnline } from '../../utils/offlineGate';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { DatePickerInput } from '../common/DatePickerInput';
@@ -126,6 +127,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
   }, [currency, currentUserId]);
 
   const handleFileSelect = useCallback(async (input: File | string) => {
+    if (!requireOnline('Beleg-Scan')) return;
     try {
       const result = await compressForReceipt(input);
       setCompressed(result);

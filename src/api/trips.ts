@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { Trip } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getTrips = async (userId: string): Promise<Trip[]> => {
   return cachedQuery(`trips:${userId}`, async () => {
@@ -26,7 +27,7 @@ export const getTrip = async (tripId: string): Promise<Trip> => {
   });
 };
 
-export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>): Promise<Trip> => {
+const _createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>): Promise<Trip> => {
   const { data, error } = await supabase
     .from('trips')
     .insert(trip)
@@ -45,7 +46,15 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
   return data;
 };
 
-export const updateTrip = async (tripId: string, updates: Partial<Trip>): Promise<Trip> => {
+export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>): Promise<Trip> => {
+  return offlineMutation({
+    operation: 'createTrip', table: 'trips', args: [trip], cacheKeys: ['trips:'],
+    fn: _createTrip,
+    optimisticResult: { ...trip, id: `temp_${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Trip,
+  });
+};
+
+const _updateTrip = async (tripId: string, updates: Partial<Trip>): Promise<Trip> => {
   const { data, error } = await supabase
     .from('trips')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -58,11 +67,28 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>): Promis
   return data;
 };
 
-export const deleteTrip = async (tripId: string): Promise<void> => {
+export const updateTrip = async (tripId: string, updates: Partial<Trip>): Promise<Trip> => {
+  return offlineMutation({
+    operation: 'updateTrip', table: 'trips', args: [tripId, updates],
+    cacheKeys: ['trips:', `trip:${tripId}`],
+    fn: _updateTrip,
+    optimisticResult: { id: tripId, ...updates, updated_at: new Date().toISOString() } as Trip,
+  });
+};
+
+const _deleteTrip = async (tripId: string): Promise<void> => {
   const { error } = await supabase.from('trips').delete().eq('id', tripId);
   if (error) throw error;
   invalidateCache('trips:');
   invalidateCache(`trip:${tripId}`);
+};
+
+export const deleteTrip = async (tripId: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteTrip', table: 'trips', args: [tripId],
+    cacheKeys: ['trips:', `trip:${tripId}`],
+    fn: _deleteTrip,
+  });
 };
 
 export interface ClearTripOptions {

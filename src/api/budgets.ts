@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { BudgetCategory, Expense } from '../types/database';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getBudgetCategories = async (
   tripId: string
@@ -13,29 +14,31 @@ export const getBudgetCategories = async (
   return data || [];
 };
 
-export const createBudgetCategory = async (
-  tripId: string,
-  name: string,
-  color: string,
-  budgetLimit: number | null
+const _createBudgetCategory = async (
+  tripId: string, name: string, color: string, budgetLimit: number | null
 ): Promise<BudgetCategory> => {
   const { data, error } = await supabase
     .from('budget_categories')
-    .insert({
-      trip_id: tripId,
-      name,
-      color,
-      budget_limit: budgetLimit,
-    })
+    .insert({ trip_id: tripId, name, color, budget_limit: budgetLimit })
     .select()
     .single();
   if (error) throw error;
   return data;
 };
 
-export const updateBudgetCategory = async (
-  id: string,
-  updates: Partial<Pick<BudgetCategory, 'name' | 'color' | 'budget_limit'>>
+export const createBudgetCategory = async (
+  tripId: string, name: string, color: string, budgetLimit: number | null
+): Promise<BudgetCategory> => {
+  return offlineMutation({
+    operation: 'createBudgetCategory', table: 'budget_categories',
+    args: [tripId, name, color, budgetLimit], cacheKeys: [],
+    fn: _createBudgetCategory,
+    optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, name, color, budget_limit: budgetLimit, created_at: new Date().toISOString() } as BudgetCategory,
+  });
+};
+
+const _updateBudgetCategory = async (
+  id: string, updates: Partial<Pick<BudgetCategory, 'name' | 'color' | 'budget_limit'>>
 ): Promise<BudgetCategory> => {
   const { data, error } = await supabase
     .from('budget_categories')
@@ -47,9 +50,28 @@ export const updateBudgetCategory = async (
   return data;
 };
 
-export const deleteBudgetCategory = async (id: string): Promise<void> => {
+export const updateBudgetCategory = async (
+  id: string, updates: Partial<Pick<BudgetCategory, 'name' | 'color' | 'budget_limit'>>
+): Promise<BudgetCategory> => {
+  return offlineMutation({
+    operation: 'updateBudgetCategory', table: 'budget_categories',
+    args: [id, updates], cacheKeys: [],
+    fn: _updateBudgetCategory,
+    optimisticResult: { id, ...updates } as BudgetCategory,
+  });
+};
+
+const _deleteBudgetCategory = async (id: string): Promise<void> => {
   const { error } = await supabase.from('budget_categories').delete().eq('id', id);
   if (error) throw error;
+};
+
+export const deleteBudgetCategory = async (id: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteBudgetCategory', table: 'budget_categories',
+    args: [id], cacheKeys: [],
+    fn: _deleteBudgetCategory,
+  });
 };
 
 export const getExpenses = async (
@@ -64,7 +86,7 @@ export const getExpenses = async (
   return data || [];
 };
 
-export const createExpense = async (
+const _createExpense = async (
   expense: Omit<Expense, 'id' | 'created_at' | 'budget_categories' | 'receipt_id' | 'creator_name'> & { receipt_id?: string | null; creator_name?: string | null }
 ): Promise<Expense> => {
   const { data, error } = await supabase
@@ -76,9 +98,18 @@ export const createExpense = async (
   return data;
 };
 
-export const updateExpense = async (
-  id: string,
-  updates: Partial<Omit<Expense, 'id' | 'created_at' | 'budget_categories'>>
+export const createExpense = async (
+  expense: Omit<Expense, 'id' | 'created_at' | 'budget_categories' | 'receipt_id' | 'creator_name'> & { receipt_id?: string | null; creator_name?: string | null }
+): Promise<Expense> => {
+  return offlineMutation({
+    operation: 'createExpense', table: 'expenses', args: [expense], cacheKeys: [],
+    fn: _createExpense,
+    optimisticResult: { ...expense, id: `temp_${Date.now()}`, created_at: new Date().toISOString(), budget_categories: null } as any,
+  });
+};
+
+const _updateExpense = async (
+  id: string, updates: Partial<Omit<Expense, 'id' | 'created_at' | 'budget_categories'>>
 ): Promise<Expense> => {
   const { data, error } = await supabase
     .from('expenses')
@@ -90,9 +121,26 @@ export const updateExpense = async (
   return data;
 };
 
-export const deleteExpense = async (id: string): Promise<void> => {
+export const updateExpense = async (
+  id: string, updates: Partial<Omit<Expense, 'id' | 'created_at' | 'budget_categories'>>
+): Promise<Expense> => {
+  return offlineMutation({
+    operation: 'updateExpense', table: 'expenses', args: [id, updates], cacheKeys: [],
+    fn: _updateExpense,
+    optimisticResult: { id, ...updates } as Expense,
+  });
+};
+
+const _deleteExpense = async (id: string): Promise<void> => {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
+};
+
+export const deleteExpense = async (id: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteExpense', table: 'expenses', args: [id], cacheKeys: [],
+    fn: _deleteExpense,
+  });
 };
 
 export const getTripExpenseTotal = async (tripId: string): Promise<number> => {

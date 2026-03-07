@@ -112,6 +112,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(null);
       setUser(null);
       setProfile(null);
+      if (Platform.OS === 'web') {
+        try { localStorage.removeItem('wayfable_profile'); } catch {}
+      }
       await supabase.auth.signOut();
       const { clearCache } = await import('../utils/queryCache');
       clearCache();
@@ -124,6 +127,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Validate session server-side (getUser hits the API, unlike getSession which is local)
   const validateSession = useCallback(async () => {
     if (validatingRef.current) return;
+    // Skip validation when offline — can't reach server anyway
+    if (Platform.OS === 'web' && !navigator.onLine) return;
     const { data: { user: serverUser }, error } = await supabase.auth.getUser();
     if (error || !serverUser) {
       await forceSignOut('Dein Konto ist nicht mehr verfügbar. Du wurdest abgemeldet.');
@@ -135,7 +140,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const p = await getProfile(user.id);
         setProfile(p);
+        // Cache profile for offline use
+        if (Platform.OS === 'web') {
+          try { localStorage.setItem('wayfable_profile', JSON.stringify(p)); } catch {}
+        }
       } catch {
+        // Offline: load cached profile if user ID matches
+        if (Platform.OS === 'web' && !navigator.onLine) {
+          try {
+            const cached = localStorage.getItem('wayfable_profile');
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed.id === user.id) {
+                setProfile(parsed);
+                return;
+              }
+            }
+          } catch {}
+        }
         // Profile fetch failed — check if user still exists server-side
         await validateSession();
       }
@@ -149,15 +171,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       if (s) {
-        // Validate server-side that user still exists
-        const { data: { user: serverUser }, error } = await supabase.auth.getUser();
-        if (error || !serverUser) {
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          showToast('Dein Konto ist nicht mehr verfügbar. Du wurdest abgemeldet.', 'error', 5000);
-          return;
+        // Validate server-side that user still exists (skip when offline)
+        if (Platform.OS !== 'web' || navigator.onLine) {
+          const { data: { user: serverUser }, error } = await supabase.auth.getUser();
+          if (error || !serverUser) {
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setLoading(false);
+            showToast('Dein Konto ist nicht mehr verfügbar. Du wurdest abgemeldet.', 'error', 5000);
+            return;
+          }
         }
       }
       setSession(s);

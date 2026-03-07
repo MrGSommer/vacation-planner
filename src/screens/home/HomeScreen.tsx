@@ -11,6 +11,7 @@ import { getCollaboratorsForTrips, getCollaborators, transferOwnership, leaveTri
 import { getRecentCreateModeJob, PlanJob } from '../../api/aiPlanJobs';
 import { Trip } from '../../types/database';
 import { duplicateTrip } from '../../api/trips';
+import { requireOnline } from '../../utils/offlineGate';
 import { formatDateRange, getDayCount, isTripActive, getTripCountdownText, getDaysUntil, getCurrentTripDay } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows, gradients, iconSize } from '../../utils/theme';
 import { getDisplayName } from '../../utils/profileHelpers';
@@ -298,6 +299,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }, [deleteTrip, fetchTrips, showToast]);
 
   const handleDuplicateTrip = useCallback(async (trip: Trip) => {
+    if (!requireOnline('Trip duplizieren')) return;
     try {
       showToast('Trip wird kopiert...', 'info');
       await duplicateTrip(trip.id, user!.id);

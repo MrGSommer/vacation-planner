@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { ActivityComment, ActivityReaction } from '../types/database';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getComments = async (activityId: string): Promise<ActivityComment[]> => {
   const { data, error } = await supabase
@@ -11,7 +12,7 @@ export const getComments = async (activityId: string): Promise<ActivityComment[]
   return (data ?? []) as ActivityComment[];
 };
 
-export const addComment = async (activityId: string, userId: string, content: string): Promise<ActivityComment> => {
+const _addComment = async (activityId: string, userId: string, content: string): Promise<ActivityComment> => {
   const { data, error } = await supabase
     .from('activity_comments')
     .insert({ activity_id: activityId, user_id: userId, content })
@@ -21,9 +22,26 @@ export const addComment = async (activityId: string, userId: string, content: st
   return data as ActivityComment;
 };
 
-export const deleteComment = async (commentId: string): Promise<void> => {
+export const addComment = async (activityId: string, userId: string, content: string): Promise<ActivityComment> => {
+  return offlineMutation({
+    operation: 'addComment', table: 'activity_comments',
+    args: [activityId, userId, content], cacheKeys: [],
+    fn: _addComment,
+    optimisticResult: { id: `temp_${Date.now()}`, activity_id: activityId, user_id: userId, content, created_at: new Date().toISOString() } as ActivityComment,
+  });
+};
+
+const _deleteComment = async (commentId: string): Promise<void> => {
   const { error } = await supabase.from('activity_comments').delete().eq('id', commentId);
   if (error) throw error;
+};
+
+export const deleteComment = async (commentId: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteComment', table: 'activity_comments',
+    args: [commentId], cacheKeys: [],
+    fn: _deleteComment,
+  });
 };
 
 export const getReactions = async (activityId: string): Promise<ActivityReaction[]> => {
@@ -35,8 +53,7 @@ export const getReactions = async (activityId: string): Promise<ActivityReaction
   return (data ?? []) as ActivityReaction[];
 };
 
-export const toggleReaction = async (activityId: string, userId: string, emoji: string): Promise<void> => {
-  // Check if this exact reaction exists (toggle off)
+const _toggleReaction = async (activityId: string, userId: string, emoji: string): Promise<void> => {
   const { data: existing } = await supabase
     .from('activity_reactions')
     .select('id')
@@ -46,21 +63,26 @@ export const toggleReaction = async (activityId: string, userId: string, emoji: 
     .maybeSingle();
 
   if (existing) {
-    // Remove the reaction (toggle off)
     await supabase.from('activity_reactions').delete().eq('id', existing.id);
   } else {
-    // Remove any other reaction by this user on this activity (one per user)
     await supabase
       .from('activity_reactions')
       .delete()
       .eq('activity_id', activityId)
       .eq('user_id', userId);
-    // Insert the new reaction
     const { error } = await supabase
       .from('activity_reactions')
       .insert({ activity_id: activityId, user_id: userId, emoji });
     if (error) throw error;
   }
+};
+
+export const toggleReaction = async (activityId: string, userId: string, emoji: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'toggleReaction', table: 'activity_reactions',
+    args: [activityId, userId, emoji], cacheKeys: [],
+    fn: _toggleReaction,
+  });
 };
 
 /** Get reactions for multiple activities at once (for list views) */

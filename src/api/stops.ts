@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { TripStop } from '../types/database';
+import { offlineMutation } from '../utils/offlineMutation';
 
 export const getStops = async (tripId: string): Promise<TripStop[]> => {
   const { data, error } = await supabase
@@ -11,7 +12,7 @@ export const getStops = async (tripId: string): Promise<TripStop[]> => {
   return data || [];
 };
 
-export const createStop = async (stop: Omit<TripStop, 'id' | 'created_at'>): Promise<TripStop> => {
+const _createStop = async (stop: Omit<TripStop, 'id' | 'created_at'>): Promise<TripStop> => {
   const { data, error } = await supabase
     .from('trip_stops')
     .insert(stop)
@@ -21,7 +22,15 @@ export const createStop = async (stop: Omit<TripStop, 'id' | 'created_at'>): Pro
   return data;
 };
 
-export const updateStop = async (id: string, updates: Partial<TripStop>): Promise<TripStop> => {
+export const createStop = async (stop: Omit<TripStop, 'id' | 'created_at'>): Promise<TripStop> => {
+  return offlineMutation({
+    operation: 'createStop', table: 'trip_stops', args: [stop], cacheKeys: [],
+    fn: _createStop,
+    optimisticResult: { ...stop, id: `temp_${Date.now()}`, created_at: new Date().toISOString() } as TripStop,
+  });
+};
+
+const _updateStop = async (id: string, updates: Partial<TripStop>): Promise<TripStop> => {
   const { data, error } = await supabase
     .from('trip_stops')
     .update(updates)
@@ -32,9 +41,24 @@ export const updateStop = async (id: string, updates: Partial<TripStop>): Promis
   return data;
 };
 
-export const deleteStop = async (id: string): Promise<void> => {
+export const updateStop = async (id: string, updates: Partial<TripStop>): Promise<TripStop> => {
+  return offlineMutation({
+    operation: 'updateStop', table: 'trip_stops', args: [id, updates], cacheKeys: [],
+    fn: _updateStop,
+    optimisticResult: { id, ...updates } as TripStop,
+  });
+};
+
+const _deleteStop = async (id: string): Promise<void> => {
   const { error } = await supabase.from('trip_stops').delete().eq('id', id);
   if (error) throw error;
+};
+
+export const deleteStop = async (id: string): Promise<void> => {
+  return offlineMutation({
+    operation: 'deleteStop', table: 'trip_stops', args: [id], cacheKeys: [],
+    fn: _deleteStop,
+  });
 };
 
 export const reorderStops = async (tripId: string, orderedIds: string[]): Promise<void> => {

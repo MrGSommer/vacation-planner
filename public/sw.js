@@ -1,9 +1,14 @@
 const APP_VERSION = '1.4.0';
 const CACHE_NAME = `wayfable-cache-${APP_VERSION}`;
+const PRECACHE_URLS = [];
 
-// Install: skip waiting immediately so the new SW activates on detection
-self.addEventListener('install', () => {
-  self.skipWaiting();
+// Install: precache critical assets, then skip waiting
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => PRECACHE_URLS.length > 0 ? cache.addAll(PRECACHE_URLS) : Promise.resolve())
+      .then(() => self.skipWaiting())
+  );
 });
 
 // Activate: clean up old caches

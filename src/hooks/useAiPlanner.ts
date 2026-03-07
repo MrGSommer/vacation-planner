@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { requireOnline } from '../utils/offlineGate';
 import { sendAiMessage, AiMessage, AiContext, AiTask } from '../api/aiChat';
 import { executePlan, parsePlanJson, safeParseAgentJson, AiTripPlan, ExecutionResult, ProgressStep } from '../services/ai/planExecutor';
 import { getTrip, updateTrip } from '../api/trips';
@@ -483,6 +484,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   }, [mode, tripId, userId]);
 
   const startConversation = useCallback(async (canSend = true) => {
+    if (!requireOnline('Fable')) return;
     if (!contextReady) return;
 
     // Master gate: if Fable is disabled for this trip, show info message
@@ -731,6 +733,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   }, [contextReady, mode, tripId, userId, loadExistingData, debouncedSave, persistMessage]);
 
   const sendMessage = useCallback(async (text: string) => {
+    if (!requireOnline('Fable')) return;
     if (!text.trim() || sending) return;
 
     setError(null);

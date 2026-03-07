@@ -8,6 +8,7 @@ import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { MUSIC_TRACKS, MusicTrack } from '../../config/music';
 import { createSlideshowShare } from '../../api/slideshows';
+import { requireOnline } from '../../utils/offlineGate';
 
 interface Props {
   visible: boolean;
@@ -60,6 +61,7 @@ export const SlideshowShareModal: React.FC<Props> = ({
   }, [previewingTrack, stopPreview]);
 
   const handleCreate = async () => {
+    if (!requireOnline('Slideshow-Erstellung')) return;
     setCreating(true);
     try {
       const share = await createSlideshowShare({

@@ -11,6 +11,7 @@ import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getTrip, uploadCoverImage } from '../../api/trips';
+import { requireOnline } from '../../utils/offlineGate';
 import { getDays, getActivities, deleteDay, moveActivitiesToDay } from '../../api/itineraries';
 import { searchPhotos, triggerDownload, UnsplashPhoto } from '../../api/unsplash';
 import {
@@ -437,6 +438,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                 <TouchableOpacity
                   style={styles.coverActionBtn}
                   onPress={async () => {
+                    if (!requireOnline('Cover-Bild hochladen')) return;
                     const result = await ImagePicker.launchImageLibraryAsync({
                       mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [16, 9],
                     });

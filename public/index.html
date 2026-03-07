@@ -56,6 +56,9 @@
         color: #4ECDC4;
         margin: 0 8px;
       }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
     </style>
   </head>
 
@@ -69,7 +72,15 @@
         <a href="https://wayfable.ch/impressum">Impressum</a>
       </nav>
     </noscript>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-loader" style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F9FA;">
+        <img src="/icon-192.png" alt="WayFable" width="80" height="80" style="border-radius:20px;margin-bottom:24px;" />
+        <div style="width:40px;height:40px;border:3px solid #DFE6E9;border-top-color:#FF6B6B;border-radius:50%;animation:spin .8s linear infinite;"></div>
+        <p id="offline-msg" style="display:none;margin-top:24px;color:#636E72;font-size:14px;text-align:center;padding:0 32px;">
+          Du bist offline. Einige Funktionen sind eingeschraenkt verfuegbar.
+        </p>
+      </div>
+    </div>
 
     <!--
       Crawler-visible footer: Google's crawler sees this even without JS.
@@ -84,5 +95,11 @@
     </div>
 
     <!-- SW registration handled by useServiceWorkerUpdate hook -->
+    <script>
+      if (!navigator.onLine) {
+        var m = document.getElementById('offline-msg');
+        if (m) m.style.display = 'block';
+      }
+    </script>
   </body>
 </html>
