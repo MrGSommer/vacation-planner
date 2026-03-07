@@ -8,6 +8,7 @@ import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
+import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
@@ -28,6 +29,8 @@ import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 import { usePresence } from '../../hooks/usePresence';
+import { MUSIC_TRACKS } from '../../config/music';
+import { SlideshowShareModal } from '../../components/photos/SlideshowShareModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
 
@@ -91,6 +94,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideshowProgress = useRef(new Animated.Value(0)).current;
+
+  // Slideshow music
+  const slideshowSoundRef = useRef<Audio.Sound | null>(null);
+
+  // Share modal
+  const [showSlideshowShare, setShowSlideshowShare] = useState(false);
 
   // Swipe gesture for viewer
   const viewerGoRef = useRef<(dir: -1 | 1) => void>(() => {});
@@ -435,6 +444,10 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const stopSlideshow = () => {
     setSlideshowActive(false);
     if (slideshowRef.current) { clearInterval(slideshowRef.current); slideshowRef.current = null; }
+    if (slideshowSoundRef.current) {
+      slideshowSoundRef.current.unloadAsync();
+      slideshowSoundRef.current = null;
+    }
   };
 
   const SLIDESHOW_INTERVAL = 4000;
@@ -454,6 +467,17 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
+      // Start background music
+      (async () => {
+        try {
+          const track = MUSIC_TRACKS[0]; // 'relaxed' default
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: track.url },
+            { shouldPlay: true, isLooping: true, volume: 0.5 }
+          );
+          slideshowSoundRef.current = sound;
+        } catch {}
+      })();
       // Animate progress bar
       slideshowProgress.setValue(0);
       Animated.timing(slideshowProgress, {
@@ -725,8 +749,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                 </TouchableOpacity>
               )}
               {selectedPhoto && (
-                <TouchableOpacity style={styles.viewerBtn} onPress={() => handleSingleExport(selectedPhoto)}>
-                  <Icon name="share-outline" size={20} color="#FFFFFF" />
+                <TouchableOpacity
+                  style={styles.viewerBtn}
+                  onPress={slideshowActive
+                    ? () => { stopSlideshow(); setShowSlideshowShare(true); }
+                    : () => handleSingleExport(selectedPhoto)
+                  }
+                >
+                  <Icon name={slideshowActive ? 'link-outline' : 'share-outline'} size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
             </View>
@@ -806,6 +836,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </KeyboardAvoidingView>
       </Modal>
+
+      <SlideshowShareModal
+        visible={showSlideshowShare}
+        onClose={() => setShowSlideshowShare(false)}
+        tripId={tripId}
+        tripName={tripName}
+        photoIds={flatPhotos.map(p => p.id)}
+      />
     </View>
   );
 };
