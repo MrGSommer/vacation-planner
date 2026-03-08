@@ -170,6 +170,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      // Offline fallback: if session is null and we're offline,
+      // try reading raw session from localStorage
+      if (!s && Platform.OS === 'web' && !navigator.onLine) {
+        try {
+          const stored = localStorage.getItem(
+            'sb-ogwccvzyhljxwtcbjbsd-auth-token'
+          );
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed?.access_token && parsed?.user) {
+              s = parsed as Session;
+            }
+          }
+        } catch {}
+      }
+
       if (s) {
         // Validate server-side that user still exists (skip when offline)
         if (Platform.OS !== 'web' || navigator.onLine) {
@@ -204,7 +220,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Refresh tokens when connectivity returns
+    const onOnline = () => {
+      supabase.auth.getSession().then(({ data: { session: freshSession } }) => {
+        if (freshSession) {
+          setSession(freshSession);
+          setUser(freshSession.user);
+        }
+      });
+    };
+    if (Platform.OS === 'web') {
+      window.addEventListener('online', onOnline);
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (Platform.OS === 'web') {
+        window.removeEventListener('online', onOnline);
+      }
+    };
   }, []);
 
   // Re-validate on window focus (web) — catches deletions while tab was in background

@@ -176,7 +176,98 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ processed: (trips?.length || 0) + (completedTrips?.length || 0), sent, completionSent }));
+    // 3) Activity digest — new activities in the last 12 hours
+    // Runs at 12:00 and 18:00 UTC (separate cron), or always if invoked
+    let digestSent = 0;
+    const since = new Date(now);
+    since.setHours(since.getHours() - 12);
+
+    // Find activities created in the last 12h for active trips
+    const recentActivities = await sq(
+      `activities?created_at=gte.${since.toISOString()}&select=id,title,trip_id,day_id,created_at,category`
+    );
+
+    if (Array.isArray(recentActivities) && recentActivities.length > 0) {
+      // Group by trip_id
+      const byTrip = new Map<string, typeof recentActivities>();
+      for (const a of recentActivities) {
+        if (!byTrip.has(a.trip_id)) byTrip.set(a.trip_id, []);
+        byTrip.get(a.trip_id)!.push(a);
+      }
+
+      for (const [tid, acts] of byTrip) {
+        const ty = 'activity_digest';
+
+        // Get trip info
+        const tripInfo = await sq(`trips?id=eq.${tid}&select=id,name,destination,start_date,end_date`);
+        if (!Array.isArray(tripInfo) || tripInfo.length === 0) continue;
+        const trip = tripInfo[0];
+
+        // Only active trips (not completed)
+        const tripEnd = new Date(trip.end_date);
+        if (tripEnd < yesterday) continue;
+
+        // Get collaborators
+        const cs = await sq(`trip_collaborators?trip_id=eq.${tid}&select=user_id`);
+        if (!Array.isArray(cs) || cs.length === 0) continue;
+
+        const ps = await sq(
+          `profiles?id=in.(${cs.map((c: any) => c.user_id).join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_email_reminders,notification_push_collaborators`
+        );
+        if (!Array.isArray(ps)) continue;
+
+        for (const p of ps) {
+          if (await wasN(p.id, tid, ty)) continue;
+
+          const wantsPush = p.notification_push_collaborators !== false;
+          const wantsEmail = (p.notification_email_enabled !== false) && (p.notification_email_reminders !== false);
+
+          if (!wantsPush && !wantsEmail) continue;
+
+          const count = acts.length;
+          const pushTitle = `${trip.name}: ${count} neue Aktivit\u00e4t${count === 1 ? '' : 'en'}`;
+          const pushBody = count === 1 ? acts[0].title : `${acts[0].title} und ${count - 1} weitere`;
+
+          if (wantsPush) {
+            const pushResult = await callFn('send-push', {
+              user_id: p.id,
+              title: pushTitle,
+              body: pushBody,
+              url: `${SITE}/trip/${tid}/itinerary`,
+              tag: `digest-${tid}`,
+            });
+            if (pushResult.sent !== false) {
+              await logN(p.id, tid, ty, 'push');
+            }
+          }
+
+          if (wantsEmail) {
+            const g = p.first_name ? `Hallo ${p.first_name}` : 'Hallo';
+            const actList = acts.map((a: any) => `<li>${a.title}</li>`).join('');
+            const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head><body style="font-family:sans-serif;padding:20px;margin:0;background:#f5f5f5"><div style="max-width:500px;margin:0 auto;background:#FFF;border-radius:16px;padding:32px">
+              <h2>${g},</h2>
+              <p><b>${count}</b> neue Aktivit\u00e4t${count === 1 ? '' : 'en'} bei <b>${trip.name}</b>:</p>
+              <ul>${actList}</ul>
+              <a href="${SITE}/trip/${tid}/itinerary" style="display:inline-block;background:#4ECDC4;color:#FFF;padding:10px 20px;border-radius:8px;text-decoration:none;margin-top:12px;font-weight:600">Reise \u00f6ffnen</a>
+              ${footer}
+            </div></body></html>`;
+            const emailResult = await callFn('send-email', {
+              to: p.email,
+              subject: pushTitle,
+              html_body: html,
+              unsubscribe_url: UNSUB,
+            });
+            if (emailResult.sent === true) {
+              await logN(p.id, tid, ty, 'email');
+            }
+          }
+
+          digestSent++;
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ processed: (trips?.length || 0) + (completedTrips?.length || 0), sent, completionSent, digestSent }));
   } catch (e) {
     console.error('trip-reminders: unhandled error:', e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500 });

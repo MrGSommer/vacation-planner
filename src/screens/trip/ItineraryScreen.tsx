@@ -26,7 +26,7 @@ import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 import { useWeather } from '../../hooks/useWeather';
 import { useFlightStatus, getFlightStatusLabel, isVerifiedFlight } from '../../hooks/useFlightStatus';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import { InlineEditText } from '../../components/common/InlineEditText';
+// InlineEditText removed — tap card to edit via modal
 import { ContextMenu, ContextMenuItem } from '../../components/common/ContextMenu';
 import { NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import { PollCard, CreatePollModal } from '../../components/common/PollCard';
@@ -37,6 +37,14 @@ import { ActivityReaction } from '../../types/database';
 import { usePresence } from '../../hooks/usePresence';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
+
+const filterActivitiesByDay = (all: Activity[], dayId: string): Activity[] =>
+  all.filter(a => a.day_id === dayId).sort((a, b) => {
+    if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time) || (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    if (a.start_time && !b.start_time) return -1;
+    if (!a.start_time && b.start_time) return 1;
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
 
 export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
@@ -149,7 +157,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         const todayDay = existingDays.find(d => d.date === today);
         const targetDay = todayDay || existingDays[0];
         setSelectedDayId(targetDay.id);
-        const acts = await getActivities(targetDay.id);
+        let acts: Activity[];
+        try { acts = await getActivities(targetDay.id); }
+        catch { acts = filterActivitiesByDay(fetchedAllActivities, targetDay.id); }
         setActivities(acts);
         if (todayDay) {
           const idx = existingDays.indexOf(todayDay);
@@ -171,7 +181,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const loadDayActivities = useCallback(async (dayId: string) => {
     setSelectedDayId(dayId);
     scrollToActiveTab(dayId);
-    const acts = await getActivities(dayId);
+    let acts: Activity[];
+    try { acts = await getActivities(dayId); }
+    catch { acts = filterActivitiesByDay(allTripActivities, dayId); }
     setActivities(acts);
     // Load reactions + document indicators for visible activities
     if (acts.length > 0) {
@@ -182,7 +194,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setReactionsMap({});
       setDocActivityIds(new Set());
     }
-  }, [scrollToActiveTab]);
+  }, [scrollToActiveTab, allTripActivities]);
 
   useEffect(() => { loadTripData(); }, [loadTripData]);
 
@@ -496,12 +508,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
         <View style={styles.accommodationIcon}><Icon name="bed-outline" size={iconSize.lg} color={colors.primary} /></View>
         <View style={styles.accommodationInfo}>
-          <InlineEditText
-            value={hotel.title}
-            onSave={(v) => updateActivity(hotel.id, { title: v }).then(() => { if (selectedDayId) loadDayActivities(selectedDayId); })}
-            style={styles.accommodationName}
-            maxLength={100}
-          />
+          <Text style={styles.accommodationName} numberOfLines={1}>{hotel.title}</Text>
           {nights && <Text style={styles.accommodationNights}>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</Text>}
           {hotel.location_name && <Text style={styles.accommodationAddress}>{hotel.location_name}</Text>}
         </View>
@@ -681,34 +688,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                       <Icon name={getActivityIconName(activity.category, activity.category_data)} size={iconSize.sm} color={CATEGORY_COLORS[activity.category] || colors.primary} />
                     </View>
                     <View style={styles.activityInfo}>
-                      <InlineEditText
-                        value={activity.title}
-                        onSave={(v) => updateActivity(activity.id, { title: v }).then(() => { if (selectedDayId) loadDayActivities(selectedDayId); })}
-                        style={styles.activityTitle}
-                        maxLength={100}
-                      />
-                      <InlineEditText
-                        value={activity.start_time ? formatTime(activity.start_time) : ''}
-                        onSave={(v) => {
-                          const trimmed = v.trim();
-                          if (!trimmed) {
-                            updateActivity(activity.id, { start_time: null }).then(() => {
-                              if (selectedDayId) loadDayActivities(selectedDayId);
-                            });
-                            return;
-                          }
-                          const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
-                          if (!timeMatch) return;
-                          const time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-                          updateActivity(activity.id, { start_time: time }).then(() => {
-                            if (selectedDayId) resortActivitiesByTime(selectedDayId).then(() => loadDayActivities(selectedDayId));
-                          });
-                        }}
-                        style={activity.start_time ? styles.activityTime : styles.activityTimePlaceholder}
-                        maxLength={5}
-                        placeholder="Uhrzeit hinzufügen"
-                        allowEmpty
-                      />
+                      <Text style={styles.activityTitle} numberOfLines={2}>{activity.title}</Text>
+                      {activity.start_time ? <Text style={styles.activityTime}>{formatTime(activity.start_time)}</Text> : null}
                     </View>
                     {/* Flight status badge — verified flights always show badge */}
                     {activity.category === 'transport' && activity.category_data?.transport_type === 'Flug' && activity.category_data?.flight_verified && (() => {
