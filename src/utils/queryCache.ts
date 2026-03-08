@@ -13,61 +13,65 @@ const FRESH_TTL = 30_000;    // 30s fresh
 const STALE_TTL = 120_000;   // 120s stale-while-revalidate
 
 // --- localStorage persistence (web only) ---
+// All cache entries stored in a single localStorage key as one object
 
-const STORAGE_PREFIX = 'wf_cache:';
-const MANIFEST_KEY = 'wf_cache:__keys__';
+const STORAGE_KEY = 'wf_cache';
+
+type StorageMap = Record<string, { data: any; timestamp: number }>;
 
 function isWeb(): boolean {
   return Platform.OS === 'web';
 }
 
-function getManifest(): string[] {
-  if (!isWeb()) return [];
+let _storageCache: StorageMap | null = null;
+
+function getStorageMap(): StorageMap {
+  if (_storageCache) return _storageCache;
+  if (!isWeb()) return {};
   try {
-    const raw = localStorage.getItem(MANIFEST_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    _storageCache = raw ? JSON.parse(raw) : {};
+    return _storageCache!;
   } catch {
-    return [];
+    _storageCache = {};
+    return _storageCache;
   }
 }
 
-function addToManifest(key: string): void {
+function saveStorageMap(map: StorageMap): void {
   if (!isWeb()) return;
+  _storageCache = map;
   try {
-    const keys = getManifest();
-    if (!keys.includes(key)) {
-      keys.push(key);
-      localStorage.setItem(MANIFEST_KEY, JSON.stringify(keys));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // QuotaExceeded — try to trim oldest entries
+    try {
+      const entries = Object.entries(map);
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      // Remove oldest 25%
+      const trimmed = Object.fromEntries(entries.slice(Math.floor(entries.length * 0.25)));
+      _storageCache = trimmed;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    } catch {
+      // Give up silently
     }
-  } catch {}
-}
-
-function removeFromManifest(key: string): void {
-  if (!isWeb()) return;
-  try {
-    const keys = getManifest().filter(k => k !== key);
-    localStorage.setItem(MANIFEST_KEY, JSON.stringify(keys));
-  } catch {}
+  }
 }
 
 function persistToStorage(key: string, data: any): void {
   if (!isWeb()) return;
-  try {
-    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify({ data, timestamp: Date.now() }));
-    addToManifest(key);
-  } catch {
-    // QuotaExceeded or other error — silently ignore
-  }
+  const map = getStorageMap();
+  map[key] = { data, timestamp: Date.now() };
+  saveStorageMap(map);
 }
 
 export function loadFromStorage<T>(key: string): CacheEntry<T> | null {
   if (!isWeb()) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.data !== undefined && parsed.timestamp) {
-      return { data: parsed.data, timestamp: parsed.timestamp };
+    const map = getStorageMap();
+    const entry = map[key];
+    if (entry && entry.data !== undefined && entry.timestamp) {
+      return { data: entry.data, timestamp: entry.timestamp };
     }
     return null;
   } catch {
@@ -77,10 +81,9 @@ export function loadFromStorage<T>(key: string): CacheEntry<T> | null {
 
 function removeFromStorage(key: string): void {
   if (!isWeb()) return;
-  try {
-    localStorage.removeItem(STORAGE_PREFIX + key);
-    removeFromManifest(key);
-  } catch {}
+  const map = getStorageMap();
+  delete map[key];
+  saveStorageMap(map);
 }
 
 // --- cachedQuery ---
@@ -178,22 +181,23 @@ export function invalidateCache(prefix: string): void {
   }
   // Also remove from localStorage
   if (isWeb()) {
-    for (const key of getManifest()) {
+    const map = getStorageMap();
+    let changed = false;
+    for (const key of Object.keys(map)) {
       if (key.startsWith(prefix)) {
-        removeFromStorage(key);
+        delete map[key];
+        changed = true;
       }
     }
+    if (changed) saveStorageMap(map);
   }
 }
 
 export function clearCache(): void {
   cache.clear();
   inflight.clear();
-  // Clear all localStorage cache entries
+  _storageCache = null;
   if (isWeb()) {
-    for (const key of getManifest()) {
-      try { localStorage.removeItem(STORAGE_PREFIX + key); } catch {}
-    }
-    try { localStorage.removeItem(MANIFEST_KEY); } catch {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }
 }
