@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import { getTrips, getTrip } from '../api/trips';
 import { getDays, getActivitiesForTrip } from '../api/itineraries';
 import { getBudgetCategories, getExpenses, getTripExpenseTotal } from '../api/budgets';
-import { getPhotos } from '../api/photos';
 import { getDocuments, getActivityIdsWithDocuments } from '../api/documents';
 import { getCollaborators } from '../api/invitations';
 import { getStops } from '../api/stops';
@@ -38,11 +37,10 @@ export async function prefetchAllData(userId: string): Promise<void> {
 async function prefetchTrip(tripId: string): Promise<void> {
   try {
     // These all go through cachedQuery → auto-persisted to localStorage
-    const [, activities, , photos, , , budgetCats] = await Promise.all([
+    const [, activities] = await Promise.all([
       getTrip(tripId),
       getActivitiesForTrip(tripId),
       getTripExpenseTotal(tripId).catch(() => 0),
-      getPhotos(tripId).catch(() => []),
       getCollaborators(tripId).catch(() => []),
       getStops(tripId).catch(() => []),
       getBudgetCategories(tripId).catch(() => []),
@@ -79,10 +77,6 @@ async function prefetchTrip(tripId: string): Promise<void> {
       }
     }
 
-    // Warm SW cache for photo thumbnails
-    for (const photo of photos) {
-      warmSwCache(photo.thumbnail_url || photo.url);
-    }
   } catch {
     // Silent
   }
