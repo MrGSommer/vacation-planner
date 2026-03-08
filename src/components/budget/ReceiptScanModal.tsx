@@ -640,6 +640,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: Platform.OS === 'web' ? 6 : spacing.xs,
     ...typography.bodySmall,
+    fontSize: 16,
     color: colors.text,
   },
   itemInputCenter: { textAlign: 'center' },

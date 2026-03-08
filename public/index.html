@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
     <title>WayFable</title>
 
     <!-- Favicon -->
@@ -37,6 +37,10 @@
         display: flex;
         height: 100%;
         flex: 1;
+      }
+      /* Prevent iOS auto-zoom on input focus (triggers at font-size < 16px) */
+      input, textarea, select {
+        font-size: 16px !important;
       }
       /* Crawler-visible footer hidden when JS renders the app */
       #crawler-footer {

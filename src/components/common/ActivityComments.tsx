@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     ...typography.bodySmall,
+    fontSize: 16,
     color: colors.text,
     backgroundColor: colors.background,
     borderRadius: borderRadius.md,
