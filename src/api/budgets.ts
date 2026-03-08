@@ -6,13 +6,15 @@ import { cachedQuery, invalidateCache } from '../utils/queryCache';
 export const getBudgetCategories = async (
   tripId: string
 ): Promise<BudgetCategory[]> => {
-  const { data, error } = await supabase
-    .from('budget_categories')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('name');
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`budgetCats:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('budget_categories')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 const _createBudgetCategory = async (
@@ -24,6 +26,7 @@ const _createBudgetCategory = async (
     .select()
     .single();
   if (error) throw error;
+  invalidateCache(`budgetCats:${tripId}`);
   return data;
 };
 
@@ -32,7 +35,7 @@ export const createBudgetCategory = async (
 ): Promise<BudgetCategory> => {
   return offlineMutation({
     operation: 'createBudgetCategory', table: 'budget_categories',
-    args: [tripId, name, color, budgetLimit], cacheKeys: [],
+    args: [tripId, name, color, budgetLimit], cacheKeys: [`budgetCats:${tripId}`],
     fn: _createBudgetCategory,
     optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, name, color, budget_limit: budgetLimit, created_at: new Date().toISOString() } as BudgetCategory,
   });
@@ -65,12 +68,13 @@ export const updateBudgetCategory = async (
 const _deleteBudgetCategory = async (id: string): Promise<void> => {
   const { error } = await supabase.from('budget_categories').delete().eq('id', id);
   if (error) throw error;
+  invalidateCache('budgetCats:');
 };
 
 export const deleteBudgetCategory = async (id: string): Promise<void> => {
   return offlineMutation({
     operation: 'deleteBudgetCategory', table: 'budget_categories',
-    args: [id], cacheKeys: [],
+    args: [id], cacheKeys: ['budgetCats:'],
     fn: _deleteBudgetCategory,
   });
 };
@@ -78,13 +82,15 @@ export const deleteBudgetCategory = async (id: string): Promise<void> => {
 export const getExpenses = async (
   tripId: string
 ): Promise<Expense[]> => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .select('*, budget_categories(name, color)')
-    .eq('trip_id', tripId)
-    .order('date', { ascending: false });
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`expenses:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*, budget_categories(name, color)')
+      .eq('trip_id', tripId)
+      .order('date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 const _createExpense = async (
@@ -97,6 +103,7 @@ const _createExpense = async (
     .single();
   if (error) throw error;
   invalidateCache(`expenseTotal:${expense.trip_id}`);
+  invalidateCache(`expenses:${expense.trip_id}`);
   return data;
 };
 
@@ -104,7 +111,7 @@ export const createExpense = async (
   expense: Omit<Expense, 'id' | 'created_at' | 'budget_categories' | 'receipt_id' | 'creator_name'> & { receipt_id?: string | null; creator_name?: string | null }
 ): Promise<Expense> => {
   return offlineMutation({
-    operation: 'createExpense', table: 'expenses', args: [expense], cacheKeys: [],
+    operation: 'createExpense', table: 'expenses', args: [expense], cacheKeys: [`expenses:${expense.trip_id}`, `expenseTotal:${expense.trip_id}`],
     fn: _createExpense,
     optimisticResult: { ...expense, id: `temp_${Date.now()}`, created_at: new Date().toISOString(), budget_categories: null } as any,
   });
@@ -137,11 +144,12 @@ const _deleteExpense = async (id: string): Promise<void> => {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
   invalidateCache('expenseTotal:');
+  invalidateCache('expenses:');
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {
   return offlineMutation({
-    operation: 'deleteExpense', table: 'expenses', args: [id], cacheKeys: [],
+    operation: 'deleteExpense', table: 'expenses', args: [id], cacheKeys: ['expenses:', 'expenseTotal:'],
     fn: _deleteExpense,
   });
 };
