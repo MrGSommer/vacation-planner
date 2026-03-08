@@ -1,15 +1,18 @@
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { ActivityDocument } from '../types/database';
+import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getDocuments = async (activityId: string): Promise<ActivityDocument[]> => {
-  const { data, error } = await supabase
-    .from('activity_documents')
-    .select('*')
-    .eq('activity_id', activityId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`docs:${activityId}`, async () => {
+    const { data, error } = await supabase
+      .from('activity_documents')
+      .select('*')
+      .eq('activity_id', activityId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 /**
@@ -138,6 +141,7 @@ export const uploadDocument = async (
     .select()
     .single();
   if (error) throw error;
+  invalidateCache(`docs:${activityId}`);
   return data;
 };
 
@@ -156,4 +160,5 @@ export const deleteDocument = async (doc: ActivityDocument): Promise<void> => {
   await supabase.storage.from('activity-documents').remove([doc.storage_path]);
   const { error } = await supabase.from('activity_documents').delete().eq('id', doc.id);
   if (error) throw error;
+  invalidateCache(`docs:${doc.activity_id}`);
 };

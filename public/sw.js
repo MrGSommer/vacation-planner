@@ -68,6 +68,27 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
+  // Cache-first for Supabase Storage public files (photos, documents)
+  // These URLs are immutable (contain timestamp in filename)
+  if (url.hostname.includes('supabase') && url.pathname.includes('/storage/v1/object/public/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        }).catch(() => {
+          // Offline and not cached — return a simple offline response
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        });
+      })
+    );
+    return;
+  }
+
   // Network-only for API calls (Supabase, Google, Stripe, Anthropic) and version check
   if (
     url.hostname.includes('supabase') ||
