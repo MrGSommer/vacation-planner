@@ -141,6 +141,17 @@ export const uploadDocument = async (
   return data;
 };
 
+/** Returns set of activity IDs that have at least one document */
+export const getActivityIdsWithDocuments = async (activityIds: string[]): Promise<Set<string>> => {
+  if (activityIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('activity_documents')
+    .select('activity_id')
+    .in('activity_id', activityIds);
+  if (error) return new Set();
+  return new Set((data || []).map(d => d.activity_id));
+};
+
 export const deleteDocument = async (doc: ActivityDocument): Promise<void> => {
   await supabase.storage.from('activity-documents').remove([doc.storage_path]);
   const { error } = await supabase.from('activity_documents').delete().eq('id', doc.id);

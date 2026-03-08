@@ -32,6 +32,7 @@ import { NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import { PollCard, CreatePollModal } from '../../components/common/PollCard';
 import { getPolls, PollWithVotes } from '../../api/polls';
 import { getReactionsByActivities } from '../../api/comments';
+import { getActivityIdsWithDocuments } from '../../api/documents';
 import { ActivityReaction } from '../../types/database';
 import { usePresence } from '../../hooks/usePresence';
 
@@ -67,6 +68,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [polls, setPolls] = useState<PollWithVotes[]>([]);
   const [showPollModal, setShowPollModal] = useState(false);
   const [reactionsMap, setReactionsMap] = useState<Record<string, ActivityReaction[]>>({});
+  const [docActivityIds, setDocActivityIds] = useState<Set<string>>(new Set());
   const tabScrollRef = useRef<ScrollView>(null);
   const tabWidths = useRef<number[]>([]);
 
@@ -171,11 +173,14 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     scrollToActiveTab(dayId);
     const acts = await getActivities(dayId);
     setActivities(acts);
-    // Load reactions for visible activities
+    // Load reactions + document indicators for visible activities
     if (acts.length > 0) {
-      getReactionsByActivities(acts.map(a => a.id)).then(setReactionsMap).catch(() => {});
+      const ids = acts.map(a => a.id);
+      getReactionsByActivities(ids).then(setReactionsMap).catch(() => {});
+      getActivityIdsWithDocuments(ids).then(setDocActivityIds).catch(() => {});
     } else {
       setReactionsMap({});
+      setDocActivityIds(new Set());
     }
   }, [scrollToActiveTab]);
 
@@ -715,6 +720,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                         </View>
                       ) : null;
                     })()}
+                    {docActivityIds.has(activity.id) && (
+                      <Icon name="attach-outline" size={14} color={colors.textLight} />
+                    )}
                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(activity.id); }} style={styles.deleteBtn}>
                       <Icon name={NAV_ICONS.close} size={iconSize.xs} color={colors.error} />
                     </TouchableOpacity>
