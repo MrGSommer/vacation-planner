@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, Platform } from 'react-native';
 import * as ExpoDocumentPicker from 'expo-document-picker';
 import { getDocuments, uploadDocument, deleteDocument } from '../../api/documents';
 import { ActivityDocument } from '../../types/database';
+import { useRealtime, RealtimePayload } from '../../hooks/useRealtime';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
@@ -15,11 +16,11 @@ interface Props {
 }
 
 const FILE_ICONS: Record<string, string> = {
-  'application/pdf': '📄',
-  'image/jpeg': '🖼️',
-  'image/png': '🖼️',
-  'image/webp': '🖼️',
-  default: '📎',
+  'application/pdf': 'document-text-outline',
+  'image/jpeg': 'image-outline',
+  'image/png': 'image-outline',
+  'image/webp': 'image-outline',
+  default: 'attach-outline',
 };
 
 const getFileIcon = (type: string) => FILE_ICONS[type] || FILE_ICONS.default;
@@ -37,11 +38,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    loadDocuments();
-  }, [activityId]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       const docs = await getDocuments(activityId);
       setDocuments(docs);
@@ -50,7 +47,28 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
     } finally {
       setLoading(false);
     }
-  };
+  }, [activityId]);
+
+  useEffect(() => { loadDocuments(); }, [loadDocuments]);
+
+  // Live updates from other users
+  const handleRealtime = useCallback((payload?: RealtimePayload) => {
+    if (!payload) return;
+    if (payload.eventType === 'INSERT' && payload.new) {
+      const doc = payload.new as ActivityDocument;
+      if (doc.activity_id === activityId) {
+        setDocuments(prev => {
+          if (prev.some(d => d.id === doc.id)) return prev;
+          return [doc, ...prev];
+        });
+      }
+    } else if (payload.eventType === 'DELETE' && payload.old) {
+      const old = payload.old as { id: string };
+      setDocuments(prev => prev.filter(d => d.id !== old.id));
+    }
+  }, [activityId]);
+
+  useRealtime('activity_documents', `activity_id=eq.${activityId}`, handleRealtime);
 
   const handlePick = async () => {
     try {
@@ -84,7 +102,12 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
       }
 
       if (uploaded.length > 0) {
-        setDocuments(prev => [...uploaded, ...prev]);
+        // Realtime will add them, but also add optimistically to avoid flicker
+        setDocuments(prev => {
+          const existingIds = new Set(prev.map(d => d.id));
+          const newDocs = uploaded.filter(d => !existingIds.has(d.id));
+          return [...newDocs, ...prev];
+        });
         const msg = uploaded.length === 1
           ? 'Dokument hochgeladen'
           : `${uploaded.length} Dokumente hochgeladen`;
@@ -133,13 +156,15 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
 
       {documents.map(doc => (
         <TouchableOpacity key={doc.id} style={styles.docRow} onPress={() => handleOpen(doc)} activeOpacity={0.7}>
-          <Text style={styles.docIcon}>{getFileIcon(doc.file_type)}</Text>
+          <View style={styles.docIconWrap}>
+            <Icon name={getFileIcon(doc.file_type)} size={18} color={colors.primary} />
+          </View>
           <View style={styles.docInfo}>
             <Text style={styles.docName} numberOfLines={1}>{doc.file_name}</Text>
-            {doc.file_size && <Text style={styles.docSize}>{formatFileSize(doc.file_size)}</Text>}
+            {doc.file_size ? <Text style={styles.docSize}>{formatFileSize(doc.file_size)}</Text> : null}
           </View>
           {!readOnly && (
-            <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleDelete(doc); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); handleDelete(doc); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Icon name="close-circle" size={16} color={colors.error} />
             </TouchableOpacity>
           )}
@@ -152,7 +177,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <>
-              <Text style={styles.uploadIcon}>+</Text>
+              <Icon name="cloud-upload-outline" size={18} color={colors.primary} />
               <Text style={styles.uploadText}>Dokumente hinzufügen</Text>
             </>
           )}
@@ -177,11 +202,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  docIcon: { fontSize: 20, marginRight: spacing.sm },
+  docIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.primary + '12', alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
   docInfo: { flex: 1 },
   docName: { ...typography.bodySmall, fontWeight: '500' },
   docSize: { ...typography.caption, color: colors.textLight },
-  docDelete: { fontSize: 14, color: colors.error, padding: spacing.xs },
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -194,7 +218,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     gap: spacing.xs,
   },
-  uploadIcon: { fontSize: 18, color: colors.primary, fontWeight: '300' },
   uploadText: { ...typography.bodySmall, color: colors.textSecondary },
   emptyText: { ...typography.bodySmall, color: colors.textLight, textAlign: 'center', paddingVertical: spacing.sm },
 });

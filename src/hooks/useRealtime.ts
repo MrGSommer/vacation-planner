@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-type TableName = 'activities' | 'expenses' | 'packing_items' | 'photos' | 'budget_categories' | 'trip_collaborators' | 'itinerary_days' | 'receipts';
+type TableName = 'activities' | 'expenses' | 'packing_items' | 'photos' | 'budget_categories' | 'trip_collaborators' | 'itinerary_days' | 'receipts' | 'activity_documents';
 
 export interface RealtimePayload {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
