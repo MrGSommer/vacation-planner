@@ -89,14 +89,13 @@ async function prefetchTrip(tripId: string): Promise<void> {
 }
 
 /**
- * Trigger a fetch so the Service Worker caches the response.
- * Uses a low-priority, no-cors request to avoid blocking.
+ * Trigger a fetch so the Service Worker intercepts and caches the response.
+ * Uses cors mode so the SW gets a proper response (not opaque) with response.ok=true.
  */
 function warmSwCache(url: string | null): void {
   if (!url) return;
   try {
-    // Fire-and-forget — SW intercepts and caches
-    fetch(url, { mode: 'no-cors', priority: 'low' } as any).catch(() => {});
+    fetch(url, { priority: 'low' } as any).catch(() => {});
   } catch {
     // ignore
   }
