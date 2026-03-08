@@ -237,6 +237,18 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => { fetchTrips().finally(() => setInitialLoad(false)); }, [fetchTrips]);
   useEffect(() => { loadCollaborators(); }, [loadCollaborators]);
 
+  // Background prefetch: cache all trip data for offline use
+  useEffect(() => {
+    if (!user?.id || initialLoad || loading) return;
+    // Delay to not compete with initial render
+    const timer = setTimeout(() => {
+      import('../../utils/prefetch').then(({ prefetchAllData }) => {
+        prefetchAllData(user.id).catch(() => {});
+      });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [user?.id, initialLoad, loading]);
+
   // Check for recently completed create-mode Fable jobs
   useEffect(() => {
     if (!user?.id) return;

@@ -4,13 +4,15 @@ import { cachedQuery, invalidateCache } from '../utils/queryCache';
 import { offlineMutation } from '../utils/offlineMutation';
 
 export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
-  const { data, error } = await supabase
-    .from('itinerary_days')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('date');
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`days:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('itinerary_days')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('date');
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 const _createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
@@ -20,13 +22,14 @@ const _createDay = async (tripId: string, date: string): Promise<ItineraryDay> =
     .select()
     .single();
   if (error) throw error;
+  invalidateCache(`days:${tripId}`);
   return data;
 };
 
 export const createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
   return offlineMutation({
     operation: 'createDay', table: 'itinerary_days', args: [tripId, date],
-    cacheKeys: [`activities:${tripId}`],
+    cacheKeys: [`activities:${tripId}`, `days:${tripId}`],
     fn: _createDay,
     optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, date, created_at: new Date().toISOString() } as ItineraryDay,
   });
@@ -125,12 +128,13 @@ export const createActivities = async (activities: Omit<Activity, 'id' | 'create
 const _deleteDay = async (dayId: string): Promise<void> => {
   const { error } = await supabase.from('itinerary_days').delete().eq('id', dayId);
   if (error) throw error;
+  invalidateCache('days:');
 };
 
 export const deleteDay = async (dayId: string): Promise<void> => {
   return offlineMutation({
     operation: 'deleteDay', table: 'itinerary_days', args: [dayId],
-    cacheKeys: ['activities:'],
+    cacheKeys: ['activities:', 'days:'],
     fn: _deleteDay,
   });
 };
