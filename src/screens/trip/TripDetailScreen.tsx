@@ -84,7 +84,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       const [t, activities, spent, collabs, photos] = await Promise.all([
         getTrip(tripId),
         getActivitiesForTrip(tripId),
-        getTripExpenseTotal(tripId),
+        getTripExpenseTotal(tripId).catch(() => 0),
         getCollaborators(tripId).catch(() => []),
         getPhotos(tripId).catch(() => []),
       ]);
@@ -96,6 +96,14 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       setPhotoCount(photos.length);
     } catch (e) {
       console.error(e);
+      // Offline fallback: try loading trip from localStorage cache
+      if (!trip) {
+        try {
+          const { loadFromStorage } = await import('../../utils/queryCache');
+          const stored = loadFromStorage<Trip>(`trip:${tripId}`);
+          if (stored) setTrip(stored.data);
+        } catch {}
+      }
     } finally {
       setLoading(false);
     }

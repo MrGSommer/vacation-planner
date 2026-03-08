@@ -12,7 +12,7 @@ export function OfflineBanner() {
 
   const message = pendingCount > 0
     ? `Offline — ${pendingCount} Aenderung${pendingCount > 1 ? 'en' : ''} warten auf Sync`
-    : 'Offline — einige Funktionen sind nicht verfuegbar';
+    : 'Offline — gespeicherte Daten werden angezeigt';
 
   return (
     <View style={styles.banner}>

@@ -1,15 +1,18 @@
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { Photo, ItineraryDay } from '../types/database';
+import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getPhotos = async (tripId: string): Promise<Photo[]> => {
-  const { data, error } = await supabase
-    .from('photos')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('taken_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
+  return cachedQuery(`photos:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('photos')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('taken_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 /** Parse EXIF date string (YYYY:MM:DD HH:MM:SS) to ISO string */
@@ -212,6 +215,7 @@ export const uploadPhoto = async (
     .select()
     .single();
   if (error) throw error;
+  invalidateCache(`photos:${tripId}`);
   return data;
 };
 
@@ -233,6 +237,7 @@ export const deletePhoto = async (photo: Photo): Promise<void> => {
   try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
   const { error } = await supabase.from('photos').delete().eq('id', photo.id);
   if (error) throw error;
+  invalidateCache(`photos:${photo.trip_id}`);
 };
 
 export const deletePhotos = async (photos: Photo[]): Promise<void> => {
@@ -242,4 +247,5 @@ export const deletePhotos = async (photos: Photo[]): Promise<void> => {
   try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
   const { error } = await supabase.from('photos').delete().in('id', ids);
   if (error) throw error;
+  if (photos[0]) invalidateCache(`photos:${photos[0].trip_id}`);
 };

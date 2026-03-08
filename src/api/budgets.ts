@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { BudgetCategory, Expense } from '../types/database';
 import { offlineMutation } from '../utils/offlineMutation';
+import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getBudgetCategories = async (
   tripId: string
@@ -95,6 +96,7 @@ const _createExpense = async (
     .select('*, budget_categories(name, color)')
     .single();
   if (error) throw error;
+  invalidateCache(`expenseTotal:${expense.trip_id}`);
   return data;
 };
 
@@ -134,6 +136,7 @@ export const updateExpense = async (
 const _deleteExpense = async (id: string): Promise<void> => {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
+  invalidateCache('expenseTotal:');
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {
@@ -144,10 +147,12 @@ export const deleteExpense = async (id: string): Promise<void> => {
 };
 
 export const getTripExpenseTotal = async (tripId: string): Promise<number> => {
-  const { data, error } = await supabase
-    .from('expenses')
-    .select('amount')
-    .eq('trip_id', tripId);
-  if (error) throw error;
-  return (data || []).reduce((sum, e) => sum + e.amount, 0);
+  return cachedQuery(`expenseTotal:${tripId}`, async () => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('trip_id', tripId);
+    if (error) throw error;
+    return (data || []).reduce((sum, e) => sum + e.amount, 0);
+  });
 };

@@ -64,3 +64,7 @@ WAYFABLE-SETUP.md
 
 # Local API overview (contains keys/links)
 API_KEYS.local.md
+
+# Icon drafts & export script
+public/icon-drafts/
+scripts/export-icon.mjs

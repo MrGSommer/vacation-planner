@@ -33,7 +33,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const userId = user?.id;
   const fetchTrips = useCallback(async () => {
     if (!userId) { setLoading(false); return; }
-    setLoading(true);
+    // Only show loading skeleton when there's no data yet
+    if (trips.length === 0) setLoading(true);
     try {
       const data = await getTrips(userId);
 

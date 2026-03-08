@@ -57,24 +57,41 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
       const result = await ExpoDocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
+        multiple: true,
       });
 
-      if (result.canceled || !result.assets?.[0]) return;
+      if (result.canceled || !result.assets?.length) return;
 
-      const file = result.assets[0];
       setUploading(true);
+      const uploaded: ActivityDocument[] = [];
+      let failed = 0;
 
-      const doc = await uploadDocument(
-        activityId,
-        tripId,
-        userId,
-        file.uri,
-        file.name,
-        file.mimeType || 'application/octet-stream',
-        file.size,
-      );
-      setDocuments(prev => [doc, ...prev]);
-      showToast('Dokument hochgeladen', 'success');
+      for (const file of result.assets) {
+        try {
+          const doc = await uploadDocument(
+            activityId,
+            tripId,
+            userId,
+            file.uri,
+            file.name,
+            file.mimeType || 'application/octet-stream',
+            file.size,
+          );
+          uploaded.push(doc);
+        } catch {
+          failed++;
+        }
+      }
+
+      if (uploaded.length > 0) {
+        setDocuments(prev => [...uploaded, ...prev]);
+        const msg = uploaded.length === 1
+          ? 'Dokument hochgeladen'
+          : `${uploaded.length} Dokumente hochgeladen`;
+        showToast(failed > 0 ? `${msg} (${failed} fehlgeschlagen)` : msg, failed > 0 ? 'warning' : 'success');
+      } else {
+        showToast('Upload fehlgeschlagen', 'error');
+      }
     } catch {
       showToast('Upload fehlgeschlagen', 'error');
     } finally {
@@ -136,7 +153,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
           ) : (
             <>
               <Text style={styles.uploadIcon}>+</Text>
-              <Text style={styles.uploadText}>Dokument hinzufugen</Text>
+              <Text style={styles.uploadText}>Dokumente hinzufügen</Text>
             </>
           )}
         </TouchableOpacity>

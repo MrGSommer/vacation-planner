@@ -57,6 +57,7 @@
   "devDependencies": {
     "@types/google.maps": "^3.58.1",
     "@types/react": "~19.1.0",
+    "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   },
   "private": true
