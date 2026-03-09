@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { Header, Input, Button, Card, PlaceAutocomplete } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
@@ -12,6 +13,11 @@ import { Icon } from '../../utils/icons';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useToast } from '../../contexts/ToastContext';
+import { uploadCoverImage } from '../../api/trips';
+import { searchPhotos, triggerDownload, UnsplashPhoto } from '../../api/unsplash';
+import { requireOnline } from '../../utils/offlineGate';
+import { extractDominantColor } from '../../utils/colorExtraction';
 import { colors, spacing, borderRadius, typography, gradients, shadows } from '../../utils/theme';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
@@ -21,10 +27,10 @@ type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateTrip'>>();
-  const { create, loading } = useTrips();
-  const { trips } = useTrips();
+  const { create, update, loading, trips } = useTrips();
   const { user } = useAuthContext();
   const { isFeatureAllowed, canAddTrip, aiCredits } = useSubscription();
+  const { showToast } = useToast();
   const [step, setStep] = useState(0);
   const [showAiModal, setShowAiModal] = useState(false);
 
@@ -48,6 +54,86 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const [travelersCount, setTravelersCount] = useState(1);
   const [groupType, setGroupType] = useState<'solo' | 'couple' | 'family' | 'friends' | 'group'>('solo');
   const [notes, setNotes] = useState('');
+
+  // Cover image
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverAttribution, setCoverAttribution] = useState<string | null>(null);
+  const [coverThemeColor, setCoverThemeColor] = useState<string | null>(null);
+  const [localUploadUri, setLocalUploadUri] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const unsplashCache = useRef<UnsplashPhoto[]>([]);
+  const unsplashIndex = useRef(0);
+  const lastQuery = useRef('');
+  const coverMode = localUploadUri ? 'upload' : coverAttribution ? 'unsplash' : 'none';
+
+  const handleUnsplashToggle = async () => {
+    if (unsplashLoading) return;
+
+    if (coverMode === 'unsplash' && unsplashCache.current.length > 0) {
+      unsplashIndex.current = (unsplashIndex.current + 1) % unsplashCache.current.length;
+      const photo = unsplashCache.current[unsplashIndex.current];
+      setCoverImageUrl(photo.urls.regular);
+      setCoverAttribution(`${photo.user.name}|${photo.user.links.html}|${photo.links.html}`);
+      setCoverThemeColor(photo.color || null);
+      setLocalUploadUri(null);
+      triggerDownload(photo);
+      return;
+    }
+
+    const query = (destination || name).trim();
+    if (!query) {
+      showToast('Gib zuerst ein Reiseziel oder einen Namen ein', 'info');
+      return;
+    }
+
+    setUnsplashLoading(true);
+    try {
+      if (query !== lastQuery.current || unsplashCache.current.length === 0) {
+        const results = await searchPhotos(query);
+        unsplashCache.current = results;
+        unsplashIndex.current = 0;
+        lastQuery.current = query;
+      }
+      if (unsplashCache.current.length > 0) {
+        unsplashIndex.current = Math.floor(Math.random() * unsplashCache.current.length);
+        const photo = unsplashCache.current[unsplashIndex.current];
+        setCoverImageUrl(photo.urls.regular);
+        setCoverAttribution(`${photo.user.name}|${photo.user.links.html}|${photo.links.html}`);
+        setCoverThemeColor(photo.color || null);
+        setLocalUploadUri(null);
+        triggerDownload(photo);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUnsplashLoading(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    if (!requireOnline('Cover-Bild hochladen')) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [16, 9],
+    });
+    if (result.canceled) return;
+    const uri = result.assets[0].uri;
+    setLocalUploadUri(uri);
+    setCoverImageUrl(uri);
+    setCoverAttribution(null);
+    setCoverThemeColor(null);
+    unsplashCache.current = [];
+    unsplashIndex.current = 0;
+  };
+
+  const handleClearCover = () => {
+    setCoverImageUrl(null);
+    setCoverAttribution(null);
+    setCoverThemeColor(null);
+    setLocalUploadUri(null);
+    unsplashCache.current = [];
+    unsplashIndex.current = 0;
+  };
 
   const GROUP_TYPES: Array<{ id: typeof groupType; label: string }> = [
     { id: 'solo', label: 'Solo' },
@@ -106,14 +192,16 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleCreate = async () => {
     try {
+      // For unsplash, pass URL directly; for upload, create trip first then upload
+      const isUnsplash = coverMode === 'unsplash';
       const trip = await create({
         name: name.trim(),
         destination: destination.trim(),
         destination_lat: destinationLat,
         destination_lng: destinationLng,
-        cover_image_url: null,
-        cover_image_attribution: null,
-        theme_color: null,
+        cover_image_url: isUnsplash ? coverImageUrl : null,
+        cover_image_attribution: isUnsplash ? coverAttribution : null,
+        theme_color: isUnsplash ? coverThemeColor : null,
         start_date: startDate,
         end_date: endDate,
         status: 'planning',
@@ -129,6 +217,21 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         fable_instruction: null,
         fable_recap: null,
       });
+
+      // Upload own image after trip creation (needs tripId for storage path)
+      if (localUploadUri) {
+        try {
+          const url = await uploadCoverImage(trip.id, localUploadUri);
+          const themeColor = await extractDominantColor(url).catch(() => null);
+          // uploadCoverImage already updates cover_image_url; update theme_color separately
+          if (themeColor) {
+            await update(trip.id, { theme_color: themeColor } as any);
+          }
+        } catch (e) {
+          console.error('Cover upload failed:', e);
+        }
+      }
+
       navigation.replace('TripDetail', { tripId: trip.id });
     } catch (e) {
       console.error(e);
@@ -199,6 +302,48 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                   />
                 </View>
               )}
+
+              <Text style={styles.fieldLabel}>Headerbild</Text>
+              {coverImageUrl ? (
+                <View style={styles.coverPicker}>
+                  <Image source={{ uri: coverImageUrl }} style={styles.coverPreview} />
+                  {unsplashLoading && (
+                    <View style={styles.coverUploading}>
+                      <ActivityIndicator color="#fff" />
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={[styles.coverPicker, styles.coverPlaceholder]}>
+                  <Icon name="image-outline" size={32} color={colors.textLight} />
+                  <Text style={styles.coverPlaceholderText}>Kein Bild (Farbverlauf)</Text>
+                </View>
+              )}
+              <View style={styles.coverActions}>
+                <TouchableOpacity style={styles.coverActionBtn} onPress={handlePickImage} activeOpacity={0.7}>
+                  <Icon name="camera-outline" size={18} color={colors.primary} />
+                  <Text style={styles.coverActionText}>Eigenes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.coverActionBtn, coverMode === 'unsplash' && styles.coverActionBtnActive]}
+                  onPress={handleUnsplashToggle}
+                  disabled={unsplashLoading}
+                  activeOpacity={0.7}
+                >
+                  {unsplashLoading ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Icon name={coverMode === 'unsplash' ? 'refresh-outline' : 'sparkles-outline'} size={18} color={colors.primary} />
+                  )}
+                  <Text style={styles.coverActionText}>{coverMode === 'unsplash' ? 'Nächstes' : 'Vorschlag'}</Text>
+                </TouchableOpacity>
+                {coverImageUrl && (
+                  <TouchableOpacity style={styles.coverActionBtn} onPress={handleClearCover} activeOpacity={0.7}>
+                    <Icon name="close" size={18} color={colors.error} />
+                    <Text style={[styles.coverActionText, { color: colors.error }]}>Standard</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </>
           )}
 
@@ -351,7 +496,16 @@ const styles = StyleSheet.create({
   stepperBtnText: { fontSize: 20, color: colors.primary, fontWeight: '600', lineHeight: 22 },
   stepperBtnTextDisabled: { color: colors.border },
   stepperValue: { ...typography.h2, minWidth: 32, textAlign: 'center' },
-  aiButton: { marginTop: spacing.lg },
+  coverPicker: { borderRadius: borderRadius.lg, overflow: 'hidden', marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  coverPreview: { width: '100%', height: 160 },
+  coverPlaceholder: { height: 120, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  coverPlaceholderText: { ...typography.bodySmall, color: colors.textLight },
+  coverUploading: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  coverActions: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  coverActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingVertical: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  coverActionBtnActive: { borderColor: colors.primary },
+  coverActionText: { ...typography.caption, fontWeight: '600', color: colors.textSecondary },
+  aiButton: { marginTop: spacing.md, marginBottom: spacing.md },
   aiButtonGradient: { padding: spacing.md, borderRadius: borderRadius.lg, alignItems: 'center', ...shadows.sm },
   aiButtonText: { ...typography.button, color: '#FFFFFF', marginBottom: 2 },
   aiButtonSubtext: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },

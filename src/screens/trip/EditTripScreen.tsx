@@ -12,7 +12,8 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getTrip, uploadCoverImage } from '../../api/trips';
 import { requireOnline } from '../../utils/offlineGate';
-import { getDays, getActivities, deleteDay, moveActivitiesToDay } from '../../api/itineraries';
+import { getDays, getActivities, getActivitiesForTrip, deleteDay, shiftDaysToNewDates, deleteAllDays } from '../../api/itineraries';
+import { DateChangeModal } from '../../components/common/DateChangeModal';
 import { searchPhotos, triggerDownload, UnsplashPhoto } from '../../api/unsplash';
 import {
   getCollaborators,
@@ -42,7 +43,8 @@ const roleLabels: Record<string, string> = {
 
 export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
-  const { update, loading: saving } = useTrips();
+  const { update } = useTrips();
+  const [saving, setSaving] = useState(false);
   const { user } = useAuthContext();
   const { showToast } = useToast();
   const [loadingTrip, setLoadingTrip] = useState(true);
@@ -75,6 +77,19 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [fablePackingVisible, setFablePackingVisible] = useState(true);
   const [fableWebSearch, setFableWebSearch] = useState(true);
   const [fableMemoryEnabled, setFableMemoryEnabled] = useState(true);
+
+  // Date change modal
+  const [dateChangeModal, setDateChangeModal] = useState(false);
+  const [dateChangeLoading, setDateChangeLoading] = useState(false);
+  const [dateChangeInfo, setDateChangeInfo] = useState<{
+    affectedCount: number;
+    totalActivities: number;
+    daysRemoved: number;
+    daysAdded: number;
+    isShifted: boolean;
+    removedDays: { id: string; date: string }[];
+    newDates: string[];
+  } | null>(null);
 
   // Cache unsplash results so repeated toggles don't re-fetch
   const unsplashCache = useRef<UnsplashPhoto[]>([]);
@@ -241,69 +256,85 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     const datesChanged = startDate !== originalTrip.start_date || endDate !== originalTrip.end_date;
 
     if (datesChanged) {
-      const oldDates = getDayDates(originalTrip.start_date, originalTrip.end_date);
-      const newDates = getDayDates(startDate, endDate);
-      const newDatesSet = new Set(newDates);
-      const removedDates = oldDates.filter(d => !newDatesSet.has(d));
+      try {
+        const oldDates = getDayDates(originalTrip.start_date, originalTrip.end_date);
+        const newDates = getDayDates(startDate, endDate);
+        const newDatesSet = new Set(newDates);
+        const oldDatesSet = new Set(oldDates);
+        const removedDates = oldDates.filter(d => !newDatesSet.has(d));
+        const addedDates = newDates.filter(d => !oldDatesSet.has(d));
 
-      if (removedDates.length > 0) {
-        const existingDays = await getDays(tripId);
-        const removedDays = existingDays.filter(d => removedDates.includes(d.date));
+        // Check if it's a shift (dates moved but similar length) vs just trimming
+        const isShifted = addedDates.length > 0 && removedDates.length > 0;
 
-        let affectedActivities: { id: string; day_id: string }[] = [];
-        for (const day of removedDays) {
-          const acts = await getActivities(day.id);
-          affectedActivities.push(...acts.map(a => ({ id: a.id, day_id: day.id })));
+        const allActivities = await getActivitiesForTrip(tripId);
+
+        if (allActivities.length > 0 && (removedDates.length > 0 || isShifted)) {
+          const existingDays = await getDays(tripId);
+          const removedDays = existingDays.filter(d => removedDates.includes(d.date));
+
+          // Count activities on removed days
+          let affectedCount = 0;
+          for (const day of removedDays) {
+            const acts = await getActivities(day.id);
+            affectedCount += acts.length;
+          }
+
+          // If shifted but no days technically removed, all activities are "affected"
+          if (isShifted && affectedCount === 0) {
+            affectedCount = allActivities.length;
+          }
+
+          if (affectedCount > 0 || isShifted) {
+            setDateChangeInfo({
+              affectedCount,
+              totalActivities: allActivities.length,
+              daysRemoved: removedDates.length,
+              daysAdded: addedDates.length,
+              isShifted,
+              removedDays: removedDays.map(d => ({ id: d.id, date: d.date })),
+              newDates,
+            });
+            setDateChangeModal(true);
+            return; // Modal callbacks will call saveTrip()
+          }
         }
-
-        if (affectedActivities.length > 0) {
-          return new Promise<void>((resolve) => {
-            Alert.alert(
-              'Aktivitäten betroffen',
-              `${affectedActivities.length} Aktivität(en) liegen auf Tagen ausserhalb der neuen Datumsspanne.`,
-              [
-                { text: 'Abbrechen', style: 'cancel', onPress: () => resolve() },
-                {
-                  text: 'Löschen', style: 'destructive',
-                  onPress: async () => {
-                    for (const day of removedDays) await deleteDay(day.id);
-                    await saveTrip();
-                    resolve();
-                  },
-                },
-                {
-                  text: 'Verschieben',
-                  onPress: async () => {
-                    const allDays = await getDays(tripId);
-                    const newFirstDate = newDates[0];
-                    const newLastDate = newDates[newDates.length - 1];
-                    for (const day of removedDays) {
-                      const acts = await getActivities(day.id);
-                      if (acts.length === 0) continue;
-                      const targetDate = day.date < newFirstDate ? newFirstDate : newLastDate;
-                      let targetDay = allDays.find(d => d.date === targetDate);
-                      if (!targetDay) {
-                        const { createDay } = await import('../../api/itineraries');
-                        targetDay = await createDay(tripId, targetDate);
-                      }
-                      await moveActivitiesToDay(acts.map(a => a.id), targetDay.id);
-                    }
-                    for (const day of removedDays) await deleteDay(day.id);
-                    await saveTrip();
-                    resolve();
-                  },
-                },
-              ],
-            );
-          });
-        }
+      } catch (e) {
+        console.error('Error checking date conflicts:', e);
+        showToast('Fehler beim Prüfen der Aktivitäten', 'error');
+        return;
       }
     }
 
     await saveTrip();
   };
 
+  const handleDateChangeAction = async (action: 'shift' | 'delete-affected' | 'delete-all') => {
+    if (!dateChangeInfo) return;
+    setDateChangeLoading(true);
+    try {
+      if (action === 'shift') {
+        await shiftDaysToNewDates(tripId, dateChangeInfo.newDates);
+      } else if (action === 'delete-affected') {
+        for (const day of dateChangeInfo.removedDays) {
+          await deleteDay(day.id);
+        }
+      } else if (action === 'delete-all') {
+        await deleteAllDays(tripId);
+      }
+      setDateChangeModal(false);
+      setDateChangeInfo(null);
+      await saveTrip();
+    } catch (e) {
+      console.error('Error handling date change:', e);
+      showToast('Fehler beim Anpassen der Aktivitäten', 'error');
+    } finally {
+      setDateChangeLoading(false);
+    }
+  };
+
   const saveTrip = async () => {
+    setSaving(true);
     try {
       await update(tripId, {
         name: name.trim(),
@@ -325,6 +356,9 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       navigation.goBack();
     } catch (e) {
       console.error(e);
+      showToast('Fehler beim Speichern', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -670,6 +704,22 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
           <Button title="Speichern" onPress={handleSave} loading={saving} disabled={!canNext()} style={[styles.footerButton, styles.footerNext]} />
         )}
       </View>
+
+      {dateChangeInfo && (
+        <DateChangeModal
+          visible={dateChangeModal}
+          onClose={() => { setDateChangeModal(false); setDateChangeInfo(null); }}
+          affectedCount={dateChangeInfo.affectedCount}
+          totalActivities={dateChangeInfo.totalActivities}
+          daysRemoved={dateChangeInfo.daysRemoved}
+          daysAdded={dateChangeInfo.daysAdded}
+          isShifted={dateChangeInfo.isShifted}
+          loading={dateChangeLoading}
+          onShift={() => handleDateChangeAction('shift')}
+          onDeleteAffected={() => handleDateChangeAction('delete-affected')}
+          onDeleteAll={() => handleDateChangeAction('delete-all')}
+        />
+      )}
     </View>
   );
 };

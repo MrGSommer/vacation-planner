@@ -143,3 +143,71 @@ export const moveActivitiesToDay = async (activityIds: string[], newDayId: strin
   const { error } = await supabase.from('activities').update({ day_id: newDayId }).in('id', activityIds);
   if (error) throw error;
 };
+
+export const shiftDaysToNewDates = async (tripId: string, newDates: string[]): Promise<void> => {
+  const existingDays = await getDays(tripId);
+  if (existingDays.length === 0) return;
+
+  // Map old day positions (index) to new dates
+  // Day 0 → newDates[0], Day 1 → newDates[1], etc.
+  // Excess days (if trip shortened) → activities move to last new day
+
+  const lastNewDate = newDates[newDates.length - 1];
+
+  // Phase 1: Collect all activities by old day index
+  const dayActivities: { dayIndex: number; activityIds: string[] }[] = [];
+  for (let i = 0; i < existingDays.length; i++) {
+    const acts = await getActivities(existingDays[i].id);
+    if (acts.length > 0) {
+      dayActivities.push({ dayIndex: i, activityIds: acts.map(a => a.id) });
+    }
+  }
+
+  // Phase 2: Ensure target days exist for all new dates
+  const existingDateMap = new Map(existingDays.map(d => [d.date, d]));
+  const targetDayMap = new Map<string, ItineraryDay>();
+
+  for (const date of newDates) {
+    if (existingDateMap.has(date)) {
+      targetDayMap.set(date, existingDateMap.get(date)!);
+    }
+  }
+
+  // Create missing days
+  for (const date of newDates) {
+    if (!targetDayMap.has(date)) {
+      const newDay = await _createDay(tripId, date);
+      targetDayMap.set(date, newDay);
+    }
+  }
+
+  // Phase 3: Move activities to their target days
+  for (const { dayIndex, activityIds } of dayActivities) {
+    const targetDate = dayIndex < newDates.length ? newDates[dayIndex] : lastNewDate;
+    const targetDay = targetDayMap.get(targetDate);
+    if (!targetDay) continue;
+
+    const sourceDay = existingDays[dayIndex];
+    if (sourceDay.id !== targetDay.id) {
+      await moveActivitiesToDay(activityIds, targetDay.id);
+    }
+  }
+
+  // Phase 4: Delete old days that aren't in the new date set
+  const newDatesSet = new Set(newDates);
+  for (const day of existingDays) {
+    if (!newDatesSet.has(day.date)) {
+      await _deleteDay(day.id);
+    }
+  }
+
+  invalidateCache(`days:${tripId}`);
+  invalidateCache(`activities:${tripId}`);
+};
+
+export const deleteAllDays = async (tripId: string): Promise<void> => {
+  const { error } = await supabase.from('itinerary_days').delete().eq('trip_id', tripId);
+  if (error) throw error;
+  invalidateCache(`days:${tripId}`);
+  invalidateCache(`activities:${tripId}`);
+};

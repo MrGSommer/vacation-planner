@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Platform } from 'react-native';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Dimensions } from 'react-native';
 import { Icon, IconName } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
+
+const MENU_WIDTH = 180;
+const ITEM_HEIGHT = 42; // approx per item
 
 export interface ContextMenuItem {
   label: string;
@@ -21,6 +24,29 @@ interface ContextMenuProps {
 export const ContextMenu: React.FC<ContextMenuProps> = ({ visible, onClose, items, position }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  const clampedPos = useMemo(() => {
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : Dimensions.get('window').width;
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : Dimensions.get('window').height;
+    const menuH = items.length * ITEM_HEIGHT;
+
+    let top = position.y;
+    let left = position.x;
+
+    // Clamp right edge
+    if (left + MENU_WIDTH > screenW - 8) {
+      left = screenW - MENU_WIDTH - 8;
+    }
+    left = Math.max(8, left);
+
+    // If menu goes below screen, flip above
+    if (top + menuH > screenH - 8) {
+      top = position.y - menuH;
+    }
+    top = Math.max(8, top);
+
+    return { top, left };
+  }, [position.x, position.y, items.length]);
 
   useEffect(() => {
     if (visible) {
@@ -43,8 +69,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ visible, onClose, item
           style={[
             styles.menu,
             {
-              top: position.y,
-              left: position.x,
+              top: clampedPos.top,
+              left: clampedPos.left,
               opacity: fadeAnim,
               transform: [{ scale: scaleAnim }],
             },

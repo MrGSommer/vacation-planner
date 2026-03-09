@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking, Modal } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,6 +69,9 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const menuBtnRef = useRef<TouchableOpacity>(null);
+  const MENU_HEIGHT = 200;
   const [showClearModal, setShowClearModal] = useState(false);
   const [showChangeLog, setShowChangeLog] = useState(false);
   const presenceUsers = usePresence(tripId, 'TripDetail');
@@ -405,37 +408,32 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               )}
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => setShowMenu(v => !v)} style={styles.menuBtn}>
+          <TouchableOpacity
+            ref={menuBtnRef}
+            onPress={() => {
+              if (menuBtnRef.current) {
+                (menuBtnRef.current as any).measureInWindow?.((x: number, y: number, w: number, h: number) => {
+                  const screenW = typeof window !== 'undefined' ? window.innerWidth : 400;
+                  const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+                  const rightPos = Math.max(8, screenW - x - w);
+                  const belowY = y + h + 4;
+                  if (belowY + MENU_HEIGHT > screenH && y - MENU_HEIGHT - 4 >= 0) {
+                    setMenuPos({ bottom: screenH - y + 4, right: rightPos });
+                  } else {
+                    setMenuPos({ top: Math.min(belowY, screenH - MENU_HEIGHT - 8), right: rightPos });
+                  }
+                  setShowMenu(true);
+                }) || setShowMenu(true);
+              } else {
+                setShowMenu(true);
+              }
+            }}
+            style={styles.menuBtn}
+          >
             <Icon name="ellipsis-horizontal" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
-      {showMenu && (
-        <>
-          <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1} />
-          <View style={styles.menuDropdown}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
-              <Icon name="create-outline" size={18} color={colors.text} />
-              <Text style={styles.menuLabel}>Bearbeiten</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowShareModal(true); }}>
-              <Icon name="share-outline" size={18} color={colors.text} />
-              <Text style={styles.menuLabel}>Teilen & Drucken</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowChangeLog(true); }}>
-              <Icon name="time-outline" size={18} color={colors.text} />
-              <Text style={styles.menuLabel}>Verlauf</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
-              <Icon name="trash-outline" size={18} color={colors.error} />
-              <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
       <View style={styles.tripNameRow}>
         <Text style={styles.tripName}>{trip.name}</Text>
         {trip.status === 'completed' && (
@@ -709,6 +707,32 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           onCancel={() => { setShowAddActivity(false); setAddActivityDefaults(null); }}
         />
       )}
+
+      <Modal visible={showMenu} transparent animationType="none" onRequestClose={() => setShowMenu(false)}>
+        <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1}>
+          <View style={[styles.menuDropdown, menuPos && { ...(menuPos.top != null ? { top: menuPos.top } : { bottom: menuPos.bottom }), right: menuPos.right }]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
+              <Icon name="create-outline" size={18} color={colors.text} />
+              <Text style={styles.menuLabel}>Bearbeiten</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowShareModal(true); }}>
+              <Icon name="share-outline" size={18} color={colors.text} />
+              <Text style={styles.menuLabel}>Teilen & Drucken</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowChangeLog(true); }}>
+              <Icon name="time-outline" size={18} color={colors.text} />
+              <Text style={styles.menuLabel}>Verlauf</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
+              <Icon name="trash-outline" size={18} color={colors.error} />
+              <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -728,8 +752,8 @@ const styles = StyleSheet.create({
   avatarOverflowText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
   menuText: { color: '#FFFFFF' },
-  menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
-  menuDropdown: { position: 'absolute', top: 52, right: spacing.xl, backgroundColor: colors.card, borderRadius: borderRadius.md, ...shadows.lg, zIndex: 11, minWidth: 190, overflow: 'hidden' },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
+  menuDropdown: { position: 'absolute', backgroundColor: colors.card, borderRadius: borderRadius.md, ...shadows.lg, minWidth: 190, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
   menuLabel: { ...typography.body, fontWeight: '500', marginLeft: spacing.sm },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },

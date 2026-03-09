@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ImageBackground, ScrollView, Modal, ActivityIndicator, Platform } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -52,6 +52,9 @@ const TripCard: React.FC<{
   isPast?: boolean;
 }> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const btnRef = useRef<TouchableOpacity>(null);
+  const MENU_HEIGHT = 210; // approximate menu height (4 items + divider + padding)
   const others = collaborators.filter(c => c.user_id !== currentUserId);
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
@@ -111,7 +114,30 @@ const TripCard: React.FC<{
             )}
           </View>
           <TouchableOpacity
-            onPress={(e: any) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            ref={btnRef}
+            onPress={(e: any) => {
+              e.stopPropagation();
+              if (btnRef.current) {
+                (btnRef.current as any).measureInWindow?.((x: number, y: number, w: number, h: number) => {
+                  const screenW = typeof window !== 'undefined' ? window.innerWidth : 400;
+                  const screenH = typeof window !== 'undefined' ? window.innerHeight : 800;
+                  const rightPos = Math.max(8, screenW - x - w);
+                  const belowY = y + h + 4;
+                  const aboveY = y - MENU_HEIGHT - 4;
+
+                  // Show above if not enough space below, and enough space above
+                  if (belowY + MENU_HEIGHT > screenH && aboveY >= 0) {
+                    setMenuPos({ bottom: screenH - y + 4, right: rightPos });
+                  } else {
+                    // Clamp so menu doesn't go off-screen bottom
+                    setMenuPos({ top: Math.min(belowY, screenH - MENU_HEIGHT - 8), right: rightPos });
+                  }
+                  setMenuOpen(true);
+                }) || setMenuOpen(true);
+              } else {
+                setMenuOpen(true);
+              }
+            }}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.deleteBtn}
           >
@@ -123,7 +149,7 @@ const TripCard: React.FC<{
   );
 
   return (
-    <View style={{ position: 'relative' }}>
+    <>
       <TouchableOpacity style={[styles.card, isPast && styles.cardPast]} onPress={onPress} activeOpacity={0.85}>
         {trip.cover_image_url ? (
           <ImageBackground source={{ uri: trip.cover_image_url }} style={styles.cardGradient}>
@@ -133,10 +159,9 @@ const TripCard: React.FC<{
           cardInner
         )}
       </TouchableOpacity>
-      {menuOpen && (
-        <>
-          <TouchableOpacity style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} activeOpacity={1} />
-          <View style={styles.cardMenu}>
+      <Modal visible={menuOpen} transparent animationType="none" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableOpacity style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} activeOpacity={1}>
+          <View style={[styles.cardMenu, menuPos && { position: 'absolute', right: menuPos.right, ...(menuPos.top != null ? { top: menuPos.top } : { bottom: menuPos.bottom }) }]}>
             <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onEdit(); }}>
               <Icon name="create-outline" size={iconSize.sm} color={colors.accent} />
               <Text style={styles.cardMenuLabel}>Bearbeiten</Text>
@@ -155,9 +180,9 @@ const TripCard: React.FC<{
               <Text style={[styles.cardMenuLabel, { color: colors.error }]}>Löschen</Text>
             </TouchableOpacity>
           </View>
-        </>
-      )}
-    </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 });
 
@@ -641,12 +666,11 @@ const styles = StyleSheet.create({
   cardDates: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
   cardCountdown: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' as const, marginTop: 2 },
   deleteBtn: { padding: spacing.xs },
-  menuBackdrop: { position: 'absolute', top: -200, left: -200, right: -200, bottom: -200, zIndex: 998 },
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
   cardMenu: {
-    position: 'absolute', right: spacing.md, bottom: spacing.md + 24,
     backgroundColor: '#FFFFFF', borderRadius: borderRadius.lg,
-    paddingVertical: spacing.xs, minWidth: 180,
-    ...shadows.lg, zIndex: 999,
+    paddingVertical: spacing.xs, minWidth: 200,
+    ...shadows.lg,
     borderWidth: 1, borderColor: colors.border,
   },
   cardMenuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },

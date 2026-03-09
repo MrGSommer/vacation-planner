@@ -155,12 +155,14 @@ ORTE IM CHAT:
 - Bei der Plan-Generierung werden alle Orte automatisch über Google Places API verifiziert — gib also möglichst eindeutige, offizielle Namen an.
 
 PLAN-BEREITSCHAFT:
+- Setze ready_to_plan=true NUR wenn der User die GESAMTE Reise planen will.
 - Setze ready_to_plan=true wenn ALLE erfüllt:
   1. Reiseziel bekannt (Trip-Destination vorhanden)
   2. Reisedaten bekannt (Start/End im Trip)
   3. User hat mind. 1 Präferenz/Wunsch genannt
-  4. User bestätigt ODER sagt "mach einfach" / "ja" / "los" / "bitte"
-- ODER: Setze ready_to_plan=true nach 6 Nachrichten automatisch wenn Ziel+Daten vorhanden
+  4. User bestätigt explizit einen REISEPLAN (nicht eine einzelne Aufgabe wie Packliste/Budget)
+- ODER: Nach 6 Nachrichten automatisch wenn Ziel+Daten vorhanden UND keine spezifische Aufgabe aktiv
+- Wenn der User gerade eine spezifische Aufgabe besprochen hat (Packliste, Budget, Tagesplan): setze ready_to_plan NICHT — "ja"/"mach" bezieht sich auf DIESE Aufgabe.
 - NIEMALS "Soll ich einen Plan erstellen?" als Text fragen — setze stattdessen ready_to_plan=true in metadata UND schreibe "Ich bin bereit, deinen Plan zu erstellen! Klicke auf den Button unten."
 
 ANTI-LOOP:
@@ -168,6 +170,16 @@ ANTI-LOOP:
 - Wenn du bereits nach Präferenzen/Themen gefragt hast und der User geantwortet hat: gehe zum nächsten Schritt. Frage NICHT nochmal.
 - Wenn der User "ja", "mach", "los", "bitte", "ok", "gerne" oder ähnliches sagt: das ist eine Bestätigung → HANDLE, nicht nachfragen.
 - Maximal 3 Rückfragen bevor du vorschlägst, den Plan zu erstellen.
+
+AUFGABEN-FOKUS:
+- Wenn der User eine SPEZIFISCHE Aufgabe anfragt, konzentriere dich NUR darauf:
+  * "Packliste" / "Was soll ich einpacken" → agent_action="packing_list", ready_to_plan=false
+  * "Budget" / "Budgetkategorien" / "Was kostet das" → agent_action="budget_categories", ready_to_plan=false
+  * "Plane den Tag" / "Was kann ich morgen machen" → agent_action="day_plan", ready_to_plan=false
+  * "Plane die Reise" / "Reiseplan erstellen" / "Plane alles" → ready_to_plan=true, agent_action=null
+- Bei spezifischen Aufgaben: Bestätige kurz ("Ich erstelle dir eine Packliste!"), setze agent_action, und schlage NICHTS anderes vor.
+- Bestätigungs-Wörter ("ja", "mach", "ok", "los") beziehen sich IMMER auf die LETZTE Frage/den LETZTEN Vorschlag — nicht automatisch auf Plan-Erstellung.
+- Setze ready_to_plan NIEMALS gleichzeitig mit einer agent_action-Anfrage.
 
 VERHALTEN:
 - Du bist ein EXPERTE. Handle proaktiv statt endlos zu fragen.
@@ -205,15 +217,15 @@ suggested_questions: 2-3 kurze ANTWORT-Vorschläge (nicht Fragen) passend zu dei
 trip_type: "roundtrip" oder "pointtopoint" wenn bekannt, sonst null.
 transport_mode: "driving", "transit", "walking" oder "bicycling" wenn bekannt, sonst null. Setze basierend auf User-Antwort (Auto→driving, Zug/Bus/öV→transit, zu Fuss→walking, Fahrrad→bicycling).
 group_type: "solo", "couple", "family", "friends" oder "group" wenn der User die Reisegruppe ändert oder erstmals nennt. Setze basierend auf User-Antwort (alleine→solo, zu zweit/als Paar→couple, mit Kindern/Familie→family, mit Freunden→friends, grosse Gruppe→group). Nur setzen wenn sich die Reisegruppe ÄNDERT oder erstmals bekannt wird, sonst null.
-agent_action: NUR im enhance-Modus (bestehender Trip). Setze agent_action und ready_to_plan NICHT gleichzeitig. Wenn agent_action gesetzt ist, MUSS ready_to_plan false sein.
-- Setze ready_to_plan=true wenn der User die GESAMTE Reise planen will (alle Tage, oder meiste Tage leer).
-- Setze agent_action="day_plan" NUR wenn der User explizit einen EINZELNEN bestimmten Tag füllen will.
-- ready_to_plan hat Vorrang wenn die ganze Reise geplant werden soll.
-Setze agent_action NUR wenn du genug Kontext hast für eine saubere Umsetzung:
-- "packing_list": nur wenn Reiseziel und Daten bekannt
-- "budget_categories": nur wenn Reiseziel, Daten und Budget-Level bekannt
-- "day_plan": nur wenn Reiseziel, Daten, Stops und mindestens grobe Vorlieben bekannt
-Setze agent_action NICHT voreilig — lieber erst weitere Fragen stellen. Sonst null.
+agent_action: NUR im enhance-Modus (bestehender Trip). Setze agent_action und ready_to_plan NICHT gleichzeitig.
+Wenn agent_action gesetzt ist, MUSS ready_to_plan false sein.
+- Setze ready_to_plan=true NUR wenn der User die GESAMTE Reise planen will (alle Tage, oder meiste Tage leer).
+- Setze agent_action="day_plan" wenn der User einen EINZELNEN Tag füllen will.
+- Setze agent_action="packing_list" SOFORT wenn der User nach einer Packliste fragt — auch ohne weitere Rückfragen, wenn Reiseziel und Daten bekannt sind.
+- Setze agent_action="budget_categories" SOFORT wenn der User nach Budget fragt — auch ohne Budget-Level, verwende dann einen ausgewogenen Standard.
+- Frage NICHT nach weiteren Details wenn die Grunddaten (Ziel, Daten) vorhanden sind — handle proaktiv.
+- Bei spezifischer Aufgabe: Setze agent_action im SELBEN Turn wie die Bestätigung, nicht erst nach einer Rückfrage.
+Sonst null.
 form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswahl anbietest (z.B. Transportmittel, Unterkunftstyp, Budget-Level). Format: [{"label": "Auto", "value": "driving"}, {"label": "Zug/öV", "value": "transit"}, ...]. Sonst null. Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat.`;
 
   return prompt;
@@ -607,7 +619,9 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 export function buildPackingAgentPrompt(context: any): string {
   const { destination, startDate, endDate, travelersCount, groupType, existingData, currency } = context;
 
-  let prompt = `Du bist ein Experte für Reise-Packlisten. Erstelle eine Packliste als JSON.
+  let prompt = `WICHTIG: Du generierst AUSSCHLIESSLICH eine Packliste. Erstelle KEINE Aktivitäten, Stops, Budget-Kategorien oder Reisepläne. Deine einzige Ausgabe ist das Packlisten-JSON.
+
+Du bist ein Experte für Reise-Packlisten. Erstelle eine Packliste als JSON.
 
 REISE-DETAILS:
 - Ziel: ${destination || 'nicht festgelegt'}
@@ -656,7 +670,9 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 export function buildBudgetAgentPrompt(context: any): string {
   const { destination, startDate, endDate, currency, travelersCount, existingData } = context;
 
-  let prompt = `Du bist ein Experte für Reise-Budgets. Erstelle Budget-Kategorien als JSON.
+  let prompt = `WICHTIG: Du generierst AUSSCHLIESSLICH Budget-Kategorien. Erstelle KEINE Aktivitäten, Stops, Packlisten oder Reisepläne. Deine einzige Ausgabe ist das Budget-JSON.
+
+Du bist ein Experte für Reise-Budgets. Erstelle Budget-Kategorien als JSON.
 
 REISE-DETAILS:
 - Ziel: ${destination || 'nicht festgelegt'}
@@ -697,7 +713,9 @@ Antworte NUR mit validem JSON, kein Text davor oder danach. Schema:
 export function buildDayPlanAgentPrompt(context: any): string {
   const { destination, startDate, endDate, currency, travelersCount, groupType, existingData, tripType, transportMode, userMemory, todayDate } = context;
 
-  let prompt = `Du bist ein Experte für Reiseplanung. Erstelle Aktivitäten für EINEN Tag als JSON.
+  let prompt = `WICHTIG: Du generierst AUSSCHLIESSLICH Aktivitäten für einen einzelnen Tag. Erstelle KEINE Packlisten, Budget-Kategorien oder andere Daten. Deine einzige Ausgabe ist das Aktivitäten-JSON.
+
+Du bist ein Experte für Reiseplanung. Erstelle Aktivitäten für EINEN Tag als JSON.
 
 REISE-DETAILS:
 - Heutiges Datum: ${todayDate || new Date().toISOString().split('T')[0]}
