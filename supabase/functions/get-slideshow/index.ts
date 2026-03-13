@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     // Fetch photos in order
     const photosRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/trip_photos?id=in.(${validPhotoIds.map((id: string) => `"${id}"`).join(',')})&select=id,url`,
+      `${SUPABASE_URL}/rest/v1/photos?id=in.(${validPhotoIds.map((id: string) => `"${id}"`).join(',')})&select=id,url`,
       {
         headers: {
           'apikey': SERVICE_ROLE_KEY,
@@ -93,8 +93,8 @@ Deno.serve(async (req) => {
       music_url: musicUrl,
       expires_at: share.expires_at,
     }, origin);
-  } catch (e) {
+  } catch (e: any) {
     console.error('get-slideshow error:', e);
-    return json({ error: 'Interner Fehler' }, origin, 500);
+    return json({ error: `Interner Fehler: ${e?.message || String(e)}` }, origin, 500);
   }
 });

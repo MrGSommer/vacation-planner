@@ -38,6 +38,36 @@ export const createSlideshowShare = async (params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Nicht eingeloggt');
 
+  // Check for existing valid share for this trip/user
+  const { data: existing } = await supabase
+    .from('slideshow_shares')
+    .select('*')
+    .eq('trip_id', params.tripId)
+    .eq('created_by', user.id)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    // Update existing share (keep token, refresh expiry)
+    const { data, error } = await supabase
+      .from('slideshow_shares')
+      .update({
+        music_track: params.musicTrack,
+        interval_ms: params.intervalMs,
+        photo_ids: params.photoIds,
+        trip_name: params.tripName,
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // Create new share
   const { data, error } = await supabase
     .from('slideshow_shares')
     .insert({
@@ -50,7 +80,6 @@ export const createSlideshowShare = async (params: {
     })
     .select()
     .single();
-
   if (error) throw new Error(error.message);
   return data;
 };
