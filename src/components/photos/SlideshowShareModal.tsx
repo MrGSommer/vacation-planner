@@ -1,9 +1,9 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator,
   Platform, Share as RNShare,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { MUSIC_TRACKS, MusicTrack } from '../../config/music';
@@ -16,6 +16,13 @@ interface Props {
   tripId: string;
   tripName: string;
   photoIds: string[];
+  /** 'settings' = just music+speed, 'share' = settings + create link */
+  mode?: 'settings' | 'share';
+  /** Current values (for settings mode) */
+  initialTrack?: MusicTrack;
+  initialInterval?: number;
+  /** Called when user applies settings (settings mode) */
+  onApply?: (track: MusicTrack, intervalMs: number) => void;
 }
 
 const SPEEDS = [
@@ -26,35 +33,43 @@ const SPEEDS = [
 
 export const SlideshowShareModal: React.FC<Props> = ({
   visible, onClose, tripId, tripName, photoIds,
+  mode = 'share', initialTrack, initialInterval, onApply,
 }) => {
-  const [selectedTrack, setSelectedTrack] = useState<MusicTrack>('relaxed');
-  const [intervalMs, setIntervalMs] = useState(4000);
+  const [selectedTrack, setSelectedTrack] = useState<MusicTrack>(initialTrack || 'relaxed');
+  const [intervalMs, setIntervalMs] = useState(initialInterval || 4000);
   const [creating, setCreating] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [previewingTrack, setPreviewingTrack] = useState<MusicTrack | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
 
-  const stopPreview = useCallback(async () => {
+  // Sync initial values when modal opens
+  useEffect(() => {
+    if (visible) {
+      if (initialTrack) setSelectedTrack(initialTrack);
+      if (initialInterval) setIntervalMs(initialInterval);
+    }
+  }, [visible, initialTrack, initialInterval]);
+
+  const stopPreview = useCallback(() => {
     if (soundRef.current) {
-      try { await soundRef.current.unloadAsync(); } catch {}
+      try { soundRef.current.remove(); } catch {}
       soundRef.current = null;
     }
     setPreviewingTrack(null);
   }, []);
 
-  const togglePreview = useCallback(async (track: MusicTrack) => {
-    await stopPreview();
+  const togglePreview = useCallback((track: MusicTrack) => {
+    stopPreview();
     if (previewingTrack === track) return;
 
     const info = MUSIC_TRACKS.find(t => t.id === track);
     if (!info) return;
     try {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: info.url },
-        { shouldPlay: true, volume: 0.5 }
-      );
-      soundRef.current = sound;
+      const player = createAudioPlayer(info.url);
+      player.volume = 0.5;
+      player.play();
+      soundRef.current = player;
       setPreviewingTrack(track);
       setTimeout(() => stopPreview(), 8000);
     } catch {}
@@ -99,6 +114,12 @@ export const SlideshowShareModal: React.FC<Props> = ({
     }
   };
 
+  const handleApply = () => {
+    stopPreview();
+    onApply?.(selectedTrack, intervalMs);
+    onClose();
+  };
+
   const handleClose = () => {
     stopPreview();
     setShareUrl(null);
@@ -106,12 +127,15 @@ export const SlideshowShareModal: React.FC<Props> = ({
     onClose();
   };
 
+  const isSettings = mode === 'settings';
+
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.overlay}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={handleClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.title}>Diashow teilen</Text>
+            <Text style={styles.title}>{isSettings ? 'Diashow-Einstellungen' : 'Diashow teilen'}</Text>
             <TouchableOpacity onPress={handleClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Icon name="close" size={24} color={colors.text} />
             </TouchableOpacity>
@@ -148,7 +172,7 @@ export const SlideshowShareModal: React.FC<Props> = ({
               </View>
 
               {/* Speed selection */}
-              <Text style={styles.sectionTitle}>Geschwindigkeit</Text>
+              <Text style={styles.sectionTitle}>Anzeigedauer</Text>
               <View style={styles.speedRow}>
                 {SPEEDS.map(s => (
                   <TouchableOpacity
@@ -163,19 +187,26 @@ export const SlideshowShareModal: React.FC<Props> = ({
                 ))}
               </View>
 
-              {/* Info */}
-              <Text style={styles.infoText}>
-                {photoIds.length} Fotos · Link 30 Tage gueltig
-              </Text>
-
-              {/* Create button */}
-              <TouchableOpacity style={styles.createBtn} onPress={handleCreate} disabled={creating}>
-                {creating ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.createBtnText}>Link erstellen</Text>
-                )}
-              </TouchableOpacity>
+              {isSettings ? (
+                /* Settings mode: apply button */
+                <TouchableOpacity style={styles.createBtn} onPress={handleApply}>
+                  <Text style={styles.createBtnText}>Übernehmen</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  {/* Share mode: info + create link */}
+                  <Text style={styles.infoText}>
+                    {photoIds.length} Fotos · Link 30 Tage gültig
+                  </Text>
+                  <TouchableOpacity style={styles.createBtn} onPress={handleCreate} disabled={creating}>
+                    {creating ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.createBtnText}>Link erstellen</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -199,7 +230,8 @@ export const SlideshowShareModal: React.FC<Props> = ({
             </>
           )}
         </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };

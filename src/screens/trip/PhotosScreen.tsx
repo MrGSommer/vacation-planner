@@ -30,7 +30,7 @@ import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 import { usePresence } from '../../hooks/usePresence';
-import { MUSIC_TRACKS } from '../../config/music';
+import { MUSIC_TRACKS, MusicTrack, getMusicUrl } from '../../config/music';
 import { SlideshowShareModal } from '../../components/photos/SlideshowShareModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
@@ -100,8 +100,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   // Slideshow music
   const slideshowSoundRef = useRef<AudioPlayer | null>(null);
 
-  // Slideshow intro
+  // Slideshow intro + settings
   const [showIntro, setShowIntro] = useState(true);
+  const [selectedTrack, setSelectedTrack] = useState<MusicTrack>('relaxed');
+  const [slideshowIntervalMs, setSlideshowIntervalMs] = useState(4000);
+  const [showSlideshowSettings, setShowSlideshowSettings] = useState(false);
 
   // Share modal
   const [showSlideshowShare, setShowSlideshowShare] = useState(false);
@@ -457,7 +460,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const SLIDESHOW_INTERVAL = 4000;
+  const slideshowInterval = slideshowIntervalMs;
 
   // Preload next slideshow image to avoid loading flash
   useEffect(() => {
@@ -474,26 +477,34 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     if (nextUrl) { const img = new window.Image(); img.src = nextUrl; }
   }, [slideshowActive, viewerIndex, flatPhotos, showIntro]);
 
+  // Crossfade: next image fades in over current
+  const [crossfadeUrl, setCrossfadeUrl] = useState<string | null>(null);
+
   const advanceSlideshow = useCallback(() => {
-    // Fade out
-    Animated.timing(fadeAnim, { toValue: 0, duration: 400, useNativeDriver: false }).start(() => {
-      setViewerIndex(prev => {
-        const next = prev + 1 >= flatPhotos.length ? 0 : prev + 1;
-        setSelectedPhoto(flatPhotos[next]);
-        return next;
-      });
-      // Fade in
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: false }).start();
+    const nextIdx = (viewerIndex + 1) % flatPhotos.length;
+    const nextPhoto = flatPhotos[nextIdx];
+    if (!nextPhoto) return;
+
+    // Set next image on top layer, start transparent
+    setCrossfadeUrl(nextPhoto.url);
+    fadeAnim.setValue(0);
+
+    // Fade in the next image over the current
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start(() => {
+      // Swap complete: update the base image and clear overlay
+      setViewerIndex(nextIdx);
+      setSelectedPhoto(nextPhoto);
+      setCrossfadeUrl(null);
+      fadeAnim.setValue(1);
     });
-  }, [fadeAnim, flatPhotos]);
+  }, [fadeAnim, flatPhotos, viewerIndex]);
 
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
       // Start background music (plays during intro too)
       if (!slideshowSoundRef.current) {
         try {
-          const track = MUSIC_TRACKS[0]; // 'relaxed' default
-          const player = createAudioPlayer(track.url);
+          const player = createAudioPlayer(getMusicUrl(selectedTrack));
           player.loop = true;
           player.volume = 0.5;
           player.play();
@@ -502,36 +513,48 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       if (showIntro) {
-        // Intro slide: wait SLIDESHOW_INTERVAL then transition to photos
+        // Intro slide: wait slideshowInterval then transition to photos
         slideshowProgress.setValue(0);
         Animated.timing(slideshowProgress, {
-          toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
+          toValue: 1, duration: slideshowInterval, useNativeDriver: false,
         }).start();
         const introTimer = setTimeout(() => {
           setShowIntro(false);
-        }, SLIDESHOW_INTERVAL);
+        }, slideshowInterval);
         return () => clearTimeout(introTimer);
       }
 
       // Normal slideshow: animate progress bar + advance photos
       slideshowProgress.setValue(0);
       Animated.timing(slideshowProgress, {
-        toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
+        toValue: 1, duration: slideshowInterval, useNativeDriver: false,
       }).start();
       slideshowRef.current = setInterval(() => {
         advanceSlideshow();
         slideshowProgress.setValue(0);
         Animated.timing(slideshowProgress, {
-          toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
+          toValue: 1, duration: slideshowInterval, useNativeDriver: false,
         }).start();
-      }, SLIDESHOW_INTERVAL);
+      }, slideshowInterval);
     } else {
       if (slideshowRef.current) { clearInterval(slideshowRef.current); slideshowRef.current = null; }
       fadeAnim.setValue(1);
       slideshowProgress.setValue(0);
     }
     return () => { if (slideshowRef.current) clearInterval(slideshowRef.current); };
-  }, [slideshowActive, showIntro]);
+  }, [slideshowActive, showIntro, slideshowInterval, selectedTrack]);
+
+  // Apply settings live: swap music + restart interval
+  const handleSlideshowSettingsApply = useCallback((track: MusicTrack, intervalMs: number) => {
+    setSelectedTrack(track);
+    setSlideshowIntervalMs(intervalMs);
+    // Swap music if track changed
+    if (slideshowSoundRef.current) {
+      slideshowSoundRef.current.remove();
+      slideshowSoundRef.current = null;
+    }
+    // Music + interval will restart via useEffect dependency change
+  }, []);
 
   // Stats
   const photoStats = useMemo(() => {
@@ -782,6 +805,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Icon name={slideshowActive ? 'pause' : 'play'} size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
+              {slideshowActive && (
+                <TouchableOpacity style={styles.viewerBtn} onPress={() => setShowSlideshowSettings(true)}>
+                  <Icon name="settings-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
               {selectedPhoto && (
                 <TouchableOpacity
                   style={styles.viewerBtn}
@@ -831,26 +859,39 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Image + navigation */}
           {selectedPhoto && !(slideshowActive && showIntro) && (
-            <Animated.View style={[styles.viewerContent, { opacity: fadeAnim }]} {...panResponder.panHandlers}>
+            <View style={styles.viewerContent} {...panResponder.panHandlers}>
+              {/* Base image — always fully visible */}
+              <Image
+                source={selectedPhoto.url}
+                style={styles.viewerImage}
+                contentFit="contain"
+                transition={slideshowActive ? 0 : 300}
+                placeholder={selectedPhoto.thumbnail_url || undefined}
+                cachePolicy="memory-disk"
+              />
+              {/* Crossfade overlay — next image fades in on top */}
+              {crossfadeUrl && (
+                <Animated.View style={[styles.crossfadeOverlay, { opacity: fadeAnim }]}>
+                  <Image
+                    source={crossfadeUrl}
+                    style={styles.viewerImage}
+                    contentFit="contain"
+                    transition={0}
+                    cachePolicy="memory-disk"
+                  />
+                </Animated.View>
+              )}
               {viewerIndex > 0 && !slideshowActive && (
                 <TouchableOpacity style={[styles.viewerNav, styles.viewerNavLeft]} onPress={() => viewerGo(-1)}>
                   <Text style={styles.viewerNavText}>‹</Text>
                 </TouchableOpacity>
               )}
-              <Image
-                source={selectedPhoto.url}
-                style={styles.viewerImage}
-                contentFit="contain"
-                transition={300}
-                placeholder={selectedPhoto.thumbnail_url || undefined}
-                cachePolicy="memory-disk"
-              />
               {viewerIndex < flatPhotos.length - 1 && !slideshowActive && (
                 <TouchableOpacity style={[styles.viewerNav, styles.viewerNavRight]} onPress={() => viewerGo(1)}>
                   <Text style={styles.viewerNavText}>›</Text>
                 </TouchableOpacity>
               )}
-            </Animated.View>
+            </View>
           )}
 
           {/* Bottom bar */}
@@ -901,6 +942,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         tripId={tripId}
         tripName={tripName}
         photoIds={flatPhotos.map(p => p.id)}
+        initialTrack={selectedTrack}
+        initialInterval={slideshowIntervalMs}
+      />
+
+      <SlideshowShareModal
+        visible={showSlideshowSettings}
+        onClose={() => setShowSlideshowSettings(false)}
+        mode="settings"
+        tripId={tripId}
+        tripName={tripName}
+        photoIds={flatPhotos.map(p => p.id)}
+        initialTrack={selectedTrack}
+        initialInterval={slideshowIntervalMs}
+        onApply={handleSlideshowSettingsApply}
       />
     </View>
   );
@@ -1056,7 +1111,8 @@ const styles = StyleSheet.create({
   },
   slideshowProgressFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 2 },
 
-  viewerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  viewerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  crossfadeOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
   viewerImage: { width: '100%', height: '100%' },
   viewerNav: {
     position: 'absolute', top: 0, bottom: 0, width: 60,

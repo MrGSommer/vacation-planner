@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch photo URLs from trip_photos table
-    const photoIds = share.photo_ids as string[];
+    const photoIds = (share.photo_ids || []) as string[];
     // Validate UUIDs to prevent injection
     const validPhotoIds = photoIds.filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
     if (validPhotoIds.length === 0) {
@@ -93,7 +93,8 @@ Deno.serve(async (req) => {
       music_url: musicUrl,
       expires_at: share.expires_at,
     }, origin);
-  } catch (_e) {
+  } catch (e) {
+    console.error('get-slideshow error:', e);
     return json({ error: 'Interner Fehler' }, origin, 500);
   }
 });

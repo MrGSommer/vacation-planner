@@ -85,21 +85,33 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     }
   }, [started, data, showIntro, photoIndex]);
 
-  // Advance slideshow
+  // Crossfade: next image fades in over current
+  const [crossfadeUrl, setCrossfadeUrl] = useState<string | null>(null);
+
   const advance = useCallback(() => {
     if (!data) return;
-    Animated.timing(fadeAnim, { toValue: 0, duration: 500, useNativeDriver: false }).start(() => {
-      const currentIdx = photoIndexRef.current;
-      const next = currentIdx + 1;
-      if (next >= data.photos.length) {
-        photoIndexRef.current = 0;
-        setPhotoIndex(0);
-        setShowCta(true);
-      } else {
-        photoIndexRef.current = next;
-        setPhotoIndex(next);
-      }
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: false }).start();
+    const currentIdx = photoIndexRef.current;
+    const next = currentIdx + 1;
+
+    if (next >= data.photos.length) {
+      // End of slideshow — show CTA
+      photoIndexRef.current = 0;
+      setPhotoIndex(0);
+      setShowCta(true);
+      return;
+    }
+
+    // Set next image on overlay, start transparent
+    setCrossfadeUrl(data.photos[next].url);
+    fadeAnim.setValue(0);
+
+    // Fade in the next image over the current
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start(() => {
+      // Swap complete: update the base image and clear overlay
+      photoIndexRef.current = next;
+      setPhotoIndex(next);
+      setCrossfadeUrl(null);
+      fadeAnim.setValue(1);
     });
   }, [data, fadeAnim]);
 
@@ -269,9 +281,14 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
       </View>
 
       {/* Photo */}
-      <Animated.View style={[styles.photoContainer, { opacity: fadeAnim }]}>
-        <Image source={photo.url} style={styles.photo} contentFit="contain" transition={300} />
-      </Animated.View>
+      <View style={styles.photoContainer}>
+        <Image source={photo.url} style={styles.photo} contentFit="contain" transition={0} />
+        {crossfadeUrl && (
+          <Animated.View style={[styles.crossfadeOverlay, { opacity: fadeAnim }]}>
+            <Image source={crossfadeUrl} style={styles.photo} contentFit="contain" transition={0} />
+          </Animated.View>
+        )}
+      </View>
 
       {/* Controls */}
       <View style={styles.controls}>
@@ -303,7 +320,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 10,
   },
   progressFill: { height: '100%', backgroundColor: colors.primary },
-  photoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  photoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  crossfadeOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
   photo: { width: '100%', height: '100%' },
   controls: {
     position: 'absolute', bottom: Platform.OS === 'web' ? spacing.lg : 40,
