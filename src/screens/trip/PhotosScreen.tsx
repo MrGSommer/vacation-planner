@@ -1112,6 +1112,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingTop: Platform.OS === 'web' ? spacing.lg : 56,
     paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
+    zIndex: 10,
   },
   viewerTopActions: { flexDirection: 'row', gap: spacing.sm },
   viewerBtn: {
@@ -1124,6 +1125,7 @@ const styles = StyleSheet.create({
 
   slideshowProgressTrack: {
     height: 3, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: spacing.md,
+    zIndex: 10,
   },
   slideshowProgressFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 2 },
 
