@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Keyboard, Platform, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Keyboard, Platform } from 'react-native';
 import { Button } from './Button';
 import { Input } from './Input';
 import { TimePickerInput } from './TimePickerInput';
@@ -108,9 +108,9 @@ export const ActivityModal: React.FC<Props> = ({
   const baseConfig = CATEGORY_BASE_CONFIG[category] || DEFAULT_BASE_CONFIG;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <TouchableWithoutFeedback onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); }}>
-      <View style={styles.overlay}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); onCancel(); }}>
+        <TouchableOpacity activeOpacity={1} onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); }}>
         <View style={styles.content}>
           <Text style={styles.title}>
             {activity ? 'Bearbeiten' : 'Hinzufügen'}
@@ -164,6 +164,7 @@ export const ActivityModal: React.FC<Props> = ({
               />
             )}
 
+            <View style={styles.separator} />
             <Input
               label="Notizen"
               placeholder="Optionale Notizen..."
@@ -185,8 +186,8 @@ export const ActivityModal: React.FC<Props> = ({
             />
           </View>
         </View>
-      </View>
-      </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };
@@ -202,6 +203,12 @@ const styles = StyleSheet.create({
   catIcon: { marginRight: 4 },
   catLabel: { ...typography.caption },
   catLabelActive: { color: colors.primary, fontWeight: '600' },
+  separator: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
   buttons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   btn: { flex: 1 },
 });

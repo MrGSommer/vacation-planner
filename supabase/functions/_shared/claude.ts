@@ -56,7 +56,6 @@ const RATE_LIMIT_MAX_ENTRIES = 500;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 function cleanupRateLimits(): void {
-  if (rateLimits.size <= RATE_LIMIT_MAX_ENTRIES) return;
   const now = Date.now();
   for (const [key, val] of rateLimits) {
     if (now > val.resetAt) rateLimits.delete(key);

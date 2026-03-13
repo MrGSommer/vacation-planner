@@ -4,6 +4,8 @@ export interface CategoryField {
   type: 'text' | 'select' | 'time' | 'date' | 'place' | 'airport';
   placeholder?: string;
   options?: string[];
+  pair?: 'left' | 'right';
+  secondary?: boolean;
 }
 
 // Transport: only transport_type selector initially — remaining fields come from getTransportFields()
@@ -17,32 +19,32 @@ export const TRANSPORT_TYPE_FIELDS: Record<string, CategoryField[]> = {
   Flug: [
     { key: 'departure_station', label: 'Abflughafen', type: 'airport', placeholder: 'z.B. Zürich' },
     { key: 'arrival_station', label: 'Zielflughafen', type: 'airport', placeholder: 'z.B. Lissabon' },
-    { key: 'departure_date', label: 'Abflugdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'reference_number', label: 'Flugnummer', type: 'text', placeholder: 'z.B. LX1234 (optional)' },
-    { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'z.B. Swiss, Lufthansa' },
-    { key: 'departure_time', label: 'Abflugzeit', type: 'time', placeholder: 'HH:MM' },
-    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
+    { key: 'departure_date', label: 'Abflugdatum', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
+    { key: 'reference_number', label: 'Flugnummer', type: 'text', placeholder: 'z.B. LX1234 (optional)', pair: 'right' },
+    { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'z.B. Swiss, Lufthansa', secondary: true },
+    { key: 'departure_time', label: 'Abflugzeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'left' },
+    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'right' },
+    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD', secondary: true },
   ],
   Zug: [
     { key: 'carrier', label: 'Bahngesellschaft', type: 'text', placeholder: 'z.B. SBB, DB, SNCF' },
     { key: 'reference_number', label: 'Zugnummer', type: 'text', placeholder: 'z.B. IC 724' },
     { key: 'departure_station', label: 'Abfahrtsbahnhof', type: 'place', placeholder: 'Bahnhof' },
     { key: 'arrival_station', label: 'Zielbahnhof', type: 'place', placeholder: 'Bahnhof' },
-    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM' },
-    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
+    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
+    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM', pair: 'right' },
+    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD', secondary: true, pair: 'left' },
+    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'right' },
   ],
   Bus: [
     { key: 'carrier', label: 'Busunternehmen', type: 'text', placeholder: 'z.B. FlixBus, PostAuto' },
     { key: 'reference_number', label: 'Buchungsnr', type: 'text', placeholder: 'Buchungsnummer' },
     { key: 'departure_station', label: 'Abfahrtshaltestelle', type: 'place', placeholder: 'Haltestelle' },
     { key: 'arrival_station', label: 'Zielhaltestelle', type: 'place', placeholder: 'Haltestelle' },
-    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM' },
-    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
+    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
+    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM', pair: 'right' },
+    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD', secondary: true, pair: 'left' },
+    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'right' },
   ],
   Auto: [
     { key: 'departure_station', label: 'Startort', type: 'place', placeholder: 'Von' },
@@ -57,10 +59,10 @@ export const TRANSPORT_TYPE_FIELDS: Record<string, CategoryField[]> = {
     { key: 'reference_number', label: 'Buchungsnr', type: 'text', placeholder: 'Buchungsnummer' },
     { key: 'departure_station', label: 'Abfahrtshafen', type: 'place', placeholder: 'Hafen' },
     { key: 'arrival_station', label: 'Zielhafen', type: 'place', placeholder: 'Hafen' },
-    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM' },
-    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM' },
+    { key: 'departure_date', label: 'Abfahrtsdatum', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
+    { key: 'departure_time', label: 'Abfahrtszeit', type: 'time', placeholder: 'HH:MM', pair: 'right' },
+    { key: 'arrival_date', label: 'Ankunftsdatum', type: 'date', placeholder: 'YYYY-MM-DD', secondary: true, pair: 'left' },
+    { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'right' },
   ],
   Taxi: [
     { key: 'carrier', label: 'Taxiunternehmen', type: 'text', placeholder: 'z.B. Uber, Bolt' },
@@ -80,10 +82,10 @@ export function getTransportFields(transportType?: string): CategoryField[] {
 export const CATEGORY_FIELDS: Record<string, CategoryField[]> = {
   transport: [TRANSPORT_TYPE_FIELD],
   hotel: [
-    { key: 'check_in_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'check_out_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { key: 'confirmation_number', label: 'Buchungsnr', type: 'text', placeholder: 'Bestätigungsnummer' },
-    { key: 'hotel_contact', label: 'Kontakt', type: 'text', placeholder: 'Tel / Website' },
+    { key: 'check_in_date', label: 'Ankunft', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
+    { key: 'check_out_date', label: 'Abreise', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'right' },
+    { key: 'confirmation_number', label: 'Buchungsnr', type: 'text', placeholder: 'Bestätigungsnummer', pair: 'left' },
+    { key: 'hotel_contact', label: 'Kontakt', type: 'text', placeholder: 'Tel / Website', pair: 'right' },
   ],
   food: [
     { key: 'cuisine_type', label: 'Küche', type: 'text', placeholder: 'z.B. Italienisch' },

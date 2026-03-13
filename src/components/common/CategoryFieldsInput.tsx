@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { Input } from './Input';
 import { DatePickerInput } from './DatePickerInput';
 import { TimePickerInput } from './TimePickerInput';
@@ -10,6 +10,7 @@ import { Airport } from '../../data/airports';
 import { CATEGORY_FIELDS, CategoryField, getTransportFields } from '../../utils/categoryFields';
 import { lookupFlight, isValidFlightNumber, FlightInfo, searchFlightsByRoute, RouteFlightInfo } from '../../utils/flightLookup';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { Icon } from '../../utils/icons';
 
 interface Props {
   category: string;
@@ -41,190 +42,257 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
 
   const isFlightTransport = category === 'transport' && data.transport_type === 'Flug';
 
+  const primaryFields = fields.filter(f => !f.secondary);
+  const secondaryFields = fields.filter(f => f.secondary);
+
+  // Auto-expand if any secondary field already has data
+  const hasSecondaryData = secondaryFields.some(f => {
+    const val = data[f.key] || data[`${f.key}_name`];
+    return val && String(val).trim() !== '';
+  });
+  const [expanded, setExpanded] = useState(hasSecondaryData);
+
+  // Auto-expand when secondary data appears (e.g. after FlightLookup)
+  useEffect(() => {
+    if (hasSecondaryData && !expanded) {
+      setExpanded(true);
+    }
+  }, [hasSecondaryData]);
+
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < 360;
+
   const update = (key: string, value: any) => {
     onChange({ ...data, [key]: value });
   };
 
+  /** Render a single field (without pair wrapper) */
+  const renderField = (field: CategoryField): React.ReactNode => {
+    switch (field.type) {
+      case 'text':
+        return (
+          <Input
+            key={field.key}
+            label={field.label}
+            placeholder={field.placeholder}
+            value={data[field.key] || ''}
+            onChangeText={(v: string) => update(field.key, v)}
+          />
+        );
+      case 'time':
+        return (
+          <TimePickerInput
+            key={field.key}
+            label={field.label}
+            value={data[field.key] || ''}
+            onChange={(v: string) => update(field.key, v)}
+            placeholder={field.placeholder}
+          />
+        );
+      case 'date': {
+        const startKey = DATE_PAIRS[field.key];
+        const startValue = startKey ? data[startKey] : undefined;
+        return (
+          <DatePickerInput
+            key={field.key}
+            label={field.label}
+            value={data[field.key] || ''}
+            onChange={(v: string) => update(field.key, v)}
+            placeholder={field.placeholder}
+            initialDate={startValue || tripStartDate || undefined}
+            minDate={startValue || tripStartDate || undefined}
+            maxDate={tripEndDate || undefined}
+          />
+        );
+      }
+      case 'select':
+        return (
+          <View key={field.key} style={styles.selectContainer}>
+            <Text style={styles.fieldLabel}>{field.label}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {(field.options || []).map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.chip, data[field.key] === opt && styles.chipActive]}
+                  onPress={() => update(field.key, data[field.key] === opt ? '' : opt)}
+                >
+                  <Text style={[styles.chipText, data[field.key] === opt && styles.chipTextActive]}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      case 'place':
+        return (
+          <PlaceAutocomplete
+            key={field.key}
+            label={field.label}
+            placeholder={field.placeholder}
+            value={data[`${field.key}_name`] || ''}
+            onChangeText={(v: string) => update(`${field.key}_name`, v)}
+            onSelect={(place: PlaceResult) => {
+              onChange({
+                ...data,
+                [`${field.key}_name`]: place.name,
+                [`${field.key}_lat`]: place.lat,
+                [`${field.key}_lng`]: place.lng,
+              });
+            }}
+          />
+        );
+      case 'airport':
+        return (
+          <AirportAutocomplete
+            key={field.key}
+            label={field.label}
+            placeholder={field.placeholder}
+            value={data[`${field.key}_name`] || ''}
+            onChangeText={(v: string) => update(`${field.key}_name`, v)}
+            onSelect={(airport: Airport) => {
+              onChange({
+                ...data,
+                [`${field.key}_name`]: `${airport.city} (${airport.iata})`,
+                [field.key]: airport.iata,
+              });
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  /** Get widgets that should appear after a specific field key */
+  const getWidgetsAfterField = (fieldKey: string): React.ReactNode[] => {
+    const widgets: React.ReactNode[] = [];
+
+    // Route search widget after arrival_station
+    if (fieldKey === 'arrival_station' && isFlightTransport && data.departure_station && data.arrival_station && !data.reference_number) {
+      widgets.push(
+        <RouteSearchWidget
+          key="route-search"
+          depIata={data.departure_station}
+          arrIata={data.arrival_station}
+          depCityName={data.departure_station_name || data.departure_station}
+          arrCityName={data.arrival_station_name || data.arrival_station}
+          departureDate={data.departure_date || undefined}
+          onSelect={(route) => {
+            const updates: Record<string, any> = { ...data };
+            updates.reference_number = route.flight_iata;
+            if (route.airline_name) updates.carrier = route.airline_name;
+            if (route.dep_time) updates.departure_time = route.dep_time.substring(0, 5);
+            if (route.arr_time) updates.arrival_time = route.arr_time.substring(0, 5);
+            onChange(updates);
+          }}
+        />,
+      );
+    }
+
+    // Flight lookup widget after reference_number
+    if (fieldKey === 'reference_number' && isFlightTransport) {
+      widgets.push(
+        <FlightLookupWidget
+          key="flight-lookup"
+          flightNumber={data.reference_number || ''}
+          flightDate={data.departure_date || undefined}
+          onApply={(flight) => {
+            const updates: Record<string, any> = { ...data };
+            if (flight.flight_iata) {
+              updates.reference_number = flight.flight_iata;
+            }
+            if (flight.airline_name) updates.carrier = flight.airline_name;
+            if (flight.dep_city && flight.dep_airport) {
+              updates.departure_station_name = `${flight.dep_city} (${flight.dep_airport})`;
+              updates.departure_station = flight.dep_airport;
+            }
+            if (flight.arr_city && flight.arr_airport) {
+              updates.arrival_station_name = `${flight.arr_city} (${flight.arr_airport})`;
+              updates.arrival_station = flight.arr_airport;
+            }
+            if (flight.dep_time_local) {
+              const depParts = flight.dep_time_local.split(/[T ]/);
+              if (depParts.length >= 2) {
+                updates.departure_time = depParts[1].substring(0, 5);
+                if (!data.departure_date && depParts[0]) updates.departure_date = depParts[0];
+              } else if (/^\d{2}:\d{2}/.test(depParts[0])) {
+                updates.departure_time = depParts[0].substring(0, 5);
+              }
+            }
+            if (flight.arr_time_local) {
+              const arrParts = flight.arr_time_local.split(/[T ]/);
+              if (arrParts.length >= 2) {
+                updates.arrival_date = arrParts[0];
+                updates.arrival_time = arrParts[1].substring(0, 5);
+              } else if (/^\d{2}:\d{2}/.test(arrParts[0])) {
+                updates.arrival_time = arrParts[0].substring(0, 5);
+              }
+            }
+            updates.flight_verified = true;
+            updates.flight_iata = flight.flight_iata;
+            onChange(updates);
+          }}
+        />,
+      );
+    }
+
+    return widgets;
+  };
+
+  /** Render a list of fields with pair grouping and widgets */
+  const renderFieldList = (fieldList: CategoryField[]): React.ReactNode[] => {
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+    while (i < fieldList.length) {
+      const field = fieldList[i];
+
+      if (field.pair === 'left' && i + 1 < fieldList.length && fieldList[i + 1].pair === 'right') {
+        const rightField = fieldList[i + 1];
+        // Render pair side-by-side (or stacked if narrow)
+        elements.push(
+          <View key={`pair-${field.key}-${rightField.key}`} style={isNarrow ? undefined : styles.fieldRow}>
+            <View style={isNarrow ? undefined : styles.fieldRowItem}>{renderField(field)}</View>
+            <View style={isNarrow ? undefined : styles.fieldRowItem}>{renderField(rightField)}</View>
+          </View>,
+        );
+        // Widgets after each field in the pair
+        const leftWidgets = getWidgetsAfterField(field.key);
+        const rightWidgets = getWidgetsAfterField(rightField.key);
+        elements.push(...leftWidgets, ...rightWidgets);
+        i += 2;
+      } else {
+        // Single field, full width
+        elements.push(<React.Fragment key={field.key}>{renderField(field)}</React.Fragment>);
+        const widgets = getWidgetsAfterField(field.key);
+        elements.push(...widgets);
+        i += 1;
+      }
+    }
+    return elements;
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionLabel}>Details</Text>
-      {fields.map((field) => {
-        const elements: React.ReactNode[] = [];
+      {renderFieldList(primaryFields)}
 
-        switch (field.type) {
-          case 'text':
-            elements.push(
-              <Input
-                key={field.key}
-                label={field.label}
-                placeholder={field.placeholder}
-                value={data[field.key] || ''}
-                onChangeText={(v: string) => update(field.key, v)}
-              />,
-            );
-            break;
-          case 'time':
-            elements.push(
-              <TimePickerInput
-                key={field.key}
-                label={field.label}
-                value={data[field.key] || ''}
-                onChange={(v: string) => update(field.key, v)}
-                placeholder={field.placeholder}
-              />,
-            );
-            break;
-          case 'date': {
-            const startKey = DATE_PAIRS[field.key];
-            const startValue = startKey ? data[startKey] : undefined;
-            elements.push(
-              <DatePickerInput
-                key={field.key}
-                label={field.label}
-                value={data[field.key] || ''}
-                onChange={(v: string) => update(field.key, v)}
-                placeholder={field.placeholder}
-                initialDate={startValue || tripStartDate || undefined}
-                minDate={startValue || tripStartDate || undefined}
-                maxDate={tripEndDate || undefined}
-              />,
-            );
-            break;
-          }
-          case 'select':
-            elements.push(
-              <View key={field.key} style={styles.selectContainer}>
-                <Text style={styles.fieldLabel}>{field.label}</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {(field.options || []).map((opt) => (
-                    <TouchableOpacity
-                      key={opt}
-                      style={[styles.chip, data[field.key] === opt && styles.chipActive]}
-                      onPress={() => update(field.key, data[field.key] === opt ? '' : opt)}
-                    >
-                      <Text style={[styles.chipText, data[field.key] === opt && styles.chipTextActive]}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>,
-            );
-            break;
-          case 'place':
-            elements.push(
-              <PlaceAutocomplete
-                key={field.key}
-                label={field.label}
-                placeholder={field.placeholder}
-                value={data[`${field.key}_name`] || ''}
-                onChangeText={(v: string) => update(`${field.key}_name`, v)}
-                onSelect={(place: PlaceResult) => {
-                  onChange({
-                    ...data,
-                    [`${field.key}_name`]: place.name,
-                    [`${field.key}_lat`]: place.lat,
-                    [`${field.key}_lng`]: place.lng,
-                  });
-                }}
-              />,
-            );
-            break;
-          case 'airport':
-            elements.push(
-              <AirportAutocomplete
-                key={field.key}
-                label={field.label}
-                placeholder={field.placeholder}
-                value={data[`${field.key}_name`] || ''}
-                onChangeText={(v: string) => update(`${field.key}_name`, v)}
-                onSelect={(airport: Airport) => {
-                  onChange({
-                    ...data,
-                    [`${field.key}_name`]: `${airport.city} (${airport.iata})`,
-                    [field.key]: airport.iata,
-                  });
-                }}
-              />,
-            );
-            break;
-          default:
-            break;
-        }
-
-        // Add route search widget after arrival_station when both airports selected but no flight number
-        if (field.key === 'arrival_station' && isFlightTransport && data.departure_station && data.arrival_station && !data.reference_number) {
-          elements.push(
-            <RouteSearchWidget
-              key="route-search"
-              depIata={data.departure_station}
-              arrIata={data.arrival_station}
-              depCityName={data.departure_station_name || data.departure_station}
-              arrCityName={data.arrival_station_name || data.arrival_station}
-              departureDate={data.departure_date || undefined}
-              onSelect={(route) => {
-                const updates: Record<string, any> = { ...data };
-                updates.reference_number = route.flight_iata;
-                if (route.airline_name) updates.carrier = route.airline_name;
-                if (route.dep_time) updates.departure_time = route.dep_time.substring(0, 5);
-                if (route.arr_time) updates.arrival_time = route.arr_time.substring(0, 5);
-                onChange(updates);
-              }}
-            />,
-          );
-        }
-
-        // Add flight lookup widget after reference_number when transport_type is Flug
-        if (field.key === 'reference_number' && isFlightTransport) {
-          elements.push(
-            <FlightLookupWidget
-              key="flight-lookup"
-              flightNumber={data.reference_number || ''}
-              flightDate={data.departure_date || undefined}
-              onApply={(flight) => {
-                const updates: Record<string, any> = { ...data };
-                if (flight.flight_iata) {
-                  updates.reference_number = flight.flight_iata;
-                }
-                if (flight.airline_name) updates.carrier = flight.airline_name;
-                if (flight.dep_city && flight.dep_airport) {
-                  updates.departure_station_name = `${flight.dep_city} (${flight.dep_airport})`;
-                  updates.departure_station = flight.dep_airport;
-                }
-                if (flight.arr_city && flight.arr_airport) {
-                  updates.arrival_station_name = `${flight.arr_city} (${flight.arr_airport})`;
-                  updates.arrival_station = flight.arr_airport;
-                }
-                if (flight.dep_time_local) {
-                  const depParts = flight.dep_time_local.split(/[T ]/);
-                  if (depParts.length >= 2) {
-                    // Full datetime "YYYY-MM-DD HH:MM" → date + time
-                    updates.departure_time = depParts[1].substring(0, 5);
-                    if (!data.departure_date && depParts[0]) updates.departure_date = depParts[0];
-                  } else if (/^\d{2}:\d{2}/.test(depParts[0])) {
-                    // Time-only "HH:MM" → just time, no date
-                    updates.departure_time = depParts[0].substring(0, 5);
-                  }
-                }
-                if (flight.arr_time_local) {
-                  const arrParts = flight.arr_time_local.split(/[T ]/);
-                  if (arrParts.length >= 2) {
-                    // Full datetime "YYYY-MM-DD HH:MM" → date + time
-                    updates.arrival_date = arrParts[0];
-                    updates.arrival_time = arrParts[1].substring(0, 5);
-                  } else if (/^\d{2}:\d{2}/.test(arrParts[0])) {
-                    // Time-only "HH:MM" → just time, no date
-                    updates.arrival_time = arrParts[0].substring(0, 5);
-                  }
-                }
-                updates.flight_verified = true;
-                updates.flight_iata = flight.flight_iata;
-                onChange(updates);
-              }}
-            />,
-          );
-        }
-
-        return elements;
-      })}
+      {secondaryFields.length > 0 && (
+        <>
+          <TouchableOpacity
+            onPress={() => setExpanded(!expanded)}
+            style={styles.expandToggle}
+            activeOpacity={0.7}
+          >
+            <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.primary} />
+            <Text style={styles.expandText}>
+              {expanded ? 'Weniger Details' : 'Mehr Details'}
+            </Text>
+          </TouchableOpacity>
+          {expanded && (
+            <View style={styles.secondaryCard}>
+              {renderFieldList(secondaryFields)}
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 };
@@ -595,7 +663,6 @@ const flightStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { marginTop: spacing.sm },
-  sectionLabel: { ...typography.bodySmall, fontWeight: '700', color: colors.primary, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 1 },
   selectContainer: { marginBottom: spacing.md },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
   chip: {
@@ -611,4 +678,29 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
   chipText: { ...typography.caption, color: colors.textSecondary },
   chipTextActive: { color: colors.primary, fontWeight: '600' },
+  expandToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  expandText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  secondaryCard: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  fieldRowItem: {
+    flex: 1,
+  },
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { ActivityComment } from '../../types/database';
 import { getComments, addComment, deleteComment } from '../../api/comments';
 import { useAuthContext } from '../../contexts/AuthContext';
@@ -22,7 +22,7 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
     try {
       const data = await getComments(activityId);
       setComments(data);
-    } catch {}
+    } catch { /* silent - comments are non-critical */ }
   }, [activityId]);
 
   useEffect(() => { load(); }, [load]);
@@ -34,7 +34,7 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
       const comment = await addComment(activityId, user.id, text.trim());
       setComments(prev => [...prev, comment]);
       setText('');
-    } catch {}
+    } catch { Alert.alert('Fehler', 'Kommentar konnte nicht gespeichert werden.'); }
     setSending(false);
   };
 
@@ -42,7 +42,7 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
     try {
       await deleteComment(id);
       setComments(prev => prev.filter(c => c.id !== id));
-    } catch {}
+    } catch { Alert.alert('Fehler', 'Kommentar konnte nicht gelöscht werden.'); }
   };
 
   const timeAgo = (dateStr: string) => {

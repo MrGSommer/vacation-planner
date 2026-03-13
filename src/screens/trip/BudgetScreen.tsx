@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Platform, Modal, TextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, TripBottomNav } from '../../components/common';
@@ -48,10 +48,13 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
+  const [personalLimitCategory, setPersonalLimitCategory] = useState<BudgetCategory | null>(null);
+  const [personalLimitValue, setPersonalLimitValue] = useState('');
 
   const {
     categories, expenses, loading, total, totalBudget, byCategory,
     addCategory, updateCategory, removeCategory,
+    setPersonalLimit, removePersonalLimit,
     addExpense, updateExpense, removeExpense, refresh,
   } = useBudget(tripId);
 
@@ -89,6 +92,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         name: 'Unkategorisiert',
         color: '#9E9E9E',
         budget_limit: null,
+        scope: 'group' as const,
+        user_id: null,
         created_at: '',
         spent: uncategorizedSpent,
       });
@@ -120,9 +125,9 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     })();
   }, [tripId]);
 
-  const handleAddCategory = useCallback(async (name: string, color: string, limit: number | null) => {
+  const handleAddCategory = useCallback(async (name: string, color: string, limit: number | null, scope: 'group' | 'personal') => {
     try {
-      await addCategory(name, color, limit ?? undefined);
+      await addCategory(name, color, limit ?? undefined, scope);
     } catch {
       Alert.alert('Fehler', 'Kategorie konnte nicht erstellt werden');
     }
@@ -149,6 +154,26 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
       ]);
     }
   }, [removeCategory]);
+
+  const handleSetPersonalLimit = useCallback((cat: BudgetCategory) => {
+    setPersonalLimitCategory(cat);
+    setPersonalLimitValue(cat.personal_limit ? String(cat.personal_limit) : '');
+  }, []);
+
+  const handleSavePersonalLimit = useCallback(async () => {
+    if (!personalLimitCategory) return;
+    const value = parseFloat(personalLimitValue);
+    try {
+      if (!personalLimitValue.trim() || value <= 0) {
+        await removePersonalLimit(personalLimitCategory.id);
+      } else {
+        await setPersonalLimit(personalLimitCategory.id, value);
+      }
+    } catch {
+      Alert.alert('Fehler', 'Persönliches Limit konnte nicht gesetzt werden');
+    }
+    setPersonalLimitCategory(null);
+  }, [personalLimitCategory, personalLimitValue, setPersonalLimit, removePersonalLimit]);
 
   const handleAddExpense = useCallback(async (data: {
     amount: number; description: string; category_id: string | null; date: string;
@@ -348,9 +373,12 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                   color={cat.color}
                   spent={cat.spent}
                   budgetLimit={cat.budget_limit}
+                  personalLimit={cat.personal_limit}
                   currency={currency}
+                  scope={cat.scope}
                   onEdit={cat.id !== '__uncategorized__' ? () => setEditingCategory(cat) : undefined}
                   onDelete={cat.id !== '__uncategorized__' ? () => handleDeleteCategory(cat.id, cat.name) : undefined}
+                  onSetPersonalLimit={cat.id !== '__uncategorized__' && cat.scope === 'group' ? () => handleSetPersonalLimit(cat) : undefined}
                 />
               ))}
 
@@ -511,7 +539,45 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           initialName={editingCategory.name}
           initialColor={editingCategory.color}
           initialLimit={editingCategory.budget_limit}
+          initialScope={editingCategory.scope}
+          showScopeToggle={false}
         />
+      )}
+
+      {/* Personal Limit Modal */}
+      {personalLimitCategory && (
+        <Modal visible={!!personalLimitCategory} transparent animationType="fade" onRequestClose={() => setPersonalLimitCategory(null)}>
+          <TouchableOpacity style={styles.plOverlay} activeOpacity={1} onPress={() => setPersonalLimitCategory(null)}>
+            <TouchableOpacity style={styles.plModal} activeOpacity={1} onPress={() => {}}>
+              <Text style={styles.plTitle}>Mein Limit</Text>
+              <Text style={styles.plSubtitle}>
+                Persönliches Zusatzbudget für «{personalLimitCategory.name}»
+                {personalLimitCategory.budget_limit ? ` (Gruppe: ${currency} ${personalLimitCategory.budget_limit.toFixed(0)})` : ''}
+              </Text>
+              <View style={styles.plInputRow}>
+                <Text style={styles.plCurrency}>{currency}</Text>
+                <TextInput
+                  style={styles.plInput}
+                  value={personalLimitValue}
+                  onChangeText={setPersonalLimitValue}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textLight}
+                  autoFocus
+                />
+              </View>
+              <Text style={styles.plHint}>Nur für dich sichtbar. Wird zum Gruppenbudget addiert.</Text>
+              <View style={styles.plButtons}>
+                <TouchableOpacity style={styles.plBtnCancel} onPress={() => setPersonalLimitCategory(null)}>
+                  <Text style={styles.plBtnCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.plBtnSave} onPress={handleSavePersonalLimit}>
+                  <Text style={styles.plBtnSaveText}>Speichern</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
       )}
 
       <AddExpenseModal
@@ -618,4 +684,18 @@ const styles = StyleSheet.create({
     ...shadows.lg,
   },
   fabText: { fontSize: 28, color: '#FFFFFF', fontWeight: '300' },
+  // Personal limit modal
+  plOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  plModal: { backgroundColor: '#FFFFFF', borderRadius: borderRadius.lg, padding: spacing.xl, width: '85%', maxWidth: 360, ...shadows.lg },
+  plTitle: { ...typography.h3, marginBottom: spacing.xs },
+  plSubtitle: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 20 },
+  plInputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  plCurrency: { ...typography.body, fontWeight: '600', color: colors.textSecondary, marginRight: spacing.sm },
+  plInput: { ...typography.h2, flex: 1, paddingVertical: spacing.sm, color: colors.text },
+  plHint: { ...typography.caption, color: colors.textLight, fontStyle: 'italic', marginBottom: spacing.md },
+  plButtons: { flexDirection: 'row', gap: spacing.sm },
+  plBtnCancel: { flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.md, alignItems: 'center', backgroundColor: colors.background },
+  plBtnCancelText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
+  plBtnSave: { flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.md, alignItems: 'center', backgroundColor: colors.primary },
+  plBtnSaveText: { ...typography.bodySmall, fontWeight: '600', color: '#FFFFFF' },
 });

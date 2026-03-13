@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { Input, Button, DatePickerInput } from '../common';
 import { BudgetCategory, Expense } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
@@ -109,14 +109,19 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
     const color = available.length > 0
       ? available[Math.floor(Math.random() * available.length)]
       : CATEGORY_COLORS[Math.floor(Math.random() * CATEGORY_COLORS.length)];
-    await onCreateCategory(name, color);
-    setNewCatName('');
-    setShowNewCat(false);
+    try {
+      await onCreateCategory(name, color);
+      setNewCatName('');
+      setShowNewCat(false);
+    } catch {
+      Alert.alert('Fehler', 'Kategorie konnte nicht erstellt werden.');
+    }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
             <View style={styles.header}>
@@ -300,7 +305,8 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
             </View>
           </View>
         </ScrollView>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };

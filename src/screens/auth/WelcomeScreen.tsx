@@ -969,9 +969,9 @@ const s = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: spacing.md,
-    textShadowColor: 'rgba(0,0,0,0.25)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    ...(Platform.OS === 'web'
+      ? { textShadow: '0px 2px 8px rgba(0,0,0,0.25)' }
+      : { textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }),
   },
   ctaSubtitle: {
     ...typography.body,

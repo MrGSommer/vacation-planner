@@ -43,12 +43,12 @@ export interface AiContext {
     }>;
   };
   dayDates?: string[];
-  userMemory?: string;
   tripMemory?: string;
   senderName?: string;
   customInstruction?: string;
   webSearchResults?: string;
   collaboratorNames?: string[];
+  collaborators?: Array<{ id: string; name: string }>;
   lastPreferencesGathered?: string[];
   weatherData?: Array<{
     date: string;

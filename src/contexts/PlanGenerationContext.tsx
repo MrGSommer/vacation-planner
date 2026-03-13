@@ -294,10 +294,11 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
         // Execute full plan into DB (days, activities, stops, budget)
         const finalPlan = mergePlan(structure, allActivities);
         await executePlan(finalPlan, tripId, userId, context.currency || 'CHF');
-        invalidateCache(`itinerary_${tripId}`);
-        invalidateCache(`activities_${tripId}`);
-        invalidateCache(`stops_${tripId}`);
-        invalidateCache(`budget_${tripId}`);
+        invalidateCache(`itinerary:${tripId}`);
+        invalidateCache(`activities:${tripId}`);
+        invalidateCache(`stops:${tripId}`);
+        invalidateCache(`budgetCats:${tripId}`);
+        invalidateCache(`expenses:${tripId}`);
 
         // Mark completed
         setState(prev => ({

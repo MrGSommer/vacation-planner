@@ -9,7 +9,8 @@ export const getPhotos = async (tripId: string): Promise<Photo[]> => {
       .from('photos')
       .select('*')
       .eq('trip_id', tripId)
-      .order('taken_at', { ascending: false });
+      .order('taken_at', { ascending: false })
+      .limit(500);
     if (error) throw error;
     return data || [];
   });

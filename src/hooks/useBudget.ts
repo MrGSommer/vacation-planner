@@ -14,7 +14,7 @@ export const useBudget = (tripId: string) => {
     setLoading(true);
     try {
       const [cats, exps] = await Promise.all([
-        budgetApi.getBudgetCategories(tripId),
+        budgetApi.getBudgetCategories(tripId, user?.id),
         budgetApi.getExpenses(tripId),
       ]);
       setCategories(cats);
@@ -24,7 +24,7 @@ export const useBudget = (tripId: string) => {
     } finally {
       setLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -54,6 +54,8 @@ export const useBudget = (tripId: string) => {
     const { eventType } = payload;
     if (eventType === 'INSERT' && payload.new) {
       const newCat = payload.new as unknown as BudgetCategory;
+      // Skip personal categories from other users
+      if (newCat.scope === 'personal' && newCat.user_id !== user?.id) return;
       setCategories(prev => prev.some(c => c.id === newCat.id) ? prev : [...prev, newCat]);
     } else if (eventType === 'UPDATE' && payload.new) {
       const updated = payload.new as unknown as BudgetCategory;
@@ -64,15 +66,19 @@ export const useBudget = (tripId: string) => {
     } else {
       fetchData();
     }
-  }, [fetchData]);
+  }, [fetchData, user?.id]);
 
   useRealtime('budget_categories', `trip_id=eq.${tripId}`, handleCategoryRealtime);
 
   // Category CRUD
-  const addCategory = useCallback(async (name: string, color: string, budgetLimit?: number) => {
+  const addCategory = useCallback(async (
+    name: string, color: string, budgetLimit?: number,
+    scope: 'group' | 'personal' = 'group',
+  ) => {
     if (!user) return;
     const created = await budgetApi.createBudgetCategory(
-      tripId, name, color, budgetLimit ?? null
+      tripId, name, color, budgetLimit ?? null, scope,
+      scope === 'personal' ? user.id : undefined,
     );
     setCategories(prev => [...prev, created]);
   }, [tripId, user]);
@@ -89,6 +95,23 @@ export const useBudget = (tripId: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
     await budgetApi.deleteBudgetCategory(id);
   }, []);
+
+  // Personal limits on group categories
+  const setPersonalLimit = useCallback(async (categoryId: string, limit: number) => {
+    if (!user) return;
+    await budgetApi.setPersonalLimit(categoryId, user.id, limit, tripId);
+    setCategories(prev => prev.map(c =>
+      c.id === categoryId ? { ...c, personal_limit: limit } : c
+    ));
+  }, [user, tripId]);
+
+  const removePersonalLimit = useCallback(async (categoryId: string) => {
+    if (!user) return;
+    await budgetApi.removePersonalLimit(categoryId, user.id, tripId);
+    setCategories(prev => prev.map(c =>
+      c.id === categoryId ? { ...c, personal_limit: null } : c
+    ));
+  }, [user, tripId]);
 
   // Expense CRUD
   const addExpense = useCallback(async (
@@ -121,7 +144,7 @@ export const useBudget = (tripId: string) => {
   const total = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
 
   const totalBudget = useMemo(
-    () => categories.reduce((sum, c) => sum + (c.budget_limit || 0), 0),
+    () => categories.reduce((sum, c) => sum + (c.budget_limit || 0) + (c.personal_limit || 0), 0),
     [categories]
   );
 
@@ -131,7 +154,6 @@ export const useBudget = (tripId: string) => {
       ...cat,
       spent: expenses.filter(e => e.category_id === cat.id).reduce((sum, e) => sum + e.amount, 0),
     }));
-    // Add uncategorized bucket if there are expenses without valid category
     const uncategorizedSpent = expenses
       .filter(e => !e.category_id || !catIds.has(e.category_id))
       .reduce((sum, e) => sum + e.amount, 0);
@@ -142,6 +164,8 @@ export const useBudget = (tripId: string) => {
         name: 'Unkategorisiert',
         color: '#9E9E9E',
         budget_limit: null,
+        scope: 'group' as const,
+        user_id: null,
         created_at: '',
         spent: uncategorizedSpent,
       });
@@ -159,6 +183,8 @@ export const useBudget = (tripId: string) => {
     addCategory,
     updateCategory,
     removeCategory,
+    setPersonalLimit,
+    removePersonalLimit,
     addExpense,
     updateExpense,
     removeExpense,

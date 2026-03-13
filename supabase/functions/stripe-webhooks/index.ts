@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@17';
 
-const ALLOWED_ORIGINS = ['https://wayfable.ch', 'http://localhost:8081', 'http://localhost:19006'];
+const ALLOWED_ORIGINS = ['https://wayfable.ch'];
 
 const corsHeaders = (origin: string) => ({
   'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
@@ -97,18 +97,16 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Idempotency check
-    const { data: existing } = await supabase
+    // Atomic idempotency check
+    const { data: inserted, error: idempError } = await supabase
       .from('stripe_events')
+      .upsert({ id: event.id, type: event.type }, { onConflict: 'id', ignoreDuplicates: true })
       .select('id')
-      .eq('id', event.id)
       .single();
 
-    if (existing) {
+    if (idempError || !inserted) {
       return json({ received: true, duplicate: true }, origin);
     }
-
-    await supabase.from('stripe_events').insert({ id: event.id, type: event.type });
 
     switch (event.type) {
       case 'customer.subscription.created':

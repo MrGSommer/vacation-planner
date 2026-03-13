@@ -7,6 +7,7 @@ export interface WeatherDay {
   tempMin: number;
   weatherCode: number;
   icon: string;
+  isEstimate: boolean;
 }
 
 const WMO_ICONS: Record<number, string> = {
@@ -111,7 +112,7 @@ export async function fetchWeatherData(
 
     const fetches: Promise<void>[] = [];
 
-    const parseWeatherResponse = (data: any, dateMapping?: Map<string, string>) => {
+    const parseWeatherResponse = (data: any, isEstimate: boolean, dateMapping?: Map<string, string>) => {
       if (!data.daily) return;
       const { time, temperature_2m_max, temperature_2m_min } = data.daily;
       // Open-Meteo renamed weathercode → weather_code; support both
@@ -125,6 +126,7 @@ export async function fetchWeatherData(
             tempMin: Math.round(temperature_2m_min[i]),
             weatherCode: code,
             icon: getWeatherIcon(code),
+            isEstimate,
           });
         }
       }
@@ -136,7 +138,7 @@ export async function fetchWeatherData(
       fetches.push(
         fetch(`https://api.open-meteo.com/v1/forecast?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${fStart}&end_date=${fEnd}&timezone=auto`)
           .then(r => r.json())
-          .then(data => parseWeatherResponse(data))
+          .then(data => parseWeatherResponse(data, false))
       );
     }
 
@@ -146,25 +148,52 @@ export async function fetchWeatherData(
       fetches.push(
         fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${aStart}&end_date=${aEnd}&timezone=auto`)
           .then(r => r.json())
-          .then(data => parseWeatherResponse(data))
+          .then(data => parseWeatherResponse(data, false))
       );
     }
 
     if (futureDates.length > 0) {
-      const dateMapping = new Map<string, string>();
-      for (const d of futureDates) {
-        const parsed = parseISO(d);
-        const lastYear = addDays(parsed, -365);
-        dateMapping.set(format(lastYear, 'yyyy-MM-dd'), d);
+      // Seasonal Forecast API (ECMWF SEAS5) — real predictions up to ~6 months
+      const maxSeasonal = format(addDays(now, 182), 'yyyy-MM-dd');
+      const seasonalDates = futureDates.filter(d => d <= maxSeasonal);
+      const archiveFallbackDates = futureDates.filter(d => d > maxSeasonal);
+
+      if (seasonalDates.length > 0) {
+        const sStart = seasonalDates[0];
+        const sEnd = seasonalDates[seasonalDates.length - 1];
+        fetches.push(
+          fetch(`https://seasonal-api.open-meteo.com/v1/seasonal?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${sStart}&end_date=${sEnd}&timezone=auto`)
+            .then(r => r.json())
+            .then(data => parseWeatherResponse(data, true))
+            .catch(() => {
+              // Fallback to archive if seasonal API fails
+              const dateMapping = new Map<string, string>();
+              for (const d of seasonalDates) {
+                dateMapping.set(format(addDays(parseISO(d), -365), 'yyyy-MM-dd'), d);
+              }
+              const sorted = [...dateMapping.keys()].sort();
+              return fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${sorted[0]}&end_date=${sorted[sorted.length - 1]}&timezone=auto`)
+                .then(r => r.json())
+                .then(data => parseWeatherResponse(data, true, dateMapping))
+                .catch(() => {}); // don't let fallback failure kill all results
+            })
+        );
       }
-      const lastYearDates = [...dateMapping.keys()].sort();
-      const lyStart = lastYearDates[0];
-      const lyEnd = lastYearDates[lastYearDates.length - 1];
-      fetches.push(
-        fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${lyStart}&end_date=${lyEnd}&timezone=auto`)
-          .then(r => r.json())
-          .then(data => parseWeatherResponse(data, dateMapping))
-      );
+
+      // Dates beyond seasonal range (>6 months): last-year archive fallback
+      if (archiveFallbackDates.length > 0) {
+        const dateMapping = new Map<string, string>();
+        for (const d of archiveFallbackDates) {
+          dateMapping.set(format(addDays(parseISO(d), -365), 'yyyy-MM-dd'), d);
+        }
+        const sorted = [...dateMapping.keys()].sort();
+        fetches.push(
+          fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${group.lat}&longitude=${group.lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${sorted[0]}&end_date=${sorted[sorted.length - 1]}&timezone=auto`)
+            .then(r => r.json())
+            .then(data => parseWeatherResponse(data, true, dateMapping))
+            .catch(() => {}) // best-effort, don't break other results
+        );
+      }
     }
 
     await Promise.all(fetches);

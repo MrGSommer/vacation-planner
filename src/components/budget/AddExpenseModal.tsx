@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Platform, TextInput, Alert } from 'react-native';
 import { Input, Button, DatePickerInput } from '../common';
 import { BudgetCategory } from '../../types/database';
 import { CollaboratorWithProfile } from '../../api/invitations';
@@ -97,9 +97,13 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const color = available.length > 0
       ? available[Math.floor(Math.random() * available.length)]
       : CATEGORY_COLORS[Math.floor(Math.random() * CATEGORY_COLORS.length)];
-    await onCreateCategory(name, color);
-    setNewCatName('');
-    setShowNewCat(false);
+    try {
+      await onCreateCategory(name, color);
+      setNewCatName('');
+      setShowNewCat(false);
+    } catch {
+      Alert.alert('Fehler', 'Kategorie konnte nicht erstellt werden.');
+    }
   };
 
   const toggleVisibleTo = (userId: string) => {
@@ -115,8 +119,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { reset(); onClose(); }}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => { reset(); onClose(); }}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
             <View style={styles.header}>
@@ -295,7 +300,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </View>
           </View>
         </ScrollView>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };

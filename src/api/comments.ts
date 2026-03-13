@@ -54,27 +54,12 @@ export const getReactions = async (activityId: string): Promise<ActivityReaction
 };
 
 const _toggleReaction = async (activityId: string, userId: string, emoji: string): Promise<void> => {
-  const { data: existing } = await supabase
-    .from('activity_reactions')
-    .select('id')
-    .eq('activity_id', activityId)
-    .eq('user_id', userId)
-    .eq('emoji', emoji)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase.from('activity_reactions').delete().eq('id', existing.id);
-  } else {
-    await supabase
-      .from('activity_reactions')
-      .delete()
-      .eq('activity_id', activityId)
-      .eq('user_id', userId);
-    const { error } = await supabase
-      .from('activity_reactions')
-      .insert({ activity_id: activityId, user_id: userId, emoji });
-    if (error) throw error;
-  }
+  const { error } = await supabase.rpc('toggle_reaction', {
+    p_activity_id: activityId,
+    p_user_id: userId,
+    p_emoji: emoji,
+  });
+  if (error) throw error;
 };
 
 export const toggleReaction = async (activityId: string, userId: string, emoji: string): Promise<void> => {

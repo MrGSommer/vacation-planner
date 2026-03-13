@@ -75,7 +75,11 @@ Regeln:
       const clean = response.content
         .replace(/<metadata>[\s\S]*?<\/metadata>/g, '')
         .replace(/<memory_update>[\s\S]*?<\/memory_update>/g, '')
+        .replace(/<memory_add>[\s\S]*?<\/memory_add>/g, '')
+        .replace(/<memory_conflict[^>]*>[\s\S]*?<\/memory_conflict>/g, '')
         .replace(/<trip_memory_update>[\s\S]*?<\/trip_memory_update>/g, '')
+        .replace(/<trip_memory_add>[\s\S]*?<\/trip_memory_add>/g, '')
+        .replace(/<trip_memory_conflict[^>]*>[\s\S]*?<\/trip_memory_conflict>/g, '')
         .trim();
       setRecap(clean);
 

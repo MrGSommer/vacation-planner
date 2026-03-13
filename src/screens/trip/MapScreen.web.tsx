@@ -30,15 +30,19 @@ interface PreviewPlace {
   isCustomPin: boolean;
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   const icon = getCategoryIcon(act.category, act.category_data);
   const catData = act.category_data || {};
   const detail = formatCategoryDetail(act.category, catData);
-  let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${act.title}</strong>`;
+  let html = `<div style="font-family:sans-serif;min-width:180px"><strong>${icon} ${escapeHtml(act.title)}</strong>`;
   if (dayInfo) html += `<br/><span style="color:${colors.primary};font-size:12px;font-weight:600">Tag ${dayInfo.dayNumber} · ${formatDateShort(dayInfo.date)}</span>`;
-  if (act.location_name) html += `<br/><small>📍 ${act.location_name}</small>`;
-  if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${detail}</span>`;
-  if (act.description) html += `<br/><small style="color:#636E72">${act.description}</small>`;
+  if (act.location_name) html += `<br/><small>📍 ${escapeHtml(act.location_name)}</small>`;
+  if (detail) html += `<br/><span style="color:${CATEGORY_COLORS[act.category] || '#666'};font-size:13px">${escapeHtml(detail)}</span>`;
+  if (act.description) html += `<br/><small style="color:#636E72">${escapeHtml(act.description)}</small>`;
   html += '</div>';
   return html;
 }

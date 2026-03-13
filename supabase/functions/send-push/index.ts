@@ -6,7 +6,7 @@ const VAPID_PRIV = Deno.env.get('VAPID_PRIVATE_KEY') || '';
 
 function auth(r: Request) {
   const t = (r.headers.get('Authorization') || '').replace('Bearer ', '');
-  return t === SRK || t === IAS;
+  return t === SRK || (IAS !== '' && t === IAS);
 }
 
 // --- Base64url helpers ---
@@ -245,6 +245,7 @@ Deno.serve(async (req) => {
             'Urgency': 'normal',
           },
           body: ciphertext,
+          signal: AbortSignal.timeout(10000),
         });
 
         if (res.status === 201 || res.status === 200) {
@@ -265,6 +266,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ sent: sentCount > 0, count: sentCount }));
   } catch (e) {
     console.error('send-push: unhandled error:', e);
-    return new Response(JSON.stringify({ sent: false, error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ sent: false, error: 'Internal server error' }), { status: 500 });
   }
 });

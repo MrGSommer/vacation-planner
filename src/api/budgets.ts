@@ -1,28 +1,59 @@
 import { supabase } from './supabase';
-import { BudgetCategory, Expense } from '../types/database';
+import { BudgetCategory, BudgetPersonalLimit, Expense } from '../types/database';
 import { offlineMutation } from '../utils/offlineMutation';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
 
 export const getBudgetCategories = async (
-  tripId: string
+  tripId: string,
+  userId?: string,
 ): Promise<BudgetCategory[]> => {
-  return cachedQuery(`budgetCats:${tripId}`, async () => {
+  return cachedQuery(`budgetCats:${tripId}:${userId || ''}`, async () => {
     const { data, error } = await supabase
       .from('budget_categories')
       .select('*')
       .eq('trip_id', tripId)
       .order('name');
     if (error) throw error;
-    return data || [];
+
+    let categories = (data || []) as BudgetCategory[];
+
+    // Filter: show group categories + only own personal categories
+    if (userId) {
+      categories = categories.filter(
+        c => c.scope === 'group' || c.user_id === userId
+      );
+
+      // Fetch personal limits for this user
+      const catIds = categories.filter(c => c.scope === 'group').map(c => c.id);
+      if (catIds.length > 0) {
+        const { data: limits } = await supabase
+          .from('budget_personal_limits')
+          .select('*')
+          .eq('user_id', userId)
+          .in('category_id', catIds);
+        if (limits) {
+          const limitMap = new Map(limits.map(l => [l.category_id, l.budget_limit]));
+          categories = categories.map(c => ({
+            ...c,
+            personal_limit: limitMap.get(c.id) ?? null,
+          }));
+        }
+      }
+    }
+
+    return categories;
   });
 };
 
 const _createBudgetCategory = async (
-  tripId: string, name: string, color: string, budgetLimit: number | null
+  tripId: string, name: string, color: string, budgetLimit: number | null,
+  scope: 'group' | 'personal' = 'group', userId?: string | null,
 ): Promise<BudgetCategory> => {
+  const row: any = { trip_id: tripId, name, color, budget_limit: budgetLimit, scope };
+  if (scope === 'personal' && userId) row.user_id = userId;
   const { data, error } = await supabase
     .from('budget_categories')
-    .insert({ trip_id: tripId, name, color, budget_limit: budgetLimit })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;
@@ -31,13 +62,14 @@ const _createBudgetCategory = async (
 };
 
 export const createBudgetCategory = async (
-  tripId: string, name: string, color: string, budgetLimit: number | null
+  tripId: string, name: string, color: string, budgetLimit: number | null,
+  scope: 'group' | 'personal' = 'group', userId?: string | null,
 ): Promise<BudgetCategory> => {
   return offlineMutation({
     operation: 'createBudgetCategory', table: 'budget_categories',
-    args: [tripId, name, color, budgetLimit], cacheKeys: [`budgetCats:${tripId}`],
+    args: [tripId, name, color, budgetLimit, scope, userId], cacheKeys: [`budgetCats:${tripId}`],
     fn: _createBudgetCategory,
-    optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, name, color, budget_limit: budgetLimit, created_at: new Date().toISOString() } as BudgetCategory,
+    optimisticResult: { id: `temp_${Date.now()}`, trip_id: tripId, name, color, budget_limit: budgetLimit, scope, user_id: userId || null, created_at: new Date().toISOString() } as BudgetCategory,
   });
 };
 
@@ -78,6 +110,35 @@ export const deleteBudgetCategory = async (id: string): Promise<void> => {
     fn: _deleteBudgetCategory,
   });
 };
+
+// --- Personal limits on group categories ---
+
+export const setPersonalLimit = async (
+  categoryId: string, userId: string, budgetLimit: number, tripId: string,
+): Promise<BudgetPersonalLimit> => {
+  const { data, error } = await supabase
+    .from('budget_personal_limits')
+    .upsert({ category_id: categoryId, user_id: userId, budget_limit: budgetLimit }, { onConflict: 'category_id,user_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  invalidateCache(`budgetCats:${tripId}`);
+  return data;
+};
+
+export const removePersonalLimit = async (
+  categoryId: string, userId: string, tripId: string,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('budget_personal_limits')
+    .delete()
+    .eq('category_id', categoryId)
+    .eq('user_id', userId);
+  if (error) throw error;
+  invalidateCache(`budgetCats:${tripId}`);
+};
+
+// --- Expenses ---
 
 export const getExpenses = async (
   tripId: string

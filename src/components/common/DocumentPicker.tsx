@@ -6,7 +6,7 @@ import { ActivityDocument } from '../../types/database';
 import { useRealtime, RealtimePayload } from '../../hooks/useRealtime';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
-import { Icon } from '../../utils/icons';
+import { Icon, IconName } from '../../utils/icons';
 
 interface Props {
   activityId: string;
@@ -15,7 +15,7 @@ interface Props {
   readOnly?: boolean;
 }
 
-const FILE_ICONS: Record<string, string> = {
+const FILE_ICONS: Record<string, IconName> = {
   'application/pdf': 'document-text-outline',
   'image/jpeg': 'image-outline',
   'image/png': 'image-outline',

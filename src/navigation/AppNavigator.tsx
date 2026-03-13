@@ -126,7 +126,7 @@ export const AppNavigator: React.FC = () => {
       // Check for ?redirect= query param (e.g. /login?redirect=/share/token)
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect');
-      if (redirect && redirect.startsWith('/')) {
+      if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
         setPendingRedirectPath(redirect);
       }
     }

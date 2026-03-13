@@ -19,7 +19,8 @@ export const adminListUsers = async ({
     .select('*', { count: 'exact' });
 
   if (search) {
-    query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
+    const escaped = search.replace(/[%_\\]/g, '\\$&');
+    query = query.or(`email.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`);
   }
   if (tier === 'trialing') {
     query = query.eq('subscription_status', 'trialing');

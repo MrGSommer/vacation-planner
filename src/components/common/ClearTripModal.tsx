@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { clearTripData, ClearTripOptions } from '../../api/trips';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
@@ -19,11 +19,15 @@ interface ClearOption {
 }
 
 const OPTIONS: ClearOption[] = [
-  { key: 'activities', label: 'Aktivitäten & Tage', icon: 'calendar-outline', description: 'Alle Tagesplaene und Aktivitaeten' },
+  { key: 'activities', label: 'Aktivitäten & Tage', icon: 'calendar-outline', description: 'Alle Tagespläne und Aktivitäten' },
   { key: 'stops', label: 'Stops', icon: 'pin-outline', description: 'Alle Reise-Stops' },
   { key: 'budget', label: 'Budget & Ausgaben', icon: 'wallet-outline', description: 'Kategorien und erfasste Ausgaben' },
-  { key: 'packing', label: 'Checkliste', icon: 'checkmark-circle-outline', description: 'Alle Packlisten und Eintraege' },
+  { key: 'packing', label: 'Checkliste', icon: 'checkmark-circle-outline', description: 'Alle Packlisten und Einträge' },
   { key: 'photos', label: 'Fotos', icon: 'images-outline', description: 'Alle hochgeladenen Fotos' },
+  { key: 'collaborators', label: 'Mitreisende', icon: 'people-outline', description: 'Alle Mitreisenden entfernen' },
+  { key: 'invitations', label: 'Einladungen', icon: 'mail-outline', description: 'Alle offenen und angenommenen Einladungen' },
+  { key: 'ai', label: 'Fable-Gespräche', icon: 'chatbubble-outline', description: 'Alle Fable-Unterhaltungen und Nachrichten' },
+  { key: 'logs', label: 'Protokolle', icon: 'document-text-outline', description: 'Nutzungs- und Benachrichtigungsprotokolle' },
 ];
 
 export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCleared }) => {
@@ -53,11 +57,16 @@ export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCl
         budget: !!selected.budget,
         packing: !!selected.packing,
         photos: !!selected.photos,
+        collaborators: !!selected.collaborators,
+        invitations: !!selected.invitations,
+        ai: !!selected.ai,
+        logs: !!selected.logs,
       };
       await clearTripData(tripId, options);
       onCleared();
     } catch (e) {
       console.error('Clear trip data failed:', e);
+      Alert.alert('Fehler', 'Daten konnten nicht gelöscht werden. Bitte versuche es erneut.');
     } finally {
       setClearing(false);
     }

@@ -333,6 +333,10 @@ const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
+  // Clean expired entries on every call to prevent memory leak
+  for (const [key, val] of rateLimits) {
+    if (now > val.resetAt) rateLimits.delete(key);
+  }
   const entry = rateLimits.get(userId);
   if (!entry || now > entry.resetAt) {
     rateLimits.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
@@ -556,8 +560,6 @@ Deno.serve(async (req) => {
         return json({ error: 'Ungültiger IATA-Code (3 Buchstaben)' }, origin, 400);
       }
 
-      console.log(`flight-lookup route: ${depNorm} → ${arrNorm}`);
-
       try {
         const routeRes = await fetch(
           `${AIRLABS_BASE}/routes?dep_iata=${depNorm}&arr_iata=${arrNorm}&api_key=${AIRLABS_API_KEY}`,
@@ -618,8 +620,6 @@ Deno.serve(async (req) => {
     if (flightNum.length < 4) {
       candidates.push(airlinePrefix + flightNum.padStart(4, '0'));
     }
-
-    console.log(`flight-lookup: candidates=${candidates.join(',')}, date: ${dateParam || 'none'}`);
 
     // Determine if today's date for live status check
     const todayStr = new Date().toISOString().split('T')[0];

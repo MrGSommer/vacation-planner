@@ -9,9 +9,9 @@ import { getActivitiesForTrip, getDays } from '../api/itineraries';
 import { getStops } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
 import { getPackingLists, getPackingItems } from '../api/packing';
-import { getProfile } from '../api/auth';
+import { getProfile, updateProfile } from '../api/auth';
+import { useToast } from '../contexts/ToastContext';
 import { getAiConversation, saveAiConversation, deleteAiConversation } from '../api/aiConversations';
-import { getAiUserMemory, saveAiUserMemory } from '../api/aiMemory';
 import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
 import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
 import { getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
@@ -23,6 +23,7 @@ import { useAiRealtime, useAiTypingBroadcast } from './useAiRealtime';
 import { fetchWeatherData } from './useWeather';
 import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
+import { PACKING_CATEGORIES } from '../utils/constants';
 
 export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'conflict_review' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
 
@@ -101,28 +102,84 @@ function parseMetadata(text: string): { cleanText: string; metadata: AiMetadata 
   }
 }
 
-function parseMemoryUpdate(text: string): { cleanText: string; memoryUpdate: string | null } {
-  const memoryRegex = /<memory_update>([\s\S]*?)<\/memory_update>/;
-  const match = text.match(memoryRegex);
-
-  if (!match) {
-    return { cleanText: text, memoryUpdate: null };
-  }
-
-  const cleanText = text.replace(memoryRegex, '').trim();
-  return { cleanText, memoryUpdate: match[1].trim() };
+interface MemoryParseResult {
+  cleanText: string;
+  memoryAdd: string | null;
+  memoryConflict: { old: string; new_val: string } | null;
 }
 
-function parseTripMemoryUpdate(text: string): { cleanText: string; tripMemoryUpdate: string | null } {
-  const tripMemoryRegex = /<trip_memory_update>([\s\S]*?)<\/trip_memory_update>/;
-  const match = text.match(tripMemoryRegex);
+function parsePersonalMemory(text: string): MemoryParseResult {
+  let cleanText = text;
+  let memoryAdd: string | null = null;
+  let memoryConflict: { old: string; new_val: string } | null = null;
 
-  if (!match) {
-    return { cleanText: text, tripMemoryUpdate: null };
+  // New tag: <memory_add> (strip ALL occurrences, keep first non-empty)
+  const addRegex = /<memory_add>([\s\S]*?)<\/memory_add>/g;
+  const addMatches = [...cleanText.matchAll(addRegex)];
+  if (addMatches.length > 0) {
+    memoryAdd = addMatches[0][1].trim() || null;
+    cleanText = cleanText.replace(addRegex, '').trim();
   }
 
-  const cleanText = text.replace(tripMemoryRegex, '').trim();
-  return { cleanText, tripMemoryUpdate: match[1].trim() };
+  // Fallback: old <memory_update> tag treated as memory_add (strip all)
+  const legacyRegex = /<memory_update>([\s\S]*?)<\/memory_update>/g;
+  if (!memoryAdd) {
+    const legacyMatches = [...cleanText.matchAll(legacyRegex)];
+    if (legacyMatches.length > 0) {
+      memoryAdd = legacyMatches[0][1].trim() || null;
+    }
+  }
+  cleanText = cleanText.replace(legacyRegex, '').trim();
+
+  // New tag: <memory_conflict old="...">...</memory_conflict> (strip all, keep first)
+  const conflictRegex = /<memory_conflict\s+old="([^"]*)">([\s\S]*?)<\/memory_conflict>/g;
+  const conflictMatches = [...cleanText.matchAll(conflictRegex)];
+  if (conflictMatches.length > 0 && conflictMatches[0][1].trim() && conflictMatches[0][2].trim()) {
+    memoryConflict = { old: conflictMatches[0][1].trim(), new_val: conflictMatches[0][2].trim() };
+  }
+  cleanText = cleanText.replace(conflictRegex, '').trim();
+
+  return { cleanText, memoryAdd, memoryConflict };
+}
+
+interface TripMemoryParseResult {
+  cleanText: string;
+  tripMemoryAdd: string | null;
+  tripMemoryConflict: { old: string; new_val: string } | null;
+}
+
+function parseTripMemory(text: string): TripMemoryParseResult {
+  let cleanText = text;
+  let tripMemoryAdd: string | null = null;
+  let tripMemoryConflict: { old: string; new_val: string } | null = null;
+
+  // New tag: <trip_memory_add> (strip ALL occurrences, keep first non-empty)
+  const addRegex = /<trip_memory_add>([\s\S]*?)<\/trip_memory_add>/g;
+  const addMatches = [...cleanText.matchAll(addRegex)];
+  if (addMatches.length > 0) {
+    tripMemoryAdd = addMatches[0][1].trim() || null;
+    cleanText = cleanText.replace(addRegex, '').trim();
+  }
+
+  // Fallback: old <trip_memory_update> tag treated as trip_memory_add (strip all)
+  const legacyRegex = /<trip_memory_update>([\s\S]*?)<\/trip_memory_update>/g;
+  if (!tripMemoryAdd) {
+    const legacyMatches = [...cleanText.matchAll(legacyRegex)];
+    if (legacyMatches.length > 0) {
+      tripMemoryAdd = legacyMatches[0][1].trim() || null;
+    }
+  }
+  cleanText = cleanText.replace(legacyRegex, '').trim();
+
+  // New tag: <trip_memory_conflict old="...">...</trip_memory_conflict> (strip all, keep first)
+  const conflictRegex = /<trip_memory_conflict\s+old="([^"]*)">([\s\S]*?)<\/trip_memory_conflict>/g;
+  const conflictMatches = [...cleanText.matchAll(conflictRegex)];
+  if (conflictMatches.length > 0 && conflictMatches[0][1].trim() && conflictMatches[0][2].trim()) {
+    tripMemoryConflict = { old: conflictMatches[0][1].trim(), new_val: conflictMatches[0][2].trim() };
+  }
+  cleanText = cleanText.replace(conflictRegex, '').trim();
+
+  return { cleanText, tripMemoryAdd, tripMemoryConflict };
 }
 
 function parseWebSearchRequest(text: string): { cleanText: string; searchQuery: string | null } {
@@ -164,6 +221,19 @@ function formatFlightResult(flight: FlightInfo): string {
   if (flight.status) parts.push(`Status: ${flight.status}`);
   if (flight.aircraft) parts.push(`Flugzeug: ${flight.aircraft}`);
   return parts.join('\n');
+}
+
+const CUSTOM_INSTRUCTION_MAX_LENGTH = 1000;
+
+/** Dedup: check if the new entry is semantically already present */
+function isDuplicate(existing: string, newEntry: string): boolean {
+  if (!newEntry || !existing) return false;
+  const normalizedExisting = existing.toLowerCase();
+  const normalizedNew = newEntry.toLowerCase();
+  // Check if the new entry (or a significant portion) is already present
+  // Use first 30 chars or the full string, whichever is shorter
+  const needle = normalizedNew.substring(0, Math.min(30, normalizedNew.length));
+  return needle.length >= 5 && normalizedExisting.includes(needle);
 }
 
 function formatSearchResults(results: WebSearchResult[]): string {
@@ -262,8 +332,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     travelersCount: initialContext.travelersCount,
     groupType: initialContext.groupType,
   });
+  const { showToast } = useToast();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const userMemoryRef = useRef<string | undefined>(undefined);
   const tripMemoryRef = useRef<string | undefined>(undefined);
   const senderNameRef = useRef<string>('');
   const prevCreditsRef = useRef<number | null>(null);
@@ -328,6 +398,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const collabNames = collabs
         .map(c => [c.profile?.first_name, c.profile?.last_name].filter(Boolean).join(' ') || c.profile?.email || '')
         .filter(Boolean);
+      const collabList = collabs
+        .filter(c => c.profile?.id)
+        .map(c => ({
+          id: c.profile!.id,
+          name: [c.profile?.first_name, c.profile?.last_name].filter(Boolean).join(' ') || c.profile?.email || '',
+        }))
+        .filter(c => c.name);
       fableSettingsRef.current = {
         enabled: trip.fable_enabled,
         budgetVisible: trip.fable_budget_visible,
@@ -348,6 +425,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         travelersCount: trip.travelers_count,
         groupType: trip.group_type,
         collaboratorNames: collabNames.length > 0 ? collabNames : undefined,
+        collaborators: collabList.length > 0 ? collabList : undefined,
         fableSettings: {
           budgetVisible: trip.fable_budget_visible,
           packingVisible: trip.fable_packing_visible,
@@ -392,7 +470,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       saveAiConversation(
         tripId,
         userId,
-        currentPhase as any,
+        currentPhase,
         { metadata: currentMetadata, plan: currentPlan },
         {
           destination: ctx.destination,
@@ -416,6 +494,49 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     insertAiTripMessage(tripId, userId, senderName, role, content, creditsCost, creditsAfter)
       .catch(e => console.error('Failed to persist message:', e));
   }, [tripId, userId]);
+
+  // Helper: apply personal memory updates from AI response
+  const applyPersonalMemory = useCallback((parsed: MemoryParseResult) => {
+    const { memoryAdd, memoryConflict } = parsed;
+
+    if (memoryAdd && personalMemoryEnabledRef.current) {
+      const existing = contextRef.current.customInstruction || '';
+      if (!isDuplicate(existing, memoryAdd)) {
+        const merged = existing ? `${existing}\n- ${memoryAdd}` : `- ${memoryAdd}`;
+        if (merged.length <= CUSTOM_INSTRUCTION_MAX_LENGTH) {
+          updateProfile(userId, { ai_custom_instruction: merged })
+            .catch(e => logError(e, { component: 'useAiPlanner', context: { action: 'applyPersonalMemory', detail: 'updateProfile failed' } }));
+          contextRef.current.customInstruction = merged;
+        } else {
+          console.warn('[Fable Memory] ai_custom_instruction max length reached, skipping append');
+        }
+      }
+    }
+
+    if (memoryConflict) {
+      showToast(`Fable bemerkt: "${memoryConflict.old}" → "${memoryConflict.new_val}". Passe es in den Fable-Einstellungen an.`, 'info');
+    }
+  }, [userId, showToast]);
+
+  // Helper: apply trip memory updates from AI response
+  const applyTripMemory = useCallback((parsed: TripMemoryParseResult) => {
+    const { tripMemoryAdd, tripMemoryConflict } = parsed;
+
+    if (tripMemoryAdd && tripId && fableSettingsRef.current.memoryEnabled) {
+      const existingTrip = tripMemoryRef.current || '';
+      if (!isDuplicate(existingTrip, tripMemoryAdd)) {
+        const merged = existingTrip ? `${existingTrip}\n- ${tripMemoryAdd}` : `- ${tripMemoryAdd}`;
+        tripMemoryRef.current = merged;
+        contextRef.current.tripMemory = merged;
+        saveAiTripMemory(tripId, merged)
+          .catch(e => logError(e, { component: 'useAiPlanner', context: { action: 'applyTripMemory', detail: 'saveAiTripMemory failed' } }));
+      }
+    }
+
+    if (tripMemoryConflict) {
+      showToast(`Trip-Update: "${tripMemoryConflict.old}" → "${tripMemoryConflict.new_val}". Prüfe die Trip-Einstellungen.`, 'info');
+    }
+  }, [tripId, showToast]);
 
   const loadExistingData = useCallback(async (profileOverride?: { ai_trip_context_enabled: boolean }): Promise<AiContext['existingData'] | undefined> => {
     if (mode !== 'enhance' || !tripId) return undefined;
@@ -511,9 +632,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         : 'Reisender';
       senderNameRef.current = shortName;
 
-      const [existingData, userMemory, tripMemory, savedMessages, savedConversation, weatherMap] = await Promise.all([
+      const [existingData, tripMemory, savedMessages, savedConversation, weatherMap] = await Promise.all([
         loadExistingData(profile),
-        profile.fable_memory_enabled ? getAiUserMemory().catch(() => null) : null,
         tripId && fableSettingsRef.current.memoryEnabled ? getAiTripMemory(tripId).catch(() => null) : null,
         tripId ? getAiTripMessages(tripId).catch(() => []) : [],
         tripId ? getAiConversation(tripId).catch(() => null) : null,
@@ -529,10 +649,6 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         contextRef.current.weatherData = Array.from(weatherMap.entries())
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, w]) => ({ date, tempMax: w.tempMax, tempMin: w.tempMin, icon: w.icon }));
-      }
-      if (userMemory) {
-        contextRef.current.userMemory = userMemory;
-        userMemoryRef.current = userMemory;
       }
       if (tripMemory) {
         contextRef.current.tripMemory = tripMemory;
@@ -657,24 +773,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       const response = await sendAiMessage('greeting', [greeting], contextRef.current);
 
-      // Parse trip memory, user memory, and metadata from response
-      const { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
-      const { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
-      const { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
+      // Parse trip memory, personal memory, and metadata from response
+      const tripParsed = parseTripMemory(response.content);
+      const personalParsed = parsePersonalMemory(tripParsed.cleanText);
+      const { cleanText, metadata: meta } = parseMetadata(personalParsed.cleanText);
 
-      // Save user memory update if present (gated by personal setting)
-      if (memoryUpdate && personalMemoryEnabledRef.current) {
-        userMemoryRef.current = memoryUpdate;
-        contextRef.current.userMemory = memoryUpdate;
-        saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
-      }
-
-      // Save trip memory update if present (gated by trip setting)
-      if (tripMemoryUpdate && tripId && fableSettingsRef.current.memoryEnabled) {
-        tripMemoryRef.current = tripMemoryUpdate;
-        contextRef.current.tripMemory = tripMemoryUpdate;
-        saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
-      }
+      applyPersonalMemory(personalParsed);
+      applyTripMemory(tripParsed);
 
       const greetingMsg: AiChatMessage = {
         id: nextId(), role: 'user', content: greetingContent, timestamp: Date.now(),
@@ -799,24 +904,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         onCreditsUpdate?.(response.credits_remaining);
       }
 
-      // Parse trip memory, user memory, and metadata
-      let { cleanText: textAfterTripMemory, tripMemoryUpdate } = parseTripMemoryUpdate(response.content);
-      let { cleanText: textAfterMemory, memoryUpdate } = parseMemoryUpdate(textAfterTripMemory);
-      let { cleanText, metadata: meta } = parseMetadata(textAfterMemory);
+      // Parse trip memory, personal memory, and metadata
+      let tripParsed = parseTripMemory(response.content);
+      let personalParsed = parsePersonalMemory(tripParsed.cleanText);
+      let { cleanText, metadata: meta } = parseMetadata(personalParsed.cleanText);
 
-      // Save user memory update if present (gated by personal setting)
-      if (memoryUpdate && personalMemoryEnabledRef.current) {
-        userMemoryRef.current = memoryUpdate;
-        contextRef.current.userMemory = memoryUpdate;
-        saveAiUserMemory(memoryUpdate).catch(e => console.error('Failed to save memory:', e));
-      }
-
-      // Save trip memory update if present (gated by trip setting)
-      if (tripMemoryUpdate && tripId && fableSettingsRef.current.memoryEnabled) {
-        tripMemoryRef.current = tripMemoryUpdate;
-        contextRef.current.tripMemory = tripMemoryUpdate;
-        saveAiTripMemory(tripId, tripMemoryUpdate).catch(e => console.error('Failed to save trip memory:', e));
-      }
+      applyPersonalMemory(personalParsed);
+      applyTripMemory(tripParsed);
 
       // Check for flight lookup request
       const { cleanText: textWithoutFlight, flightIata } = parseFlightLookupRequest(cleanText);
@@ -839,20 +933,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
           const followUpResponse = await sendAiMessage('conversation', followUpMessages, contextRef.current);
 
-          const { cleanText: fuTextAfterTripMemory, tripMemoryUpdate: fuTripMemory } = parseTripMemoryUpdate(followUpResponse.content);
-          const { cleanText: fuTextAfterMemory, memoryUpdate: fuMemory } = parseMemoryUpdate(fuTextAfterTripMemory);
-          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuTextAfterMemory);
+          const fuTripParsed = parseTripMemory(followUpResponse.content);
+          const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
+          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuPersonalParsed.cleanText);
 
-          if (fuMemory && personalMemoryEnabledRef.current) {
-            userMemoryRef.current = fuMemory;
-            contextRef.current.userMemory = fuMemory;
-            saveAiUserMemory(fuMemory).catch(e => console.error('Failed to save memory:', e));
-          }
-          if (fuTripMemory && tripId && fableSettingsRef.current.memoryEnabled) {
-            tripMemoryRef.current = fuTripMemory;
-            contextRef.current.tripMemory = fuTripMemory;
-            saveAiTripMemory(tripId, fuTripMemory).catch(e => console.error('Failed to save trip memory:', e));
-          }
+          applyPersonalMemory(fuPersonalParsed);
+          applyTripMemory(fuTripParsed);
 
           if (followUpResponse.credits_remaining !== undefined) {
             const totalCost = creditsCost !== undefined
@@ -907,20 +993,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const followUpResponse = await sendAiMessage('conversation', followUpMessages, followUpContext);
 
           // Parse the follow-up response
-          const { cleanText: fuTextAfterTripMemory, tripMemoryUpdate: fuTripMemory } = parseTripMemoryUpdate(followUpResponse.content);
-          const { cleanText: fuTextAfterMemory, memoryUpdate: fuMemory } = parseMemoryUpdate(fuTextAfterTripMemory);
-          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuTextAfterMemory);
+          const fuTripParsed = parseTripMemory(followUpResponse.content);
+          const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
+          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuPersonalParsed.cleanText);
 
-          if (fuMemory && personalMemoryEnabledRef.current) {
-            userMemoryRef.current = fuMemory;
-            contextRef.current.userMemory = fuMemory;
-            saveAiUserMemory(fuMemory).catch(e => console.error('Failed to save memory:', e));
-          }
-          if (fuTripMemory && tripId && fableSettingsRef.current.memoryEnabled) {
-            tripMemoryRef.current = fuTripMemory;
-            contextRef.current.tripMemory = fuTripMemory;
-            saveAiTripMemory(tripId, fuTripMemory).catch(e => console.error('Failed to save trip memory:', e));
-          }
+          applyPersonalMemory(fuPersonalParsed);
+          applyTripMemory(fuTripParsed);
 
           // Update credits from follow-up
           if (followUpResponse.credits_remaining !== undefined) {
@@ -1401,16 +1479,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       }
 
       // Parse JSON from response (with repair for truncated responses)
-      const parsed = safeParseAgentJson<{ items: Array<{ name: string; category: string; quantity: number }> }>(
+      const parsed = safeParseAgentJson<{ items: Array<{ name: string; category: string; quantity: number; assigned_to?: string | null }> }>(
         response.content, 'generatePackingList'
       );
 
       if (!parsed.items?.length) throw new Error('Keine Items erhalten');
 
-      // Create packing list + items
-      const { createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
-      const list = await createList(tripId, 'Fable Packliste');
-      await createItems(list.id, parsed.items);
+      // Validate categories against DB constraint + assigned_to against known collaborators
+      const validCategories = new Set<string>(PACKING_CATEGORIES);
+      const validCollabIds = new Set(contextRef.current.collaborators?.map(c => c.id) || []);
+      const validItems = parsed.items.map(item => ({
+        ...item,
+        category: validCategories.has(item.category) ? item.category : 'Sonstiges',
+        assigned_to: item.assigned_to && validCollabIds.has(item.assigned_to) ? item.assigned_to : null,
+      }));
+
+      // Add items to existing packing list (or create one if none exists)
+      const { getPackingLists, createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
+      const existingLists = await getPackingLists(tripId);
+      const list = existingLists.length > 0 ? existingLists[0] : await createList(tripId, 'Packliste');
+      await createItems(list.id, validItems);
 
       const successMsg: AiChatMessage = {
         id: nextId(),

@@ -219,6 +219,18 @@ export interface BudgetCategory {
   name: string;
   color: string;
   budget_limit: number | null;
+  scope: 'group' | 'personal';
+  user_id: string | null;
+  created_at: string;
+  // Joined from budget_personal_limits (for current user)
+  personal_limit?: number | null;
+}
+
+export interface BudgetPersonalLimit {
+  id: string;
+  category_id: string;
+  user_id: string;
+  budget_limit: number;
   created_at: string;
 }
 

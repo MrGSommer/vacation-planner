@@ -5,16 +5,15 @@ const GCS = Deno.env.get('GMAIL_CLIENT_SECRET') || '';
 const GRT = Deno.env.get('GMAIL_REFRESH_TOKEN') || '';
 const GSE = Deno.env.get('GMAIL_SENDER_EMAIL') || '';
 const SITE = Deno.env.get('SITE_URL') || 'https://wayfable.ch';
-function auth(r:Request){const t=(r.headers.get('Authorization')||'').replace('Bearer ','');return t===SRK||t===IAS;}
+function auth(r:Request){const t=(r.headers.get('Authorization')||'').replace('Bearer ','');return t===SRK||(IAS!==''&&t===IAS);}
 let cat:string|null=null,te=0;
 async function gat(){
   if(cat&&Date.now()<te)return cat;
-  console.log('send-email: refreshing Gmail access token...');
+  console.log('send-email: refreshing token');
   const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:GCI,client_secret:GCS,refresh_token:GRT,grant_type:'refresh_token'})});
   if(!r.ok){
-    const errText = await r.text();
-    console.error('send-email: Gmail token refresh failed:', r.status, errText);
-    throw new Error(`Gmail token refresh failed (${r.status}): ${errText}`);
+    console.error('send-email: token refresh failed:', r.status);
+    throw new Error('Gmail token refresh failed');
   }
   const d=await r.json();
   cat=d.access_token;
@@ -81,14 +80,13 @@ async function send(to:string,subj:string,html:string,unsub?:string):Promise<{se
 
   const mime=[...headers,'',textPart,htmlPart,`--${boundary}--`].join('\r\n');
   const raw=btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  console.log(`send-email: sending to ${to}, subject: ${subj}`);
+  console.log('send-email: sending');
   const r=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{'Authorization':`Bearer ${at}`,'Content-Type':'application/json'},body:JSON.stringify({raw})});
   if(!r.ok){
-    const errText = await r.text();
-    console.error(`send-email: Gmail API error ${r.status} for ${to}:`, errText);
-    return {sent:false, error:`Gmail API ${r.status}: ${errText}`};
+    console.error('send-email: Gmail API error', r.status);
+    return {sent:false, error:`Gmail API ${r.status}`};
   }
-  console.log(`send-email: sent successfully to ${to}`);
+  console.log('send-email: sent');
   return {sent:true};
 }
 Deno.serve(async(req)=>{
@@ -109,6 +107,6 @@ Deno.serve(async(req)=>{
     return new Response(JSON.stringify(result));
   }catch(e){
     console.error('send-email: unhandled error:', e);
-    return new Response(JSON.stringify({error:(e as Error).message,sent:false}),{status:500});
+    return new Response(JSON.stringify({error:'Internal server error',sent:false}),{status:500});
   }
 });

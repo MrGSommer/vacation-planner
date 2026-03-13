@@ -10,6 +10,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 const CATEGORY_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8C42', '#6C5CE7'];
 
@@ -152,11 +153,11 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
   }, [receipt, onComplete]);
 
   const handleSetPaidBy = useCallback((userId: string) => {
-    onUpdate(receipt.id, { paid_by: userId } as any);
+    onUpdate(receipt.id, { paid_by: userId });
   }, [receipt.id, onUpdate]);
 
   const handleMetadataUpdate = useCallback((field: 'restaurant_name' | 'date' | 'category_id', value: string | null) => {
-    onUpdate(receipt.id, { [field]: value } as any);
+    onUpdate(receipt.id, { [field]: value } as Pick<Receipt, 'restaurant_name' | 'date' | 'category_id'>);
   }, [receipt.id, onUpdate]);
 
   // Calculate summary shares with discount support
@@ -352,7 +353,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
                             handleMetadataUpdate('category_id', created.id);
                             setNewCatName('');
                             setShowNewCategory(false);
-                          } catch {}
+                          } catch (e) { logError(e, { component: 'ReceiptCard', context: { action: 'createCategory' } }); }
                         }}
                         disabled={!newCatName.trim()}
                         style={{ marginTop: spacing.xs }}

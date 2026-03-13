@@ -49,6 +49,13 @@ export default function App() {
     'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
   });
 
+  // Remove HTML bootstrap loader once fonts are ready (prevents double spinner)
+  useEffect(() => {
+    if (Platform.OS === 'web' && fontsLoaded && typeof document !== 'undefined') {
+      document.getElementById('app-loader')?.remove();
+    }
+  }, [fontsLoaded]);
+
   if (!fontsLoaded) {
     return <LoadingScreen />;
   }

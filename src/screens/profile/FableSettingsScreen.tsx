@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Switch, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Switch, TouchableOpacity, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Header, Card } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
-import { getAiUserMemory, deleteAiUserMemory } from '../../api/aiMemory';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
 
@@ -19,18 +18,20 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [aiContextEnabled, setAiContextEnabled] = useState(profile?.ai_trip_context_enabled ?? true);
   const [nameVisible, setNameVisible] = useState(profile?.fable_name_visible ?? true);
   const [personalMemoryEnabled, setPersonalMemoryEnabled] = useState(profile?.fable_memory_enabled ?? true);
-  const [memoryText, setMemoryText] = useState<string | null>(null);
-  const [memoryLoading, setMemoryLoading] = useState(true);
-  const [memoryDeleting, setMemoryDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Refresh profile on mount to pick up auto-appended memory from Fable
   useEffect(() => {
-    getAiUserMemory()
-      .then(text => setMemoryText(text))
-      .catch(() => setMemoryText(null))
-      .finally(() => setMemoryLoading(false));
+    refreshProfile().then(() => {}).catch(() => {});
   }, []);
+
+  // Sync local state when profile changes (e.g. after refreshProfile)
+  useEffect(() => {
+    if (profile?.ai_custom_instruction !== undefined && !saving) {
+      setCustomInstruction(profile.ai_custom_instruction || '');
+    }
+  }, [profile?.ai_custom_instruction]);
 
   const handleSaveInstruction = async () => {
     if (!user) return;
@@ -70,35 +71,6 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleDeleteMemory = async () => {
-    const doDelete = async () => {
-      setMemoryDeleting(true);
-      try {
-        await deleteAiUserMemory();
-        setMemoryText(null);
-      } catch {
-        Alert.alert('Fehler', 'Memory konnte nicht gelöscht werden');
-      } finally {
-        setMemoryDeleting(false);
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('Fable vergisst alle gelernten Vorlieben. Fortfahren?')) {
-        await doDelete();
-      }
-    } else {
-      Alert.alert(
-        'Memory löschen',
-        'Fable vergisst alle gelernten Vorlieben. Fortfahren?',
-        [
-          { text: 'Abbrechen', style: 'cancel' },
-          { text: 'Löschen', style: 'destructive', onPress: doDelete },
-        ],
-      );
-    }
-  };
-
   return (
     <View style={styles.container}>
       <Header title="Fable & KI" onBack={() => navigation.goBack()} />
@@ -117,22 +89,22 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Custom Instruction */}
         <Card style={styles.card}>
-          <Text style={styles.cardTitle}>Persönliche Anweisung</Text>
+          <Text style={styles.cardTitle}>Persoenliche Anweisung</Text>
           <Text style={styles.cardDesc}>
-            Gib Fable eine Anweisung, die bei jeder Konversation berücksichtigt wird (z.B. "Antworte kurz und knapp" oder "Ich bin Vegetarier").
+            Hier stehen deine persoenlichen Vorlieben fuer Fable. Du kannst sie manuell bearbeiten — Fable ergaenzt sie auch automatisch aus Gespraechen.
           </Text>
           <TextInput
             style={styles.textArea}
             value={customInstruction}
             onChangeText={setCustomInstruction}
-            placeholder="z.B. Antworte kurz und knapp..."
+            placeholder="z.B. Ich bin Vegetarier, reise gerne mit dem Zug..."
             placeholderTextColor={colors.textLight}
             multiline
-            maxLength={500}
+            maxLength={1000}
             textAlignVertical="top"
           />
           <View style={styles.instructionFooter}>
-            <Text style={styles.charCount}>{customInstruction.length}/500</Text>
+            <Text style={styles.charCount}>{customInstruction.length}/1000</Text>
             <TouchableOpacity
               style={[styles.saveBtn, (saving || saved) && { opacity: 0.7 }]}
               onPress={handleSaveInstruction}
@@ -150,7 +122,7 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Reisedaten als Kontext</Text>
-              <Text style={styles.toggleDesc}>Erlaubt Fable, bestehende Trip-Daten für bessere Vorschläge zu nutzen</Text>
+              <Text style={styles.toggleDesc}>Erlaubt Fable, bestehende Trip-Daten fuer bessere Vorschlaege zu nutzen</Text>
             </View>
             <Switch
               value={aiContextEnabled}
@@ -182,7 +154,7 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Fable darf sich Vorlieben merken</Text>
-              <Text style={styles.toggleDesc}>Betrifft nur deine persoenlichen Vorlieben ueber alle Reisen hinweg</Text>
+              <Text style={styles.toggleDesc}>Fable ergaenzt deine persoenliche Anweisung automatisch mit neuen Erkenntnissen aus Gespraechen</Text>
             </View>
             <Switch
               value={personalMemoryEnabled}
@@ -191,34 +163,6 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
               thumbColor="#FFFFFF"
             />
           </View>
-        </Card>
-
-        {/* Memory */}
-        <Card style={styles.card}>
-          <Text style={styles.cardTitle}>Fable-Memory</Text>
-          <Text style={styles.cardDesc}>
-            Fable merkt sich deine Vorlieben aus Gesprächen (z.B. Ernährung, Reisestil).
-          </Text>
-          {memoryLoading ? (
-            <Text style={styles.memoryText}>Wird geladen...</Text>
-          ) : memoryText ? (
-            <View style={styles.memoryBox}>
-              <Text style={styles.memoryText}>{memoryText}</Text>
-            </View>
-          ) : (
-            <Text style={styles.memoryEmpty}>Noch keine Vorlieben gespeichert</Text>
-          )}
-          {memoryText && (
-            <TouchableOpacity
-              style={[styles.deleteBtn, memoryDeleting && { opacity: 0.6 }]}
-              onPress={handleDeleteMemory}
-              disabled={memoryDeleting}
-            >
-              <Text style={styles.deleteBtnText}>
-                {memoryDeleting ? 'Wird gelöscht...' : 'Memory löschen'}
-              </Text>
-            </TouchableOpacity>
-          )}
         </Card>
       </ScrollView>
     </View>
@@ -242,7 +186,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    minHeight: 100,
+    minHeight: 120,
     color: colors.text,
   },
   instructionFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
@@ -253,9 +197,4 @@ const styles = StyleSheet.create({
   toggleInfo: { flex: 1, marginRight: spacing.md },
   toggleLabel: { ...typography.body, fontWeight: '600', marginBottom: spacing.xs },
   toggleDesc: { ...typography.bodySmall, color: colors.textSecondary },
-  memoryBox: { backgroundColor: colors.background, borderRadius: borderRadius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
-  memoryText: { ...typography.bodySmall, color: colors.textSecondary },
-  memoryEmpty: { ...typography.bodySmall, color: colors.textLight, fontStyle: 'italic' },
-  deleteBtn: { marginTop: spacing.sm, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.md, backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: colors.error + '30' },
-  deleteBtnText: { ...typography.caption, color: colors.error, fontWeight: '600' },
 });

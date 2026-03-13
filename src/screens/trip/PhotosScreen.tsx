@@ -95,7 +95,9 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [slideshowActive, setSlideshowActive] = useState(false);
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const introFadeAnim = useRef(new Animated.Value(1)).current;
   const slideshowProgress = useRef(new Animated.Value(0)).current;
+  const slideshowIndexRef = useRef(0);
 
   // Slideshow music
   const slideshowSoundRef = useRef<AudioPlayer | null>(null);
@@ -480,8 +482,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   // Crossfade: next image fades in over current
   const [crossfadeUrl, setCrossfadeUrl] = useState<string | null>(null);
 
+  // Keep ref in sync
+  useEffect(() => { slideshowIndexRef.current = viewerIndex; }, [viewerIndex]);
+
   const advanceSlideshow = useCallback(() => {
-    const nextIdx = (viewerIndex + 1) % flatPhotos.length;
+    const currentIdx = slideshowIndexRef.current;
+    const nextIdx = (currentIdx + 1) % flatPhotos.length;
     const nextPhoto = flatPhotos[nextIdx];
     if (!nextPhoto) return;
 
@@ -491,13 +497,17 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
     // Fade in the next image over the current
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start(() => {
-      // Swap complete: update the base image and clear overlay
+      // Swap base image first (overlay still covers it)
+      slideshowIndexRef.current = nextIdx;
       setViewerIndex(nextIdx);
       setSelectedPhoto(nextPhoto);
-      setCrossfadeUrl(null);
-      fadeAnim.setValue(1);
+      // Clear overlay on next frame so base has rendered the new image
+      requestAnimationFrame(() => {
+        setCrossfadeUrl(null);
+        fadeAnim.setValue(1);
+      });
     });
-  }, [fadeAnim, flatPhotos, viewerIndex]);
+  }, [fadeAnim, flatPhotos]);
 
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
@@ -513,13 +523,19 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       }
 
       if (showIntro) {
-        // Intro slide: wait slideshowInterval then transition to photos
+        // Intro slide: wait slideshowInterval, then fade out intro
+        introFadeAnim.setValue(1);
         slideshowProgress.setValue(0);
         Animated.timing(slideshowProgress, {
           toValue: 1, duration: slideshowInterval, useNativeDriver: false,
         }).start();
         const introTimer = setTimeout(() => {
-          setShowIntro(false);
+          Animated.timing(introFadeAnim, {
+            toValue: 0, duration: 800, useNativeDriver: false,
+          }).start(() => {
+            setShowIntro(false);
+            introFadeAnim.setValue(1);
+          });
         }, slideshowInterval);
         return () => clearTimeout(introTimer);
       }
@@ -833,9 +849,9 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* Intro slide */}
+          {/* Intro slide (fades out to reveal first photo beneath) */}
           {slideshowActive && showIntro && (
-            <View style={styles.introSlide}>
+            <Animated.View style={[styles.introSlide, { opacity: introFadeAnim, zIndex: 2 }]}>
               {trip?.cover_image_url ? (
                 <>
                   <Image source={trip.cover_image_url} style={styles.introCoverImage} contentFit="cover" />
@@ -854,11 +870,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                 )}
                 <Text style={styles.introLogo}>WayFable</Text>
               </View>
-            </View>
+            </Animated.View>
           )}
 
-          {/* Image + navigation */}
-          {selectedPhoto && !(slideshowActive && showIntro) && (
+          {/* Image + navigation (always rendered during slideshow so it's visible beneath intro fade) */}
+          {selectedPhoto && (
             <View style={styles.viewerContent} {...panResponder.panHandlers}>
               {/* Base image — always fully visible */}
               <Image
@@ -1152,7 +1168,7 @@ const styles = StyleSheet.create({
   viewerDeleteText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },
 
   // Intro slide
-  introSlide: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  introSlide: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   introCoverImage: { ...StyleSheet.absoluteFillObject } as any,
   introCoverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   introContent: { zIndex: 1, alignItems: 'center', padding: spacing.xl },

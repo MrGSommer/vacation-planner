@@ -72,7 +72,7 @@ export const createPackingItem = async (
 
 export const createPackingItems = async (
   listId: string,
-  items: { name: string; category: string; quantity: number }[],
+  items: { name: string; category: string; quantity: number; assigned_to?: string | null }[],
 ): Promise<PackingItem[]> => {
   const rows = items.map(item => ({
     list_id: listId,
@@ -80,12 +80,14 @@ export const createPackingItems = async (
     category: item.category,
     quantity: item.quantity,
     is_packed: false,
+    ...(item.assigned_to ? { assigned_to: item.assigned_to } : {}),
   }));
   const { data, error } = await supabase
     .from('packing_items')
     .insert(rows)
     .select();
   if (error) throw error;
+  invalidateCache(`packingItems:${listId}`);
   return data || [];
 };
 

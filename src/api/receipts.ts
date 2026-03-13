@@ -38,6 +38,7 @@ export const updateReceipt = async (
 };
 
 export const deleteReceipt = async (id: string): Promise<void> => {
+  await deleteExpensesByReceiptId(id);
   const { error } = await supabase.from('receipts').delete().eq('id', id);
   if (error) throw error;
 };
@@ -51,12 +52,13 @@ export const generateExpensesFromReceipt = async (
   receipt: Receipt,
   userId: string,
 ): Promise<void> => {
-  // Delete existing expenses for this receipt (idempotent re-generation)
-  await deleteExpensesByReceiptId(receipt.id);
+  if (!receipt.paid_by) {
+    // No payer — just delete old expenses
+    await deleteExpensesByReceiptId(receipt.id);
+    return;
+  }
 
-  if (!receipt.paid_by) return;
-
-  const expensesToCreate: Array<Omit<Expense, 'id' | 'created_at' | 'budget_categories'>> = [];
+  const expensesToCreate: Array<Record<string, unknown>> = [];
 
   // Separate discounts from regular items
   const regularItems = receipt.items.filter(i => !i.is_discount);
@@ -107,9 +109,16 @@ export const generateExpensesFromReceipt = async (
     }
   }
 
-  if (expensesToCreate.length === 0) return;
+  if (expensesToCreate.length === 0) {
+    await deleteExpensesByReceiptId(receipt.id);
+    return;
+  }
 
-  const { error } = await supabase.from('expenses').insert(expensesToCreate);
+  // Atomic: delete old + insert new in one transaction
+  const { error } = await supabase.rpc('regenerate_receipt_expenses', {
+    p_receipt_id: receipt.id,
+    p_items: expensesToCreate,
+  });
   if (error) throw error;
 };
 

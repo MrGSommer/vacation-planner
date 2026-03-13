@@ -71,29 +71,35 @@ export const typography = {
   button: { fontSize: 16, ...weight('600') },
 } as const;
 
-export const shadows = {
-  sm: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  lg: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-} as const;
+export const shadows = Platform.OS === 'web'
+  ? {
+      sm: { boxShadow: '0px 1px 4px rgba(0,0,0,0.08)' },
+      md: { boxShadow: '0px 2px 8px rgba(0,0,0,0.12)' },
+      lg: { boxShadow: '0px 4px 12px rgba(0,0,0,0.15)' },
+    } as const
+  : {
+      sm: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+      md: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+      lg: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+      },
+    } as const;
 
 // Icon sizes for consistent Ionicons usage
 export const iconSize = {

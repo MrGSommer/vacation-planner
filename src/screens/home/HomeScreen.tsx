@@ -53,7 +53,7 @@ const TripCard: React.FC<{
 }> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
-  const btnRef = useRef<TouchableOpacity>(null);
+  const btnRef = useRef<View>(null);
   const MENU_HEIGHT = 210; // approximate menu height (4 items + divider + padding)
   const others = collaborators.filter(c => c.user_id !== currentUserId);
   const shown = others.slice(0, MAX_AVATARS);

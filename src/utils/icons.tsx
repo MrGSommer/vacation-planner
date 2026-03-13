@@ -8,14 +8,15 @@ interface IconProps {
   name: IconName;
   size?: number;
   color?: string;
+  style?: import('react-native').StyleProp<import('react-native').TextStyle>;
 }
 
 /**
  * Thin wrapper around Ionicons for consistent usage.
  * Use this instead of raw emoji characters.
  */
-export const Icon: React.FC<IconProps> = ({ name, size = iconSize.md, color = colors.text }) => (
-  <Ionicons name={name} size={size} color={color} />
+export const Icon: React.FC<IconProps> = ({ name, size = iconSize.md, color = colors.text, style }) => (
+  <Ionicons name={name} size={size} color={color} style={style} />
 );
 
 // Activity category → Ionicons mapping

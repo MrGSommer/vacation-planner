@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Trip } from '../types/database';
 import { getTrips, getTrip, updateTrip } from '../api/trips';
 import { useAuthContext } from './AuthContext';
@@ -90,8 +90,12 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentTrip]);
 
+  const value = useMemo(() => ({
+    trips, currentTrip, loading, fetchTrips, setCurrentTrip, refreshCurrentTrip,
+  }), [trips, currentTrip, loading, fetchTrips, setCurrentTrip, refreshCurrentTrip]);
+
   return (
-    <TripContext.Provider value={{ trips, currentTrip, loading, fetchTrips, setCurrentTrip, refreshCurrentTrip }}>
+    <TripContext.Provider value={value}>
       {children}
     </TripContext.Provider>
   );

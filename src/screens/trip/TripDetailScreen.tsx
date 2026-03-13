@@ -70,7 +70,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showAiModal, setShowAiModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
-  const menuBtnRef = useRef<TouchableOpacity>(null);
+  const menuBtnRef = useRef<View>(null);
   const MENU_HEIGHT = 200;
   const [showClearModal, setShowClearModal] = useState(false);
   const [showChangeLog, setShowChangeLog] = useState(false);

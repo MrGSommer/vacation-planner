@@ -21,6 +21,7 @@
     "@supabase/supabase-js": "^2.93.3",
     "date-fns": "^4.1.0",
     "expo": "~54.0.33",
+    "expo-audio": "~1.1.1",
     "expo-av": "~16.0.8",
     "expo-clipboard": "~8.0.8",
     "expo-crypto": "~15.0.8",

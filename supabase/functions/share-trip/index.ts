@@ -1,16 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+import { corsHeaders, json } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -39,8 +28,10 @@ const DEFAULT_SHARE_CONFIG = {
 };
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get('origin') || '';
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(origin) });
   }
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -50,7 +41,7 @@ Deno.serve(async (req) => {
     const { token } = body;
 
     if (!token) {
-      return json({ error: 'Token fehlt' }, 400);
+      return json({ error: 'Token fehlt' }, origin, 400);
     }
 
     // Look up invitation — must be type 'info' and still active
@@ -63,7 +54,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (invError || !invitation) {
-      return json({ error: 'Share-Link nicht gefunden' }, 404);
+      return json({ error: 'Share-Link nicht gefunden' }, origin, 404);
     }
 
     const tripId = invitation.trip_id;
@@ -77,7 +68,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (!trip) {
-      return json({ error: 'Reise nicht gefunden' }, 404);
+      return json({ error: 'Reise nicht gefunden' }, origin, 404);
     }
 
     // Check if user is authenticated
@@ -95,7 +86,7 @@ Deno.serve(async (req) => {
         packing: [],
         shared_sections: shareConfig,
         is_authenticated: false,
-      });
+      }, origin);
     }
 
     // Authenticated users: load data based on share_config
@@ -196,8 +187,8 @@ Deno.serve(async (req) => {
       packing,
       shared_sections: shareConfig,
       is_authenticated: true,
-    });
+    }, origin);
   } catch (e) {
-    return json({ error: (e as Error).message }, 500);
+    return json({ error: (e as Error).message }, origin, 500);
   }
 });

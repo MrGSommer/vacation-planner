@@ -1,4 +1,6 @@
-const ALLOWED_ORIGINS = ['https://wayfable.ch', 'https://wayfable.netlify.app', 'http://localhost:8081', 'http://localhost:19006'];
+const PROD_ORIGINS = ['https://wayfable.ch', 'https://wayfable.netlify.app'];
+const DEV_ORIGINS = ['http://localhost:8081', 'http://localhost:19006'];
+const ALLOWED_ORIGINS = Deno.env.get('ENV') === 'production' ? PROD_ORIGINS : [...PROD_ORIGINS, ...DEV_ORIGINS];
 
 export const corsHeaders = (origin: string) => ({
   'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],

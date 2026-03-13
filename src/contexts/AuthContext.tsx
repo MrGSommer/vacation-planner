@@ -69,7 +69,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Invite token: persist in sessionStorage (survives page reloads within same tab)
   const [pendingInviteToken, setPendingInviteTokenState] = useState<string | null>(() => {
     if (Platform.OS === 'web') {
-      try { return sessionStorage.getItem('pendingInviteToken'); } catch { return null; }
+      try {
+        const token = sessionStorage.getItem('pendingInviteToken');
+        const ts = sessionStorage.getItem('pendingInviteToken_ts');
+        if (token && ts && Date.now() - parseInt(ts, 10) < 30 * 60 * 1000) return token;
+        // Expired or missing — clean up
+        sessionStorage.removeItem('pendingInviteToken');
+        sessionStorage.removeItem('pendingInviteToken_ts');
+        return null;
+      } catch { return null; }
     }
     return null;
   });
@@ -78,8 +86,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPendingInviteTokenState(token);
     if (Platform.OS === 'web') {
       try {
-        if (token) sessionStorage.setItem('pendingInviteToken', token);
-        else sessionStorage.removeItem('pendingInviteToken');
+        if (token) {
+          sessionStorage.setItem('pendingInviteToken', token);
+          sessionStorage.setItem('pendingInviteToken_ts', String(Date.now()));
+        } else {
+          sessionStorage.removeItem('pendingInviteToken');
+          sessionStorage.removeItem('pendingInviteToken_ts');
+        }
       } catch {}
     }
   }, []);
@@ -87,7 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Pending redirect path: preserve deep link destination through login
   const [pendingRedirectPath, setPendingRedirectPathState] = useState<string | null>(() => {
     if (Platform.OS === 'web') {
-      try { return sessionStorage.getItem('pendingRedirectPath'); } catch { return null; }
+      try {
+        const path = sessionStorage.getItem('pendingRedirectPath');
+        const ts = sessionStorage.getItem('pendingRedirectPath_ts');
+        if (path && ts && Date.now() - parseInt(ts, 10) < 30 * 60 * 1000) return path;
+        sessionStorage.removeItem('pendingRedirectPath');
+        sessionStorage.removeItem('pendingRedirectPath_ts');
+        return null;
+      } catch { return null; }
     }
     return null;
   });
@@ -96,8 +116,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPendingRedirectPathState(path);
     if (Platform.OS === 'web') {
       try {
-        if (path) sessionStorage.setItem('pendingRedirectPath', path);
-        else sessionStorage.removeItem('pendingRedirectPath');
+        if (path) {
+          sessionStorage.setItem('pendingRedirectPath', path);
+          sessionStorage.setItem('pendingRedirectPath_ts', String(Date.now()));
+        } else {
+          sessionStorage.removeItem('pendingRedirectPath');
+          sessionStorage.removeItem('pendingRedirectPath_ts');
+        }
       } catch {}
     }
   }, []);

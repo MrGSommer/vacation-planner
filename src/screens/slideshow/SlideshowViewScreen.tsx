@@ -30,6 +30,8 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
   const [showCta, setShowCta] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const introFadeAnim = useRef(new Animated.Value(1)).current;
+  const outroFadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const soundRef = useRef<AudioPlayer | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -94,10 +96,12 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     const next = currentIdx + 1;
 
     if (next >= data.photos.length) {
-      // End of slideshow — show CTA
-      photoIndexRef.current = 0;
-      setPhotoIndex(0);
+      // End of slideshow — fade in CTA over last photo
+      outroFadeAnim.setValue(0);
       setShowCta(true);
+      Animated.timing(outroFadeAnim, {
+        toValue: 1, duration: 1000, useNativeDriver: false,
+      }).start();
       return;
     }
 
@@ -107,11 +111,14 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
 
     // Fade in the next image over the current
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start(() => {
-      // Swap complete: update the base image and clear overlay
+      // Swap base image first (overlay still covers it)
       photoIndexRef.current = next;
       setPhotoIndex(next);
-      setCrossfadeUrl(null);
-      fadeAnim.setValue(1);
+      // Clear overlay on next frame so base has rendered the new image
+      requestAnimationFrame(() => {
+        setCrossfadeUrl(null);
+        fadeAnim.setValue(1);
+      });
     });
   }, [data, fadeAnim]);
 
@@ -120,13 +127,19 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     if (!started || !data || showCta) return;
 
     if (showIntro) {
-      // Show intro slide for interval_ms, then transition
+      // Show intro slide for interval_ms, then fade out to reveal first photo
+      introFadeAnim.setValue(1);
       progressAnim.setValue(0);
       Animated.timing(progressAnim, {
         toValue: 1, duration: data.interval_ms, useNativeDriver: false,
       }).start();
       const introTimer = setTimeout(() => {
-        setShowIntro(false);
+        Animated.timing(introFadeAnim, {
+          toValue: 0, duration: 800, useNativeDriver: false,
+        }).start(() => {
+          setShowIntro(false);
+          introFadeAnim.setValue(1);
+        });
       }, data.interval_ms);
       return () => clearTimeout(introTimer);
     }
@@ -165,9 +178,12 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     setPaused(!paused);
   };
 
-  // Dismiss CTA
+  // Dismiss CTA — restart from beginning
   const dismissCta = () => {
+    photoIndexRef.current = 0;
+    setPhotoIndex(0);
     setShowCta(false);
+    outroFadeAnim.setValue(0);
   };
 
   if (loading) {
@@ -207,37 +223,33 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     );
   }
 
-  // CTA overlay
-  if (showCta) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.ctaTitle}>Plane deine eigene Reise</Text>
-        <Text style={styles.ctaSubtitle}>mit WayFable</Text>
-        <TouchableOpacity
-          style={styles.ctaButton}
-          onPress={() => Linking.openURL('https://wayfable.ch')}
-        >
-          <Text style={styles.ctaButtonText}>Jetzt entdecken</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={dismissCta} style={styles.ctaDismiss}>
-          <Text style={styles.ctaDismissText}>Diashow fortsetzen</Text>
-        </TouchableOpacity>
+  // CTA is now rendered as overlay in main return
+
+  // Slideshow (with intro overlay + outro)
+  const photo = data.photos[photoIndex];
+
+  return (
+    <View style={styles.container}>
+      {/* Progress bar */}
+      <View style={styles.progressTrack}>
+        <Animated.View style={[styles.progressFill, {
+          width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+        }]} />
       </View>
-    );
-  }
 
-  // Intro slide
-  if (showIntro) {
-    return (
-      <View style={styles.container}>
-        {/* Progress bar */}
-        <View style={styles.progressTrack}>
-          <Animated.View style={[styles.progressFill, {
-            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-          }]} />
-        </View>
+      {/* Photo (always rendered so it's visible beneath intro fade) */}
+      <View style={styles.photoContainer}>
+        <Image source={photo.url} style={styles.photo} contentFit="contain" transition={0} />
+        {crossfadeUrl && (
+          <Animated.View style={[styles.crossfadeOverlay, { opacity: fadeAnim }]}>
+            <Image source={crossfadeUrl} style={styles.photo} contentFit="contain" transition={0} />
+          </Animated.View>
+        )}
+      </View>
 
-        <View style={styles.introSlide}>
+      {/* Intro overlay — fades out to reveal first photo */}
+      {showIntro && (
+        <Animated.View style={[styles.introOverlayContainer, { opacity: introFadeAnim }]}>
           {data.trip_cover_image_url ? (
             <>
               <Image source={data.trip_cover_image_url} style={styles.introCoverImage} contentFit="cover" />
@@ -256,52 +268,45 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
             )}
             <Text style={styles.introLogo}>WayFable</Text>
           </View>
-        </View>
+        </Animated.View>
+      )}
 
-        {/* Controls */}
-        <View style={styles.controls}>
-          <TouchableOpacity style={styles.controlBtn} onPress={toggleMute}>
-            <Icon name={muted ? 'volume-mute' : 'volume-high'} size={20} color="rgba(255,255,255,0.8)" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // Slideshow
-  const photo = data.photos[photoIndex];
-
-  return (
-    <View style={styles.container}>
-      {/* Progress bar */}
-      <View style={styles.progressTrack}>
-        <Animated.View style={[styles.progressFill, {
-          width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-        }]} />
-      </View>
-
-      {/* Photo */}
-      <View style={styles.photoContainer}>
-        <Image source={photo.url} style={styles.photo} contentFit="contain" transition={0} />
-        {crossfadeUrl && (
-          <Animated.View style={[styles.crossfadeOverlay, { opacity: fadeAnim }]}>
-            <Image source={crossfadeUrl} style={styles.photo} contentFit="contain" transition={0} />
-          </Animated.View>
-        )}
-      </View>
+      {/* Outro / CTA overlay — fades in over last photo */}
+      {showCta && (
+        <Animated.View style={[styles.outroOverlay, { opacity: outroFadeAnim }]}>
+          <LinearGradient colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.95)']} style={StyleSheet.absoluteFillObject} />
+          <View style={styles.introContent}>
+            <Text style={styles.outroLogo}>WayFable</Text>
+            <Text style={styles.ctaTitle}>Plane deine eigene Reise</Text>
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={() => Linking.openURL('https://wayfable.ch')}
+            >
+              <Text style={styles.ctaButtonText}>Jetzt entdecken</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={dismissCta} style={styles.ctaDismiss}>
+              <Text style={styles.ctaDismissText}>Diashow nochmals abspielen</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
 
       {/* Controls */}
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.controlBtn} onPress={togglePause}>
-          <Icon name={paused ? 'play' : 'pause'} size={20} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
+        {!showIntro && !showCta && (
+          <TouchableOpacity style={styles.controlBtn} onPress={togglePause}>
+            <Icon name={paused ? 'play' : 'pause'} size={20} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.controlBtn} onPress={toggleMute}>
           <Icon name={muted ? 'volume-mute' : 'volume-high'} size={20} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
 
       {/* Counter */}
-      <Text style={styles.counter}>{photoIndex + 1} / {data.photos.length}</Text>
+      {!showIntro && (
+        <Text style={styles.counter}>{photoIndex + 1} / {data.photos.length}</Text>
+      )}
 
       {/* Logo */}
       <Text style={styles.logo}>WayFable</Text>
@@ -368,7 +373,7 @@ const styles = StyleSheet.create({
   ctaDismissText: { ...typography.bodySmall, color: 'rgba(255,255,255,0.4)' },
 
   // Intro slide
-  introSlide: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  introOverlayContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
   introCoverImage: { ...StyleSheet.absoluteFillObject } as any,
   introCoverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   introContent: { zIndex: 1, alignItems: 'center', padding: spacing.xl },
@@ -387,5 +392,12 @@ const styles = StyleSheet.create({
   introLogo: {
     ...typography.caption, color: 'rgba(255,255,255,0.3)', fontWeight: '700' as const,
     letterSpacing: 1, marginTop: spacing.xl,
+  },
+
+  // Outro
+  outroOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
+  outroLogo: {
+    ...typography.h1, color: '#fff', fontWeight: '800' as const, letterSpacing: 2,
+    marginBottom: spacing.lg, textAlign: 'center' as const,
   },
 });
