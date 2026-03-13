@@ -37,13 +37,15 @@ Deno.serve(async (req) => {
 
     // Fetch photo URLs from trip_photos table
     const photoIds = share.photo_ids as string[];
-    if (photoIds.length === 0) {
-      return json({ error: 'Keine Fotos in dieser Diashow' }, origin, 404);
+    // Validate UUIDs to prevent injection
+    const validPhotoIds = photoIds.filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    if (validPhotoIds.length === 0) {
+      return json({ error: 'Keine gültigen Foto-IDs' }, origin, 404);
     }
 
     // Fetch photos in order
     const photosRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/trip_photos?id=in.(${photoIds.map((id: string) => `"${id}"`).join(',')})&select=id,url`,
+      `${SUPABASE_URL}/rest/v1/trip_photos?id=in.(${validPhotoIds.map((id: string) => `"${id}"`).join(',')})&select=id,url`,
       {
         headers: {
           'apikey': SERVICE_ROLE_KEY,
@@ -55,10 +57,26 @@ Deno.serve(async (req) => {
 
     // Sort photos in the order specified by photo_ids
     const photoMap = new Map(photos.map((p: any) => [p.id, p]));
-    const orderedPhotos = photoIds
+    const orderedPhotos = validPhotoIds
       .map((id: string) => photoMap.get(id))
       .filter(Boolean)
       .map((p: any) => ({ url: p.url }));
+
+    // Fetch trip metadata
+    let trip: any = null;
+    if (share.trip_id) {
+      const tripRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/trips?id=eq.${share.trip_id}&select=destination,start_date,end_date,cover_image_url`,
+        {
+          headers: {
+            'apikey': SERVICE_ROLE_KEY,
+            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+          },
+        }
+      );
+      const trips = await tripRes.json();
+      trip = trips?.[0] || null;
+    }
 
     // Build music URL
     const musicUrl = `${SUPABASE_URL}/storage/v1/object/public/music/${share.music_track}.mp3`;
@@ -67,6 +85,10 @@ Deno.serve(async (req) => {
       music_track: share.music_track,
       interval_ms: share.interval_ms,
       trip_name: share.trip_name,
+      trip_destination: trip?.destination || null,
+      trip_start_date: trip?.start_date || null,
+      trip_end_date: trip?.end_date || null,
+      trip_cover_image_url: trip?.cover_image_url || null,
       photos: orderedPhotos,
       music_url: musicUrl,
       expires_at: share.expires_at,

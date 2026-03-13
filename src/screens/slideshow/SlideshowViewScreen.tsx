@@ -4,12 +4,14 @@ import {
   Dimensions, Platform, Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { getSharedSlideshow, SlideshowShareData } from '../../api/slideshows';
+import { formatDateRange } from '../../utils/dateHelpers';
 import { Icon } from '../../utils/icons';
-import { colors, spacing, typography, borderRadius } from '../../utils/theme';
+import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SlideshowView'>;
 
@@ -21,6 +23,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [muted, setMuted] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -28,7 +31,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const photoIndexRef = useRef(0);
 
@@ -45,7 +48,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
       }
     })();
     return () => {
-      if (soundRef.current) soundRef.current.unloadAsync();
+      if (soundRef.current) soundRef.current.remove();
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [token]);
@@ -54,20 +57,38 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
   const handleStart = useCallback(async () => {
     if (!data) return;
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: data.music_url },
-        { shouldPlay: true, isLooping: true, volume: 0.6 }
-      );
-      soundRef.current = sound;
+      const player = createAudioPlayer(data.music_url);
+      player.loop = true;
+      player.volume = 0.6;
+      player.play();
+      soundRef.current = player;
     } catch {}
     setStarted(true);
   }, [data]);
 
+  // Preload images: during intro preload first photo, during slideshow preload next
+  useEffect(() => {
+    if (!started || !data || data.photos.length === 0) return;
+    // During intro, preload the first photo so it's ready when intro ends
+    if (showIntro) {
+      if (data.photos[0]?.url && Platform.OS === 'web') {
+        const img = new window.Image();
+        img.src = data.photos[0].url;
+      }
+      return;
+    }
+    const nextIdx = photoIndexRef.current + 1;
+    const nextPhoto = nextIdx >= data.photos.length ? data.photos[0] : data.photos[nextIdx];
+    if (nextPhoto?.url && Platform.OS === 'web') {
+      const img = new window.Image();
+      img.src = nextPhoto.url;
+    }
+  }, [started, data, showIntro, photoIndex]);
+
   // Advance slideshow
   const advance = useCallback(() => {
     if (!data) return;
-    Animated.timing(fadeAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+    Animated.timing(fadeAnim, { toValue: 0, duration: 500, useNativeDriver: false }).start(() => {
       const currentIdx = photoIndexRef.current;
       const next = currentIdx + 1;
       if (next >= data.photos.length) {
@@ -78,13 +99,28 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
         photoIndexRef.current = next;
         setPhotoIndex(next);
       }
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: false }).start();
     });
   }, [data, fadeAnim]);
 
-  // Run interval
+  // Intro timer + run interval
   useEffect(() => {
-    if (!started || !data || paused || showCta) return;
+    if (!started || !data || showCta) return;
+
+    if (showIntro) {
+      // Show intro slide for interval_ms, then transition
+      progressAnim.setValue(0);
+      Animated.timing(progressAnim, {
+        toValue: 1, duration: data.interval_ms, useNativeDriver: false,
+      }).start();
+      const introTimer = setTimeout(() => {
+        setShowIntro(false);
+      }, data.interval_ms);
+      return () => clearTimeout(introTimer);
+    }
+
+    if (paused) return;
+
     progressAnim.setValue(0);
     Animated.timing(progressAnim, {
       toValue: 1, duration: data.interval_ms, useNativeDriver: false,
@@ -97,22 +133,22 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
       }).start();
     }, data.interval_ms);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [started, data, paused, showCta, advance, progressAnim]);
+  }, [started, data, paused, showCta, showIntro, advance, progressAnim]);
 
   // Toggle mute
-  const toggleMute = async () => {
+  const toggleMute = () => {
     if (soundRef.current) {
-      await soundRef.current.setIsMutedAsync(!muted);
+      soundRef.current.muted = !muted;
       setMuted(!muted);
     }
   };
 
   // Toggle pause
-  const togglePause = async () => {
+  const togglePause = () => {
     if (paused) {
-      soundRef.current?.playAsync();
+      soundRef.current?.play();
     } else {
-      soundRef.current?.pauseAsync();
+      soundRef.current?.pause();
     }
     setPaused(!paused);
   };
@@ -174,6 +210,48 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
         <TouchableOpacity onPress={dismissCta} style={styles.ctaDismiss}>
           <Text style={styles.ctaDismissText}>Diashow fortsetzen</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Intro slide
+  if (showIntro) {
+    return (
+      <View style={styles.container}>
+        {/* Progress bar */}
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressFill, {
+            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          }]} />
+        </View>
+
+        <View style={styles.introSlide}>
+          {data.trip_cover_image_url ? (
+            <>
+              <Image source={data.trip_cover_image_url} style={styles.introCoverImage} contentFit="cover" />
+              <View style={styles.introCoverOverlay} />
+            </>
+          ) : (
+            <LinearGradient colors={[...gradients.sunset]} style={StyleSheet.absoluteFillObject} />
+          )}
+          <View style={styles.introContent}>
+            {data.trip_destination && (
+              <Text style={styles.introDestination}>{data.trip_destination}</Text>
+            )}
+            <Text style={styles.introTitle}>{data.trip_name || 'Diashow'}</Text>
+            {data.trip_start_date && data.trip_end_date && (
+              <Text style={styles.introDate}>{formatDateRange(data.trip_start_date, data.trip_end_date)}</Text>
+            )}
+            <Text style={styles.introLogo}>WayFable</Text>
+          </View>
+        </View>
+
+        {/* Controls */}
+        <View style={styles.controls}>
+          <TouchableOpacity style={styles.controlBtn} onPress={toggleMute}>
+            <Icon name={muted ? 'volume-mute' : 'volume-high'} size={20} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -270,4 +348,26 @@ const styles = StyleSheet.create({
   ctaButtonText: { ...typography.body, color: '#fff', fontWeight: '700' as const },
   ctaDismiss: { marginTop: spacing.lg },
   ctaDismissText: { ...typography.bodySmall, color: 'rgba(255,255,255,0.4)' },
+
+  // Intro slide
+  introSlide: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  introCoverImage: { ...StyleSheet.absoluteFillObject } as any,
+  introCoverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  introContent: { zIndex: 1, alignItems: 'center', padding: spacing.xl },
+  introDestination: {
+    ...typography.bodySmall, color: 'rgba(255,255,255,0.7)', fontWeight: '600' as const,
+    letterSpacing: 2, textTransform: 'uppercase' as const, textAlign: 'center' as const,
+  },
+  introTitle: {
+    ...typography.h1, color: '#fff', fontWeight: '800' as const,
+    textAlign: 'center' as const, marginTop: spacing.xs,
+  },
+  introDate: {
+    ...typography.body, color: 'rgba(255,255,255,0.6)',
+    marginTop: spacing.sm, textAlign: 'center' as const,
+  },
+  introLogo: {
+    ...typography.caption, color: 'rgba(255,255,255,0.3)', fontWeight: '700' as const,
+    letterSpacing: 1, marginTop: spacing.xl,
+  },
 });

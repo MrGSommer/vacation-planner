@@ -18,6 +18,10 @@ export interface SlideshowShareData {
   music_track: MusicTrack;
   interval_ms: number;
   trip_name: string | null;
+  trip_destination: string | null;
+  trip_start_date: string | null;
+  trip_end_date: string | null;
+  trip_cover_image_url: string | null;
   photos: { url: string }[];
   music_url: string;
   expires_at: string;

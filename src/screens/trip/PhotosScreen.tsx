@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
@@ -17,17 +17,17 @@ import { requireOnline } from '../../utils/offlineGate';
 import { extractExifDateFromUri, extractExifDateFromBuffer, extractExifDataFromBuffer } from '../../utils/exifReader';
 import { getDays } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
-import { Photo, ItineraryDay } from '../../types/database';
+import { Photo, ItineraryDay, Trip } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
-import { formatDateShort, formatDateMedium } from '../../utils/dateHelpers';
+import { formatDateShort, formatDateMedium, formatDateRange } from '../../utils/dateHelpers';
 import { parseISO } from 'date-fns';
 import { Icon } from '../../utils/icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 import { usePresence } from '../../hooks/usePresence';
 import { MUSIC_TRACKS } from '../../config/music';
@@ -77,6 +77,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [dayFilter, setDayFilter] = useState<string | null>(null); // null = all, day_id = filter
+  const [trip, setTrip] = useState<Trip | null>(null);
   const [tripName, setTripName] = useState<string>('');
 
   // Bulk selection
@@ -97,7 +98,10 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const slideshowProgress = useRef(new Animated.Value(0)).current;
 
   // Slideshow music
-  const slideshowSoundRef = useRef<Audio.Sound | null>(null);
+  const slideshowSoundRef = useRef<AudioPlayer | null>(null);
+
+  // Slideshow intro
+  const [showIntro, setShowIntro] = useState(true);
 
   // Share modal
   const [showSlideshowShare, setShowSlideshowShare] = useState(false);
@@ -128,7 +132,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       const [data, fetchedDays, trip] = await Promise.all([getPhotos(tripId), getDays(tripId), getTrip(tripId)]);
       setDays(fetchedDays.sort((a, b) => a.date.localeCompare(b.date)));
       setPhotos(data);
-      if (trip?.name) setTripName(trip.name);
+      if (trip) { setTrip(trip); setTripName(trip.name); }
       // Auto-tag photos without day_id
       const untagged = data.filter(p => !p.day_id && p.taken_at);
       if (untagged.length > 0 && fetchedDays.length > 0) {
@@ -440,6 +444,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Slideshow
   const startSlideshow = () => {
+    setShowIntro(true);
     setSlideshowActive(true);
   };
 
@@ -447,47 +452,74 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     setSlideshowActive(false);
     if (slideshowRef.current) { clearInterval(slideshowRef.current); slideshowRef.current = null; }
     if (slideshowSoundRef.current) {
-      slideshowSoundRef.current.unloadAsync();
+      slideshowSoundRef.current.remove();
       slideshowSoundRef.current = null;
     }
   };
 
   const SLIDESHOW_INTERVAL = 4000;
 
+  // Preload next slideshow image to avoid loading flash
+  useEffect(() => {
+    if (!slideshowActive || flatPhotos.length === 0) return;
+    if (Platform.OS !== 'web') return;
+    if (showIntro) {
+      // During intro, preload the current (first) photo
+      const url = flatPhotos[viewerIndex]?.url;
+      if (url) { const img = new window.Image(); img.src = url; }
+      return;
+    }
+    const nextIdx = viewerIndex + 1 >= flatPhotos.length ? 0 : viewerIndex + 1;
+    const nextUrl = flatPhotos[nextIdx]?.url;
+    if (nextUrl) { const img = new window.Image(); img.src = nextUrl; }
+  }, [slideshowActive, viewerIndex, flatPhotos, showIntro]);
+
   const advanceSlideshow = useCallback(() => {
     // Fade out
-    Animated.timing(fadeAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => {
+    Animated.timing(fadeAnim, { toValue: 0, duration: 400, useNativeDriver: false }).start(() => {
       setViewerIndex(prev => {
         const next = prev + 1 >= flatPhotos.length ? 0 : prev + 1;
         setSelectedPhoto(flatPhotos[next]);
         return next;
       });
       // Fade in
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: false }).start();
     });
   }, [fadeAnim, flatPhotos]);
 
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
-      // Start background music
-      (async () => {
+      // Start background music (plays during intro too)
+      if (!slideshowSoundRef.current) {
         try {
           const track = MUSIC_TRACKS[0]; // 'relaxed' default
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: track.url },
-            { shouldPlay: true, isLooping: true, volume: 0.5 }
-          );
-          slideshowSoundRef.current = sound;
+          const player = createAudioPlayer(track.url);
+          player.loop = true;
+          player.volume = 0.5;
+          player.play();
+          slideshowSoundRef.current = player;
         } catch {}
-      })();
-      // Animate progress bar
+      }
+
+      if (showIntro) {
+        // Intro slide: wait SLIDESHOW_INTERVAL then transition to photos
+        slideshowProgress.setValue(0);
+        Animated.timing(slideshowProgress, {
+          toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
+        }).start();
+        const introTimer = setTimeout(() => {
+          setShowIntro(false);
+        }, SLIDESHOW_INTERVAL);
+        return () => clearTimeout(introTimer);
+      }
+
+      // Normal slideshow: animate progress bar + advance photos
       slideshowProgress.setValue(0);
       Animated.timing(slideshowProgress, {
         toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
       }).start();
       slideshowRef.current = setInterval(() => {
         advanceSlideshow();
-        // Reset progress bar
         slideshowProgress.setValue(0);
         Animated.timing(slideshowProgress, {
           toValue: 1, duration: SLIDESHOW_INTERVAL, useNativeDriver: false,
@@ -499,7 +531,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       slideshowProgress.setValue(0);
     }
     return () => { if (slideshowRef.current) clearInterval(slideshowRef.current); };
-  }, [slideshowActive]);
+  }, [slideshowActive, showIntro]);
 
   // Stats
   const photoStats = useMemo(() => {
@@ -773,8 +805,32 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           )}
 
+          {/* Intro slide */}
+          {slideshowActive && showIntro && (
+            <View style={styles.introSlide}>
+              {trip?.cover_image_url ? (
+                <>
+                  <Image source={trip.cover_image_url} style={styles.introCoverImage} contentFit="cover" />
+                  <View style={styles.introCoverOverlay} />
+                </>
+              ) : (
+                <LinearGradient colors={[...gradients.sunset]} style={StyleSheet.absoluteFillObject} />
+              )}
+              <View style={styles.introContent}>
+                {trip?.destination && (
+                  <Text style={styles.introDestination}>{trip.destination}</Text>
+                )}
+                <Text style={styles.introTitle}>{tripName || 'Diashow'}</Text>
+                {trip?.start_date && trip?.end_date && (
+                  <Text style={styles.introDate}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+                )}
+                <Text style={styles.introLogo}>WayFable</Text>
+              </View>
+            </View>
+          )}
+
           {/* Image + navigation */}
-          {selectedPhoto && (
+          {selectedPhoto && !(slideshowActive && showIntro) && (
             <Animated.View style={[styles.viewerContent, { opacity: fadeAnim }]} {...panResponder.panHandlers}>
               {viewerIndex > 0 && !slideshowActive && (
                 <TouchableOpacity style={[styles.viewerNav, styles.viewerNavLeft]} onPress={() => viewerGo(-1)}>
@@ -1038,4 +1094,26 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
   },
   viewerDeleteText: { ...typography.bodySmall, color: colors.error, fontWeight: '600' },
+
+  // Intro slide
+  introSlide: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' as const },
+  introCoverImage: { ...StyleSheet.absoluteFillObject } as any,
+  introCoverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  introContent: { zIndex: 1, alignItems: 'center', padding: spacing.xl },
+  introDestination: {
+    ...typography.bodySmall, color: 'rgba(255,255,255,0.7)', fontWeight: '600' as const,
+    letterSpacing: 2, textTransform: 'uppercase' as const, textAlign: 'center' as const,
+  },
+  introTitle: {
+    ...typography.h1, color: '#fff', fontWeight: '800' as const,
+    textAlign: 'center' as const, marginTop: spacing.xs,
+  },
+  introDate: {
+    ...typography.body, color: 'rgba(255,255,255,0.6)',
+    marginTop: spacing.sm, textAlign: 'center' as const,
+  },
+  introLogo: {
+    ...typography.caption, color: 'rgba(255,255,255,0.3)', fontWeight: '700' as const,
+    letterSpacing: 1, marginTop: spacing.xl,
+  },
 });
