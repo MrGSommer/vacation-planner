@@ -162,6 +162,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async () => {
     if (user) {
+      // Skip fetch if session was already cleared (sign-out in progress)
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s) return;
       try {
         const p = await getProfile(user.id);
         setProfile(p);

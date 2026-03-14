@@ -29,6 +29,7 @@
       html,
       body {
         height: 100%;
+        margin: 0;
       }
       body {
         overflow: hidden;
@@ -36,32 +37,21 @@
       #root {
         display: flex;
         height: 100%;
-        flex: 1;
       }
       /* Prevent iOS auto-zoom on input focus (triggers at font-size < 16px) */
       input, textarea, select {
         font-size: 16px !important;
       }
-      /* Crawler-visible footer hidden when JS renders the app */
+      /* Crawler-visible footer: hidden once JS runs, visible only for crawlers */
       #crawler-footer {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 16px;
-        text-align: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 13px;
-        color: #636E72;
-        background: #F8F9FA;
-        z-index: -1;
-      }
-      #crawler-footer a {
-        color: #4ECDC4;
-        margin: 0 8px;
+        display: none;
       }
       @keyframes spin {
         to { transform: rotate(360deg); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
       }
     </style>
   </head>
@@ -77,9 +67,9 @@
       </nav>
     </noscript>
     <div id="root">
-      <div id="app-loader" style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F9FA;">
-        <img src="/icon-192.png" alt="WayFable" width="80" height="80" style="border-radius:20px;margin-bottom:24px;" />
-        <div style="width:40px;height:40px;border:3px solid #DFE6E9;border-top-color:#FF6B6B;border-radius:50%;animation:spin .8s linear infinite;"></div>
+      <div id="app-loader" style="position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F9FA;z-index:9999;">
+        <img src="/icon-192.png" alt="WayFable" width="72" height="72" style="border-radius:18px;margin-bottom:20px;animation:fadeIn .4s ease-out;box-shadow:0 4px 12px rgba(0,0,0,0.1);" />
+        <div style="width:32px;height:32px;border:3px solid #DFE6E9;border-top-color:#FF6B6B;border-radius:50%;animation:spin .8s linear infinite;"></div>
         <p id="offline-msg" style="display:none;margin-top:24px;color:#636E72;font-size:14px;text-align:center;padding:0 32px;">
           Du bist offline. Einige Funktionen sind eingeschraenkt verfuegbar.
         </p>

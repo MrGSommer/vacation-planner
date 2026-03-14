@@ -189,12 +189,19 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     if (Platform.OS === 'web') {
       // Web: use native file input to access ORIGINAL files with EXIF intact
       // (expo-image-picker recompresses via Canvas, stripping EXIF)
+      // Input MUST be in the DOM for onchange to fire reliably across browsers
+      const prev = document.getElementById('wayfable-photo-input');
+      if (prev) prev.remove();
       const input = document.createElement('input');
+      input.id = 'wayfable-photo-input';
       input.type = 'file';
       input.accept = 'image/*';
       input.multiple = true;
+      input.style.display = 'none';
+      document.body.appendChild(input);
       input.onchange = async () => {
         const files = Array.from(input.files || []);
+        input.remove();
         if (files.length === 0 || !user) return;
         setUploading(true);
         setUploadProgress({ current: 0, total: files.length });

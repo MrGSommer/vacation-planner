@@ -33,6 +33,23 @@ export const signInWithGoogle = async () => {
 export const signOut = async () => {
   const { clearCache } = await import('../utils/queryCache');
   clearCache();
+  // Clear all user-specific localStorage/sessionStorage
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem('wayfable_profile');
+      localStorage.removeItem('wayfable_dismissed_recaps');
+      localStorage.removeItem('wayfable_custom_templates');
+      localStorage.removeItem('wayfable_offline_queue');
+    } catch {}
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.removeItem('pendingInviteToken');
+      sessionStorage.removeItem('pendingInviteToken_ts');
+      sessionStorage.removeItem('pendingRedirectPath');
+      sessionStorage.removeItem('pendingRedirectPath_ts');
+    } catch {}
+  }
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 };
