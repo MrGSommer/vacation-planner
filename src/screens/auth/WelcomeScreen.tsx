@@ -14,6 +14,18 @@ import { Icon, IconName } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
+/** Stable component for animated count-up numbers — must be outside render to avoid remounts */
+const CountText = React.memo(({ value, suffix, style }: { value: Animated.Value; suffix: string; style: any }) => {
+  const format = (v: number) => Math.round(v).toLocaleString('de-CH');
+  // Read current value on mount (animation may have already completed)
+  const [display, setDisplay] = useState(() => format((value as any).__getValue?.() ?? (value as any)._value ?? 0));
+  useEffect(() => {
+    const id = value.addListener(({ value: v }) => setDisplay(format(v)));
+    return () => value.removeListener(id);
+  }, [value]);
+  return <Text style={style}>{display}{suffix}</Text>;
+});
+
 const MAX_WIDTH = 1200;
 const UTM = '?utm_source=wayfable&utm_medium=referral';
 const UNSPLASH_URL = `https://unsplash.com/${UTM}`;
@@ -254,14 +266,6 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
     Animated.spring(featureScales[i], { toValue: 1, useNativeDriver: false, friction: 20 }).start();
   };
 
-  const CountText = ({ value, suffix }: { value: Animated.Value; suffix: string }) => {
-    const [display, setDisplay] = useState('0');
-    useEffect(() => {
-      const id = value.addListener(({ value: v }) => setDisplay(Math.round(v).toLocaleString('de-CH')));
-      return () => value.removeListener(id);
-    }, [value]);
-    return <Text style={s.statNumber}>{display}{suffix}</Text>;
-  };
 
   const heroParallax = scrollY.interpolate({ inputRange: [0, 500], outputRange: [0, -75], extrapolate: 'clamp' });
 
@@ -399,17 +403,17 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           <View style={[s.socialProofInner, { maxWidth: MAX_WIDTH, flexDirection: isMobile ? 'column' : 'row' }]}>
             <View style={s.statItem}>
-              <CountText value={countTrips} suffix="+" />
+              <CountText value={countTrips} suffix="+" style={s.statNumber} />
               <Text style={s.statLabel}>Reisen geplant</Text>
             </View>
             {!isMobile && <View style={s.statDivider} />}
             <View style={s.statItem}>
-              <CountText value={countActivities} suffix="+" />
+              <CountText value={countActivities} suffix="+" style={s.statNumber} />
               <Text style={s.statLabel}>Aktivitäten</Text>
             </View>
             {!isMobile && <View style={s.statDivider} />}
             <View style={s.statItem}>
-              <CountText value={countSatisfied} suffix="%" />
+              <CountText value={countSatisfied} suffix="%" style={s.statNumber} />
               <Text style={s.statLabel}>zufrieden</Text>
             </View>
           </View>
