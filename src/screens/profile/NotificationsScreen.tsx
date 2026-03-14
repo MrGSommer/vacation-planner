@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Switch, Alert, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Header } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 import { useAdmin } from '../../hooks/useAdmin';
 import { updateProfile } from '../../api/auth';
-import { isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush } from '../../utils/pushManager';
+import { isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush, refreshPushSubscription } from '../../utils/pushManager';
+import { supabase } from '../../api/supabase';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
 
@@ -39,6 +40,7 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
 
   const [saving, setSaving] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
+  const [testPushLoading, setTestPushLoading] = useState(false);
 
   useEffect(() => {
     if (pushSupported) {
@@ -63,6 +65,49 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
       setAdminFeedback(profile.notification_admin_feedback ?? true);
     }
   }, [profile]);
+
+  const handleTestPush = async () => {
+    if (!user) return;
+    setTestPushLoading(true);
+    try {
+      // Refresh subscription first
+      await refreshPushSubscription(user.id);
+
+      // Check subscription state
+      const registration = await navigator.serviceWorker.ready;
+      const sub = await registration.pushManager.getSubscription();
+
+      if (!sub) {
+        Alert.alert('Fehler', 'Keine aktive Push-Subscription. Bitte Push erneut aktivieren.');
+        return;
+      }
+
+      // Count DB subscriptions for this user
+      const { data: dbSubs } = await supabase
+        .from('push_subscriptions')
+        .select('id, endpoint')
+        .eq('user_id', user.id);
+
+      const info = [
+        `Endpoint: ...${sub.endpoint.slice(-40)}`,
+        `DB-Subscriptions: ${dbSubs?.length ?? 0}`,
+        `Endpoint match: ${dbSubs?.some(s => s.endpoint === sub.endpoint) ? 'Ja' : 'NEIN'}`,
+      ].join('\n');
+
+      // Send local notification as test
+      registration.showNotification('WayFable Test', {
+        body: 'Push-Benachrichtigungen funktionieren!',
+        icon: '/icon-192.png',
+        tag: 'test-push',
+      });
+
+      Alert.alert('Push-Diagnose', `Lokale Test-Notification gesendet.\n\n${info}\n\nPrüfe send-push Edge Function Logs für Server-seitige Fehler.`);
+    } catch (e: any) {
+      Alert.alert('Fehler', e.message || 'Test-Push fehlgeschlagen');
+    } finally {
+      setTestPushLoading(false);
+    }
+  };
 
   const savePreference = async (field: string, value: boolean, rollback: () => void) => {
     if (!user) return;
@@ -262,6 +307,25 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
                   thumbColor={pushFable && pushEnabled && !masterOff ? colors.sky : colors.textLight}
                 />
               </View>
+
+              {/* Test Push Button */}
+              {pushEnabled && !masterOff && (
+                <>
+                  <View style={styles.divider} />
+                  <TouchableOpacity
+                    style={styles.testPushButton}
+                    onPress={handleTestPush}
+                    disabled={testPushLoading}
+                    activeOpacity={0.7}
+                  >
+                    {testPushLoading ? (
+                      <ActivityIndicator size="small" color={colors.sky} />
+                    ) : (
+                      <Text style={styles.testPushText}>Test-Push senden</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </>
         )}
@@ -441,4 +505,14 @@ const styles = StyleSheet.create({
   },
   infoIcon: { fontSize: 16, marginTop: 2 },
   infoText: { ...typography.bodySmall, color: colors.textSecondary, flex: 1, lineHeight: 22 },
+  testPushButton: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  testPushText: {
+    ...typography.bodySmall,
+    color: colors.sky,
+    fontWeight: '600',
+  },
 });

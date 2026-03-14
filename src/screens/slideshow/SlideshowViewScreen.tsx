@@ -77,7 +77,9 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
         player.play();
         soundRef.current = player;
       }
-    } catch {}
+    } catch (e) {
+      console.warn('Slideshow audio failed:', e);
+    }
     setStarted(true);
   }, [data]);
 

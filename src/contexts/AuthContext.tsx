@@ -5,6 +5,7 @@ import { supabase } from '../api/supabase';
 import { Profile } from '../types/database';
 import { getProfile } from '../api/auth';
 import { useToast } from './ToastContext';
+import { refreshPushSubscription } from '../utils/pushManager';
 
 interface AuthContextType {
   session: Session | null;
@@ -282,6 +283,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       refreshProfile();
+      // Auto-refresh push subscription on session start (keeps endpoint current)
+      if (Platform.OS === 'web') {
+        refreshPushSubscription(user.id);
+      }
     } else {
       setProfile(null);
     }

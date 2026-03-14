@@ -456,8 +456,24 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   };
   viewerGoRef.current = viewerGo;
 
-  // Slideshow
+  // Slideshow — audio MUST start inside gesture handler for PWA compatibility
   const startSlideshow = () => {
+    if (Platform.OS === 'web') {
+      unlockWebAudio();
+      const audio = createWebAudioPlayer(getMusicUrl(selectedTrack), { loop: true, volume: 0.5 });
+      audio.play().catch((e) => console.warn('Audio play failed:', e));
+      slideshowWebAudioRef.current = audio;
+    } else {
+      try {
+        const player = createAudioPlayer(getMusicUrl(selectedTrack));
+        player.loop = true;
+        player.volume = 0.5;
+        player.play();
+        slideshowSoundRef.current = player;
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
+    }
     setShowIntro(true);
     setSlideshowActive(true);
   };
@@ -526,24 +542,6 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
-      // Start background music (plays during intro too)
-      if (Platform.OS === 'web' && !slideshowWebAudioRef.current) {
-        try {
-          unlockWebAudio();
-          const audio = createWebAudioPlayer(getMusicUrl(selectedTrack), { loop: true, volume: 0.5 });
-          audio.play().catch(() => {});
-          slideshowWebAudioRef.current = audio;
-        } catch {}
-      } else if (Platform.OS !== 'web' && !slideshowSoundRef.current) {
-        try {
-          const player = createAudioPlayer(getMusicUrl(selectedTrack));
-          player.loop = true;
-          player.volume = 0.5;
-          player.play();
-          slideshowSoundRef.current = player;
-        } catch {}
-      }
-
       if (showIntro) {
         // Intro slide: wait slideshowInterval, then fade out intro
         introFadeAnim.setValue(1);
@@ -580,13 +578,13 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       slideshowProgress.setValue(0);
     }
     return () => { if (slideshowRef.current) clearInterval(slideshowRef.current); };
-  }, [slideshowActive, showIntro, slideshowInterval, selectedTrack]);
+  }, [slideshowActive, showIntro, slideshowInterval]);
 
-  // Apply settings live: swap music + restart interval
+  // Apply settings live: swap music in gesture handler + restart interval
   const handleSlideshowSettingsApply = useCallback((track: MusicTrack, intervalMs: number) => {
     setSelectedTrack(track);
     setSlideshowIntervalMs(intervalMs);
-    // Swap music if track changed
+    // Stop old audio
     if (slideshowSoundRef.current) {
       slideshowSoundRef.current.remove();
       slideshowSoundRef.current = null;
@@ -596,7 +594,23 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       slideshowWebAudioRef.current.src = '';
       slideshowWebAudioRef.current = null;
     }
-    // Music + interval will restart via useEffect dependency change
+    // Start new audio in this gesture handler (required for PWA)
+    if (Platform.OS === 'web') {
+      unlockWebAudio();
+      const audio = createWebAudioPlayer(getMusicUrl(track), { loop: true, volume: 0.5 });
+      audio.play().catch((e) => console.warn('Audio play failed:', e));
+      slideshowWebAudioRef.current = audio;
+    } else {
+      try {
+        const player = createAudioPlayer(getMusicUrl(track));
+        player.loop = true;
+        player.volume = 0.5;
+        player.play();
+        slideshowSoundRef.current = player;
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
+    }
   }, []);
 
   // Stats

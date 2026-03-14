@@ -7,10 +7,15 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#F8F9FA",
   "theme_color": "#FF6B6B",
   "orientation": "portrait",
   "categories": ["travel", "lifestyle", "productivity"],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "icons": [
     {
       "src": "/favicon.png",

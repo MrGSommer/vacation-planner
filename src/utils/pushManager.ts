@@ -74,6 +74,49 @@ export async function subscribeToPush(userId: string): Promise<boolean> {
   }
 }
 
+/** Call on app start to ensure DB has the current push endpoint */
+export async function refreshPushSubscription(userId: string): Promise<void> {
+  if (!isPushSupported() || !VAPID_PUBLIC_KEY) return;
+  if (Notification.permission !== 'granted') return;
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      // Browser lost the subscription — re-subscribe
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
+      });
+    }
+
+    const key = subscription.getKey('p256dh');
+    const auth = subscription.getKey('auth');
+    if (!key || !auth) return;
+
+    const p256dh = btoa(String.fromCharCode(...new Uint8Array(key)));
+    const authKey = btoa(String.fromCharCode(...new Uint8Array(auth)));
+
+    // Upsert current endpoint (updates keys if endpoint changed)
+    await supabase.from('push_subscriptions').upsert(
+      { user_id: userId, endpoint: subscription.endpoint, p256dh, auth: authKey },
+      { onConflict: 'user_id,endpoint' }
+    );
+
+    // Clean up stale subscriptions (old endpoints from rotated Apple URLs etc.)
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('user_id', userId)
+      .neq('endpoint', subscription.endpoint);
+
+    console.log('Push: subscription refreshed, VAPID key prefix:', VAPID_PUBLIC_KEY.substring(0, 10));
+  } catch (e) {
+    console.error('Push refresh error:', e);
+  }
+}
+
 export async function unsubscribeFromPush(userId: string): Promise<void> {
   if (!isPushSupported()) return;
 
