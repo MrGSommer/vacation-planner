@@ -11,11 +11,12 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches (preserve wayfable-docs — persistent document cache)
+const PERSISTENT_CACHES = [CACHE_NAME, 'wayfable-docs'];
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => !PERSISTENT_CACHES.includes(k)).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();

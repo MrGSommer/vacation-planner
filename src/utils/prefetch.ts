@@ -6,6 +6,7 @@ import { getDocuments, getActivityIdsWithDocuments } from '../api/documents';
 import { getCollaborators } from '../api/invitations';
 import { getStops } from '../api/stops';
 import { getPackingLists, getPackingItems } from '../api/packing';
+import { cacheDocuments } from './documentCache';
 
 /**
  * Background prefetch: loads ALL trip data for ALL active trips into
@@ -69,28 +70,14 @@ async function prefetchTrip(tripId: string): Promise<void> {
       );
       const allDocs = await Promise.all(docPromises);
 
-      // Warm SW cache: fetch document URLs so Service Worker caches them
-      for (const docs of allDocs) {
-        for (const doc of docs) {
-          warmSwCache(doc.url);
-        }
+      // Cache document files for offline access (awaited, persistent cache)
+      const allUrls = allDocs.flat().map(d => d.url).filter(Boolean);
+      if (allUrls.length > 0) {
+        await cacheDocuments(allUrls);
       }
     }
 
   } catch {
     // Silent
-  }
-}
-
-/**
- * Trigger a fetch so the Service Worker intercepts and caches the response.
- * Uses cors mode so the SW gets a proper response (not opaque) with response.ok=true.
- */
-function warmSwCache(url: string | null): void {
-  if (!url) return;
-  try {
-    fetch(url, { priority: 'low' } as any).catch(() => {});
-  } catch {
-    // ignore
   }
 }

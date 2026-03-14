@@ -5,6 +5,7 @@ import { getDocuments, uploadDocument, deleteDocument } from '../../api/document
 import { ActivityDocument } from '../../types/database';
 import { useRealtime, RealtimePayload } from '../../hooks/useRealtime';
 import { useToast } from '../../contexts/ToastContext';
+import { openDocument, cacheDocument, uncacheDocument } from '../../utils/documentCache';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
 
@@ -42,6 +43,10 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
     try {
       const docs = await getDocuments(activityId);
       setDocuments(docs);
+      // Cache all document files for offline access
+      if (navigator.onLine) {
+        docs.forEach(d => cacheDocument(d.url));
+      }
     } catch {
       // ignore
     } finally {
@@ -102,6 +107,8 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
       }
 
       if (uploaded.length > 0) {
+        // Cache uploaded documents for offline access
+        uploaded.forEach(d => cacheDocument(d.url));
         // Realtime will add them, but also add optimistically to avoid flicker
         setDocuments(prev => {
           const existingIds = new Set(prev.map(d => d.id));
@@ -126,6 +133,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
     const doDelete = async () => {
       try {
         await deleteDocument(doc);
+        uncacheDocument(doc.url);
         setDocuments(prev => prev.filter(d => d.id !== doc.id));
         showToast('Dokument gelöscht', 'success');
       } catch {
@@ -145,7 +153,7 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
   };
 
   const handleOpen = (doc: ActivityDocument) => {
-    Linking.openURL(doc.url);
+    openDocument(doc.url, doc.file_name);
   };
 
   if (loading) return null;
