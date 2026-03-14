@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
+import { unlockWebAudio, lockWebAudio, createWebAudioPlayer } from '../../utils/webAudioUnlock';
 import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
 import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
@@ -101,6 +102,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Slideshow music
   const slideshowSoundRef = useRef<AudioPlayer | null>(null);
+  const slideshowWebAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Slideshow intro + settings
   const [showIntro, setShowIntro] = useState(true);
@@ -467,6 +469,12 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       slideshowSoundRef.current.remove();
       slideshowSoundRef.current = null;
     }
+    if (slideshowWebAudioRef.current) {
+      slideshowWebAudioRef.current.pause();
+      slideshowWebAudioRef.current.src = '';
+      slideshowWebAudioRef.current = null;
+    }
+    lockWebAudio();
   };
 
   const slideshowInterval = slideshowIntervalMs;
@@ -519,7 +527,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   useEffect(() => {
     if (slideshowActive && selectedPhoto) {
       // Start background music (plays during intro too)
-      if (!slideshowSoundRef.current) {
+      if (Platform.OS === 'web' && !slideshowWebAudioRef.current) {
+        try {
+          unlockWebAudio();
+          const audio = createWebAudioPlayer(getMusicUrl(selectedTrack), { loop: true, volume: 0.5 });
+          audio.play().catch(() => {});
+          slideshowWebAudioRef.current = audio;
+        } catch {}
+      } else if (Platform.OS !== 'web' && !slideshowSoundRef.current) {
         try {
           const player = createAudioPlayer(getMusicUrl(selectedTrack));
           player.loop = true;
@@ -575,6 +590,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     if (slideshowSoundRef.current) {
       slideshowSoundRef.current.remove();
       slideshowSoundRef.current = null;
+    }
+    if (slideshowWebAudioRef.current) {
+      slideshowWebAudioRef.current.pause();
+      slideshowWebAudioRef.current.src = '';
+      slideshowWebAudioRef.current = null;
     }
     // Music + interval will restart via useEffect dependency change
   }, []);

@@ -6,6 +6,7 @@ import {
 import { Image } from 'expo-image';
 import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
+import { unlockWebAudio, lockWebAudio, createWebAudioPlayer } from '../../utils/webAudioUnlock';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { getSharedSlideshow, SlideshowShareData } from '../../api/slideshows';
@@ -34,6 +35,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
   const outroFadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const soundRef = useRef<AudioPlayer | null>(null);
+  const webAudioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const photoIndexRef = useRef(0);
 
@@ -51,7 +53,9 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
     })();
     return () => {
       if (soundRef.current) soundRef.current.remove();
+      if (webAudioRef.current) { webAudioRef.current.pause(); webAudioRef.current.src = ''; }
       if (intervalRef.current) clearInterval(intervalRef.current);
+      lockWebAudio();
     };
   }, [token]);
 
@@ -59,11 +63,20 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
   const handleStart = useCallback(async () => {
     if (!data) return;
     try {
-      const player = createAudioPlayer(data.music_url);
-      player.loop = true;
-      player.volume = 0.6;
-      player.play();
-      soundRef.current = player;
+      if (Platform.OS === 'web') {
+        // Unlock iOS audio session on this user gesture (also resumes AudioContext on all browsers)
+        unlockWebAudio();
+        // Use HTMLAudioElement directly — more reliable than expo-audio on web/iOS
+        const audio = createWebAudioPlayer(data.music_url, { loop: true, volume: 0.6 });
+        await audio.play();
+        webAudioRef.current = audio;
+      } else {
+        const player = createAudioPlayer(data.music_url);
+        player.loop = true;
+        player.volume = 0.6;
+        player.play();
+        soundRef.current = player;
+      }
     } catch {}
     setStarted(true);
   }, [data]);
@@ -162,18 +175,21 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
 
   // Toggle mute
   const toggleMute = () => {
-    if (soundRef.current) {
-      soundRef.current.muted = !muted;
-      setMuted(!muted);
+    const next = !muted;
+    if (Platform.OS === 'web' && webAudioRef.current) {
+      webAudioRef.current.muted = next;
+    } else if (soundRef.current) {
+      soundRef.current.muted = next;
     }
+    setMuted(next);
   };
 
   // Toggle pause
   const togglePause = () => {
-    if (paused) {
-      soundRef.current?.play();
+    if (Platform.OS === 'web' && webAudioRef.current) {
+      paused ? webAudioRef.current.play() : webAudioRef.current.pause();
     } else {
-      soundRef.current?.pause();
+      paused ? soundRef.current?.play() : soundRef.current?.pause();
     }
     setPaused(!paused);
   };
