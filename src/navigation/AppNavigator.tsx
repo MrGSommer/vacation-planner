@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
-import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, NavigationContainerRef, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthContext } from '../contexts/AuthContext';
 import { LoadingScreen } from '../components/common';
@@ -48,61 +48,57 @@ import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Public screens available regardless of auth state
-const publicScreens = {
-  TripShare: 'share/:token',
-  SlideshowView: 'slideshow/:token',
-};
-
-const authenticatedScreens = {
-  ...publicScreens,
-  AcceptInvite: 'invite/:token',
-  SubscriptionSuccess: 'subscription-success',
-  SubscriptionCancel: 'subscription-cancel',
-  TripDetail: {
-    path: 'trip/:tripId',
-    parse: { tripId: String, openFable: (v: string) => v === 'true' },
-  },
-  Itinerary: 'trip/:tripId/itinerary',
-  Map: 'trip/:tripId/map',
-  Photos: 'trip/:tripId/photos',
-  Budget: 'trip/:tripId/budget',
-  Packing: 'trip/:tripId/packing',
-  Stops: 'trip/:tripId/stops',
-  EditTrip: 'trip/:tripId/edit',
-  CreateTrip: 'trip/new',
-  EditProfile: 'profile/edit',
-  Notifications: 'notifications',
-  LanguageCurrency: 'settings/language',
-  FableSettings: 'settings/fable',
-  FableTripSettings: 'trip/:tripId/fable-settings',
-  Subscription: 'subscription',
-  Datenschutz: 'datenschutz',
-  AGB: 'agb',
-  Impressum: 'impressum',
-  FeedbackModal: 'feedback',
-  SupportChat: 'support',
-  AdminDashboard: 'admin',
-  BetaDashboard: 'admin/beta',
-  AdminUserList: 'admin/users',
-  AdminUserDetail: 'admin/users/:userId',
-  AdminEmailTest: 'admin/email-test',
-  AdminAnnouncements: 'admin/announcements',
-  ResetPassword: 'reset-password',
-  Main: {
+const linking = {
+  prefixes: ['https://wayfable.ch', 'wayfable://'],
+  config: {
     screens: {
-      Home: '',
-      Profile: 'profile',
+      // Both Auth and Main map to root — React Navigation uses whichever exists
+      Auth: { screens: { Welcome: '' } },
+      Main: { screens: { Home: '', Profile: 'profile' } },
+      AcceptInvite: 'invite/:token',
+      TripShare: 'share/:token',
+      SlideshowView: 'slideshow/:token',
+      SubscriptionSuccess: 'subscription-success',
+      SubscriptionCancel: 'subscription-cancel',
+      TripDetail: {
+        path: 'trip/:tripId',
+        parse: { tripId: String, openFable: (v: string) => v === 'true' },
+      },
+      Itinerary: 'trip/:tripId/itinerary',
+      Map: 'trip/:tripId/map',
+      Photos: 'trip/:tripId/photos',
+      Budget: 'trip/:tripId/budget',
+      Packing: 'trip/:tripId/packing',
+      Stops: 'trip/:tripId/stops',
+      EditTrip: 'trip/:tripId/edit',
+      CreateTrip: 'trip/new',
+      EditProfile: 'profile/edit',
+      Notifications: 'notifications',
+      LanguageCurrency: 'settings/language',
+      FableSettings: 'settings/fable',
+      FableTripSettings: 'trip/:tripId/fable-settings',
+      Subscription: 'subscription',
+      Datenschutz: 'datenschutz',
+      AGB: 'agb',
+      Impressum: 'impressum',
+      FeedbackModal: 'feedback',
+      SupportChat: 'support',
+      AdminDashboard: 'admin',
+      BetaDashboard: 'admin/beta',
+      AdminUserList: 'admin/users',
+      AdminUserDetail: 'admin/users/:userId',
+      AdminEmailTest: 'admin/email-test',
+      AdminAnnouncements: 'admin/announcements',
+      ResetPassword: 'reset-password',
     },
   },
-};
-
-const unauthenticatedScreens = {
-  ...publicScreens,
-  Auth: {
-    screens: {
-      Welcome: '',
-    },
+  // Guard against crash when linking resolves a route not in the current navigator tree
+  getStateFromPath: (path: string, options: any) => {
+    try {
+      return defaultGetStateFromPath(path, options);
+    } catch {
+      return undefined;
+    }
   },
 };
 
@@ -112,14 +108,6 @@ export const AppNavigator: React.FC = () => {
   const prevSessionRef = useRef(session);
   const [currentRoute, setCurrentRoute] = useState('');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-
-  // Dynamic linking config — must match the current navigator tree
-  const linking = useMemo(() => ({
-    prefixes: ['https://wayfable.ch', 'wayfable://'],
-    config: {
-      screens: session ? authenticatedScreens : unauthenticatedScreens,
-    },
-  }), [session]);
 
   // Global keyboard shortcuts (web only)
   useKeyboardShortcuts([
