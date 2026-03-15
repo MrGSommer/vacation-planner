@@ -151,7 +151,8 @@ ORTE IM CHAT:
 - Bei der Plan-Generierung werden alle Orte automatisch über Google Places API verifiziert — gib also möglichst eindeutige, offizielle Namen an.
 
 PLAN-BEREITSCHAFT:
-- Setze ready_to_plan=true NUR wenn der User die GESAMTE Reise planen will.
+- Setze ready_to_plan=true wenn der User die GESAMTE Reise ODER einen bestimmten Zeitraum planen will.
+- Bei Teilplanung: setze zusätzlich plan_start_date und plan_end_date (YYYY-MM-DD).
 - Setze ready_to_plan=true wenn ALLE erfüllt:
   1. Reiseziel bekannt (Trip-Destination vorhanden)
   2. Reisedaten bekannt (Start/End im Trip)
@@ -211,7 +212,7 @@ Folgende Vorlieben wurden bereits besprochen (preferences_gathered aus vorherige
 ${context.lastPreferencesGathered?.length ? context.lastPreferencesGathered.join(', ') : 'noch keine'}
 
 Am Ende JEDER Antwort:
-<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "transport_mode": null, "group_type": null, "agent_action": null, "form_options": null}</metadata>
+<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "transport_mode": null, "group_type": null, "agent_action": null, "form_options": null, "plan_start_date": null, "plan_end_date": null}</metadata>
 
 ready_to_plan=true gemäss den PLAN-BEREITSCHAFT-Regeln oben. Setze es SOFORT wenn die Bedingungen erfüllt sind.
 suggested_questions: 2-3 kurze ANTWORT-Vorschläge (nicht Fragen) passend zu deiner Frage. WICHTIG: Variiere deine Vorschläge — wiederhole NICHT dieselben Vorschläge die du bereits gegeben hast.
@@ -220,7 +221,14 @@ transport_mode: "driving", "transit", "walking" oder "bicycling" wenn bekannt, s
 group_type: "solo", "couple", "family", "friends" oder "group" wenn der User die Reisegruppe ändert oder erstmals nennt. Setze basierend auf User-Antwort (alleine→solo, zu zweit/als Paar→couple, mit Kindern/Familie→family, mit Freunden→friends, grosse Gruppe→group). Nur setzen wenn sich die Reisegruppe ÄNDERT oder erstmals bekannt wird, sonst null.
 agent_action: NUR im enhance-Modus (bestehender Trip). Setze agent_action und ready_to_plan NICHT gleichzeitig.
 Wenn agent_action gesetzt ist, MUSS ready_to_plan false sein.
-- Setze ready_to_plan=true NUR wenn der User die GESAMTE Reise planen will (alle Tage, oder meiste Tage leer).
+- Setze ready_to_plan=true wenn der User die GESAMTE Reise planen will ODER einen bestimmten Zeitraum/Tage planen will.
+- Wenn der User NUR bestimmte Tage planen will (z.B. "plane Tag 4-7", "plane ab dem 25.", "plane die letzten 3 Tage"):
+  * Setze ready_to_plan=true
+  * Setze plan_start_date auf das Start-Datum des gewünschten Zeitraums (YYYY-MM-DD)
+  * Setze plan_end_date auf das End-Datum des gewünschten Zeitraums (YYYY-MM-DD)
+  * Berechne die konkreten Daten basierend auf den Trip-Daten (${startDate} bis ${endDate})
+  * Beispiel: Trip 20.-27. März, User sagt "plane Tag 4-7" → plan_start_date="YYYY-03-23", plan_end_date="YYYY-03-26"
+- Wenn der User die gesamte Reise planen will: plan_start_date=null, plan_end_date=null
 - Setze agent_action="day_plan" wenn der User einen EINZELNEN Tag füllen will.
 - Setze agent_action="packing_list" SOFORT wenn der User nach einer Packliste fragt — auch ohne weitere Rückfragen, wenn Reiseziel und Daten bekannt sind.
 - Setze agent_action="budget_categories" SOFORT wenn der User nach Budget fragt — auch ohne Budget-Level, verwende dann einen ausgewogenen Standard.
@@ -233,7 +241,10 @@ form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswah
 }
 
 export function buildStructureSystemPrompt(context: any): string {
-  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, todayDate, travelersCount, groupType, tripType, transportMode } = context;
+  const { destination, destinationLat, destinationLng, startDate, endDate, currency, preferences, existingData, mode, todayDate, travelersCount, groupType, tripType, transportMode, planStartDate, planEndDate } = context;
+  // Effective date range: use partial range if specified, otherwise full trip
+  const effectiveStartDate = planStartDate || startDate;
+  const effectiveEndDate = planEndDate || endDate;
 
   let prompt = `Du bist ein Experte für Reiseplanung. Generiere die GRUNDSTRUKTUR eines Reiseplans als JSON.
 
@@ -291,7 +302,7 @@ WICHTIG: Generiere NUR die Grundstruktur — KEINE Aktivitäten! Die Aktivitäte
 BUDGET-FARBEN: Transport #FF6B6B, Unterkunft #4ECDC4, Essen #FFD93D, Aktivitäten #6C5CE7, Einkaufen #74B9FF, Sonstiges #636E72
 
 REGELN:
-- Erstelle für jeden Tag zwischen ${startDate} und ${endDate} einen Eintrag in "days" (nur mit "date", OHNE "activities")
+- Erstelle für jeden Tag zwischen ${effectiveStartDate} und ${effectiveEndDate} einen Eintrag in "days" (nur mit "date", OHNE "activities")${planStartDate ? `\n- TEILPLANUNG: Generiere NUR Tage von ${effectiveStartDate} bis ${effectiveEndDate}, NICHT die gesamte Reise (${startDate} bis ${endDate}).` : ''}
 - Verwende echte Koordinaten für Stops
 - Berücksichtige das heutige Datum für Saisonalität, Wetter und lokale Events
 - Passe Stops an die Gruppengrösse und -art an (z.B. familienfreundliche Orte für Familien)
@@ -348,7 +359,12 @@ ${JSON.stringify(preferences, null, 2)}`;
     prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
   }
 
-  prompt += `\n\nGENERIERE AKTIVITÄTEN FÜR FOLGENDE TAGE:\n${JSON.stringify(dayDates)}`;
+  prompt += `\n\nGENERIERE AKTIVITÄTEN FÜR EXAKT DIESE TAGE (ein "days"-Eintrag pro Datum):
+${(dayDates || []).map((d: string) => `- ${d}`).join('\n')}
+
+KRITISCH: Dein JSON-Output MUSS für JEDES der obigen Daten exakt einen Eintrag in "days" enthalten.
+Jeder "days"-Eintrag MUSS das exakte Datum aus der Liste als "date"-Feld haben.
+Verwende KEINE anderen Daten. Die Anzahl der Einträge in "days" MUSS ${(dayDates || []).length} sein.`;
 
   if (context.weatherData?.length > 0) {
     prompt += `\n\nWETTERVORHERSAGE:`;

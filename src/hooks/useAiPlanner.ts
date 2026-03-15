@@ -55,6 +55,8 @@ export interface AiMetadata {
   group_type?: 'solo' | 'couple' | 'family' | 'friends' | 'group' | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
   form_options?: Array<{ label: string; value: string }> | null;
+  plan_start_date?: string | null;
+  plan_end_date?: string | null;
 }
 
 export interface UseAiPlannerOptions {
@@ -1152,10 +1154,21 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         preferences,
       };
 
+      // Partial plan: use date range from metadata if available
+      const planStartDate = metadata?.plan_start_date || null;
+      const planEndDate = metadata?.plan_end_date || null;
+      if (planStartDate) planContext.planStartDate = planStartDate;
+      if (planEndDate) planContext.planEndDate = planEndDate;
+
       setProgressStep('structure');
+      const dateRangeHint = planStartDate && planEndDate
+        ? ` NUR für den Zeitraum ${planStartDate} bis ${planEndDate}`
+        : planStartDate
+        ? ` ab ${planStartDate}`
+        : '';
       const structureMessage: AiMessage = {
         role: 'user',
-        content: 'Erstelle die Grundstruktur des Reiseplans als JSON (Trip, Stops, Budget, Tage — ohne Aktivitäten).',
+        content: `Erstelle die Grundstruktur des Reiseplans als JSON (Trip, Stops, Budget, Tage — ohne Aktivitäten).${dateRangeHint}`,
       };
 
       const structureResponse = await sendAiMessage('plan_generation', [structureMessage], planContext);
@@ -1190,7 +1203,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setPhase('conversing');
       setProgressStep(null);
     }
-  }, [messages, estimateTime, buildStructureSummary]);
+  }, [messages, metadata, estimateTime, buildStructureSummary]);
 
   // Check for existing activities before generating — shows conflict_review if needed
   const checkConflictsAndGenerate = useCallback(async () => {

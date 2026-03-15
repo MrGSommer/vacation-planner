@@ -43,6 +43,8 @@ export interface AiContext {
     }>;
   };
   dayDates?: string[];
+  planStartDate?: string | null;
+  planEndDate?: string | null;
   tripMemory?: string;
   senderName?: string;
   customInstruction?: string;
@@ -127,6 +129,9 @@ export const sendAiMessage = async (
   context: AiContext,
 ): Promise<AiResponse> => {
   const attempt = async (): Promise<AiResponse> => {
+    // Refresh session token before AI calls (prevents 401 during long sessions)
+    await supabase.auth.getSession();
+
     const { data, error } = await supabase.functions.invoke('ai-chat', {
       body: { task, messages, context },
     });

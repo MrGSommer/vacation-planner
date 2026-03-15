@@ -18,7 +18,7 @@ export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
 const _createDay = async (tripId: string, date: string): Promise<ItineraryDay> => {
   const { data, error } = await supabase
     .from('itinerary_days')
-    .insert({ trip_id: tripId, date })
+    .upsert({ trip_id: tripId, date }, { onConflict: 'trip_id,date' })
     .select()
     .single();
   if (error) throw error;
