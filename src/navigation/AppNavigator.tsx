@@ -92,11 +92,28 @@ const linking = {
       ResetPassword: 'reset-password',
     },
   },
-  // Guard against crash when linking resolves a route not in the current navigator tree
+  // Guard against crash when linking resolves a route not in the current navigator tree.
+  // On failure, manually resolve public/critical routes instead of falling back to root.
   getStateFromPath: (path: string, options: any) => {
     try {
       return defaultGetStateFromPath(path, options);
-    } catch {
+    } catch (e) {
+      console.warn('getStateFromPath failed for', path, e);
+
+      // Public routes that must work regardless of auth state
+      const shareMatch = path.match(/^\/share\/(.+?)(?:[?#]|$)/);
+      if (shareMatch) {
+        return { routes: [{ name: 'TripShare' as const, params: { token: shareMatch[1] } }] };
+      }
+      const slideshowMatch = path.match(/^\/slideshow\/(.+?)(?:[?#]|$)/);
+      if (slideshowMatch) {
+        return { routes: [{ name: 'SlideshowView' as const, params: { token: slideshowMatch[1] } }] };
+      }
+      const inviteMatch = path.match(/^\/invite\/(.+?)(?:[?#]|$)/);
+      if (inviteMatch) {
+        return { routes: [{ name: 'AcceptInvite' as const, params: { token: inviteMatch[1] } }] };
+      }
+
       return undefined;
     }
   },
@@ -121,8 +138,8 @@ export const AppNavigator: React.FC = () => {
     const inviteMatch = path.match(/^\/invite\/(.+)$/);
     if (inviteMatch) {
       setPendingInviteToken(inviteMatch[1]);
-    } else if (path.match(/^\/slideshow\/.+$/)) {
-      // Slideshow is public — don't require auth, let linking handle it
+    } else if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/)) {
+      // Slideshow + share are public — don't require auth, let linking handle it
       return;
     } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
       // Save any deep link path for redirect after login
