@@ -6,13 +6,19 @@ import { PlaceResult, importMapsLibrary } from '../../components/common/PlaceAut
 import { getStops } from '../../api/stops';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
-import { TripStop, Activity, ItineraryDay } from '../../types/database';
+import { Trip, TripStop, Activity, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { usePresence } from '../../hooks/usePresence';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { MapPOICard, POIDetails, detectCategory } from '../../components/map/MapPOICard';
+import { MapNearbySearch } from '../../components/map/MapNearbySearch';
+import { MapsAppPicker, tryOpenMapsDirectly } from '../../components/map/MapsAppPicker';
+import { OfflineMapView } from '../../components/map/OfflineMapView';
+import { prefetchTripMapTiles, computeBoundingBox } from '../../utils/mapTileCache';
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -47,14 +53,19 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
   return html;
 }
 
-
 export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   usePresence(tripId, 'Karte');
+  const isOnline = useNetworkStatus();
   const mapRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tripData, setTripData] = useState<Trip | null>(null);
   const [days, setDays] = useState<ItineraryDay[]>([]);
+
+  // Data for offline view
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [stops, setStops] = useState<TripStop[]>([]);
 
   // FAB modal state
   const [showModal, setShowModal] = useState(false);
@@ -76,6 +87,158 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const markerLibRef = useRef<any>(null);
 
+  // POI Card state
+  const [poiDetails, setPoiDetails] = useState<POIDetails | null>(null);
+  const [showMapsPicker, setShowMapsPicker] = useState(false);
+
+  // Nearby Search state
+  const [nearbyChipId, setNearbyChipId] = useState<string | null>(null);
+  const [nearbyMarkers, setNearbyMarkers] = useState<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const [nearbyResultCount, setNearbyResultCount] = useState(0);
+
+  const clearNearbyMarkers = useCallback(() => {
+    nearbyMarkers.forEach(m => { m.map = null; });
+    setNearbyMarkers([]);
+    setNearbyResultCount(0);
+    setNearbyChipId(null);
+  }, [nearbyMarkers]);
+
+  // ─── POI Click Handler ───
+  const handlePoiClick = useCallback(async (placeId: string) => {
+    try {
+      const placesLib = await importMapsLibrary('places');
+      const PlaceClass = placesLib.Place || google.maps.places?.Place;
+      if (!PlaceClass) return;
+
+      const place = new PlaceClass({ id: placeId });
+      await place.fetchFields({
+        fields: [
+          'displayName', 'formattedAddress', 'location',
+          'rating', 'userRatingCount',
+          'regularOpeningHours', 'photos', 'websiteURI', 'types',
+        ],
+      });
+
+      const loc = place.location;
+      if (!loc) return;
+
+      let photoUrl: string | undefined;
+      if (place.photos?.length > 0) {
+        try {
+          const photo = place.photos[0];
+          photoUrl = photo.getURI({ maxWidth: 400, maxHeight: 200 });
+        } catch {}
+      }
+
+      const poi: POIDetails = {
+        name: place.displayName || '',
+        address: place.formattedAddress || '',
+        lat: loc.lat(),
+        lng: loc.lng(),
+        rating: place.rating ?? undefined,
+        userRatingCount: place.userRatingCount ?? undefined,
+        isOpen: place.regularOpeningHours?.periods
+          ? isCurrentlyOpen(place.regularOpeningHours)
+          : undefined,
+        openingHoursText: place.regularOpeningHours?.weekdayDescriptions,
+        photoUrl,
+        websiteUrl: place.websiteURI || undefined,
+        types: place.types || undefined,
+        placeId,
+      };
+      setPoiDetails(poi);
+      setPreviewPlace(null); // Close any custom pin preview
+
+      // Pan to POI
+      const map = googleMapRef.current;
+      if (map) map.panTo({ lat: poi.lat, lng: poi.lng });
+    } catch (err) {
+      console.error('POI details error:', err);
+    }
+  }, []);
+
+  // ─── Nearby Search ───
+  const handleNearbySearch = useCallback(async (types: string[], chipId: string) => {
+    const map = googleMapRef.current;
+    const lib = markerLibRef.current;
+    if (!map || !lib) return;
+
+    // Clear previous markers
+    nearbyMarkers.forEach(m => { m.map = null; });
+
+    try {
+      const placesLib = await importMapsLibrary('places');
+      const bounds = map.getBounds();
+      if (!bounds) return;
+
+      const center = map.getCenter();
+      if (!center) return;
+
+      // Calculate radius from visible bounds (approximate)
+      const ne = bounds.getNorthEast();
+      const sw = bounds.getSouthWest();
+      const latDiff = Math.abs(ne.lat() - sw.lat());
+      const lngDiff = Math.abs(ne.lng() - sw.lng());
+      const maxDiff = Math.max(latDiff, lngDiff);
+      // Rough: 1 degree ≈ 111km
+      const radiusMeters = Math.min(Math.round(maxDiff * 111000 / 2), 50000);
+
+      const request = {
+        includedTypes: types,
+        locationRestriction: {
+          center: { lat: center.lat(), lng: center.lng() },
+          radius: radiusMeters,
+        },
+        maxResultCount: 20,
+        fields: ['displayName', 'location', 'rating', 'types', 'formattedAddress'],
+      };
+
+      const PlaceClass = placesLib.Place || google.maps.places?.Place;
+      if (!PlaceClass?.searchNearby) return;
+
+      const { places } = await PlaceClass.searchNearby(request);
+      if (!places?.length) {
+        setNearbyMarkers([]);
+        setNearbyResultCount(0);
+        setNearbyChipId(chipId);
+        return;
+      }
+
+      const { AdvancedMarkerElement, PinElement } = lib;
+      const markers: google.maps.marker.AdvancedMarkerElement[] = [];
+
+      places.forEach((place: any) => {
+        const loc = place.location;
+        if (!loc) return;
+        const pin = new PinElement({
+          background: colors.secondary,
+          borderColor: colors.card,
+          scale: 0.9,
+          glyphColor: '#FFFFFF',
+        });
+        const marker = new AdvancedMarkerElement({
+          position: { lat: loc.lat(), lng: loc.lng() },
+          map,
+          title: place.displayName || '',
+          content: pin.element,
+          gmpClickable: true,
+        });
+        marker.addEventListener('gmp-click', () => {
+          // Show POI card for this nearby result
+          const placeId = place.id || place.place_id;
+          if (placeId) handlePoiClick(placeId);
+        });
+        markers.push(marker);
+      });
+
+      setNearbyMarkers(markers);
+      setNearbyResultCount(markers.length);
+      setNearbyChipId(chipId);
+    } catch (err) {
+      console.error('Nearby search error:', err);
+    }
+  }, [nearbyMarkers, handlePoiClick]);
+
   const initMap = useCallback(async () => {
     try {
       const [t, s, a, fetchedDays] = await Promise.all([
@@ -85,9 +248,22 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         getDays(tripId),
       ]);
 
+      setTripData(t);
+      setStops(s);
+      setActivities(a);
       setDays(fetchedDays);
       if (fetchedDays.length > 0 && !selectedDayId) {
         setSelectedDayId(fetchedDays[0].id);
+      }
+
+      // Pre-fetch Mapbox tiles for offline (background, non-blocking)
+      const allPoints = [
+        ...s.map(stop => ({ lat: stop.lat, lng: stop.lng })),
+        ...a.filter(act => act.location_lat && act.location_lng).map(act => ({ lat: act.location_lat!, lng: act.location_lng! })),
+      ];
+      if (allPoints.length > 0) {
+        const bbox = computeBoundingBox(allPoints);
+        prefetchTripMapTiles(bbox).catch(() => {});
       }
 
       // Build dayId → dayInfo map
@@ -97,7 +273,6 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
 
       const mapsLib = await importMapsLibrary('maps');
       const markerLib = await importMapsLibrary('marker');
-      await importMapsLibrary('routes');
       await importMapsLibrary('core');
       if (!mapRef.current) return;
 
@@ -113,19 +288,25 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         zoom: 8,
         mapTypeControl: false,
         streetViewControl: false,
-        mapId: 'vacation-planner-map',
+        mapId: '5617c0f0247bb2e3f910e4fd',
       });
       googleMapRef.current = map;
 
-      // Click-to-pin: drop temp marker on empty map clicks
-      map.addListener('click', async (e: google.maps.MapMouseEvent) => {
-        if (!e.latLng) return;
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        addPreviewMarker(lat, lng);
-        const address = await reverseGeocode(lat, lng);
-        setPreviewPlace({ name: '', address, lat, lng, isCustomPin: true });
-        setCustomPinName('');
+      // Click handler: POI click (placeId) vs empty area (custom pin)
+      map.addListener('click', (e: any) => {
+        if (e.placeId) {
+          e.stop();
+          handlePoiClick(e.placeId);
+        } else if (e.latLng) {
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          addPreviewMarker(lat, lng);
+          setPoiDetails(null);
+          setCustomPinName('');
+          reverseGeocode(lat, lng).then(address => {
+            setPreviewPlace({ name: '', address, lat, lng, isCustomPin: true });
+          });
+        }
       });
 
       const { AdvancedMarkerElement, PinElement } = markerLib;
@@ -244,32 +425,53 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       });
 
-      // Route via Directions
+      // Route via Routes API (with round trip support)
       if (s.length >= 2) {
-        const directionsService = new google.maps.DirectionsService();
-        const waypoints = s.slice(1, -1).map((st: TripStop) => ({
-          location: new google.maps.LatLng(st.lat, st.lng),
-          stopover: true,
-        }));
-        directionsService.route({
-          origin: new google.maps.LatLng(s[0].lat, s[0].lng),
-          destination: new google.maps.LatLng(s[s.length - 1].lat, s[s.length - 1].lng),
-          waypoints,
-          travelMode: google.maps.TravelMode.DRIVING,
-        }, (result, status) => {
-          if (status === 'OK' && result) {
-            new google.maps.DirectionsRenderer({
-              map,
-              directions: result,
-              suppressMarkers: true,
-              polylineOptions: {
+        try {
+          const isRound = t.is_round_trip;
+          const routesLib = await importMapsLibrary('routes');
+          const RouteClass = routesLib.Route;
+
+          const origin = { lat: s[0].lat, lng: s[0].lng };
+          const destination = isRound
+            ? origin
+            : { lat: s[s.length - 1].lat, lng: s[s.length - 1].lng };
+          const intermediates = isRound
+            ? s.slice(1).map((st: TripStop) => ({ lat: st.lat, lng: st.lng }))
+            : s.slice(1, -1).map((st: TripStop) => ({ lat: st.lat, lng: st.lng }));
+
+          const { routes: computedRoutes } = await RouteClass.computeRoutes({
+            origin,
+            destination,
+            intermediates,
+            travelMode: 'DRIVING',
+            fields: ['path'],
+          });
+
+          if (computedRoutes?.[0]) {
+            const polylines = computedRoutes[0].createPolylines();
+            polylines.forEach((pl: any) => {
+              pl.setOptions({
                 strokeColor: colors.primary,
                 strokeWeight: 4,
                 strokeOpacity: 0.7,
-              },
+              });
+              pl.setMap(map);
             });
           }
-        });
+        } catch (routeErr) {
+          console.warn('Routes API error, falling back to polyline:', routeErr);
+          // Fallback: simple straight-line polyline
+          const path = s.map((st: TripStop) => ({ lat: st.lat, lng: st.lng }));
+          if (t.is_round_trip) path.push({ lat: s[0].lat, lng: s[0].lng });
+          new google.maps.Polyline({
+            map,
+            path,
+            strokeColor: colors.primary,
+            strokeWeight: 3,
+            strokeOpacity: 0.6,
+          });
+        }
       }
 
       const hasPoints = s.length > 0 || a.some((act: Activity) => act.location_lat);
@@ -279,7 +481,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, handlePoiClick]);
 
   useEffect(() => { initMap(); }, [initMap]);
 
@@ -340,6 +542,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     setCustomPinName('');
   };
 
+  const dismissPoiCard = () => {
+    setPoiDetails(null);
+  };
+
   const addPreviewMarker = (lat: number, lng: number) => {
     clearPreviewMarker();
     const map = googleMapRef.current;
@@ -371,19 +577,26 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   };
 
+
   const handleSearchSelect = (place: PlaceResult) => {
     const map = googleMapRef.current;
     if (!map) return;
     map.panTo({ lat: place.lat, lng: place.lng });
-    map.setZoom(15);
-    addPreviewMarker(place.lat, place.lng);
-    setPreviewPlace({
-      name: place.name,
-      address: place.address,
-      lat: place.lat,
-      lng: place.lng,
-      isCustomPin: false,
-    });
+    map.setZoom(16);
+
+    // If the place has a place_id, show POI card with full details
+    if (place.place_id) {
+      handlePoiClick(place.place_id);
+    } else {
+      addPreviewMarker(place.lat, place.lng);
+      setPreviewPlace({
+        name: place.name,
+        address: place.address,
+        lat: place.lat,
+        lng: place.lng,
+        isCustomPin: false,
+      });
+    }
   };
 
   const openAddActivityFromPreview = () => {
@@ -397,6 +610,38 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     dismissPreview();
     setShowModal(true);
   };
+
+  const openAddActivityFromPOI = () => {
+    if (!poiDetails) return;
+    const cat = detectCategory(poiDetails.types);
+    setNewLocation(poiDetails.name || poiDetails.address);
+    setNewLocationLat(poiDetails.lat);
+    setNewLocationLng(poiDetails.lng);
+    setNewLocationAddress(poiDetails.address);
+    setNewTitle(poiDetails.name);
+    setNewCategory(cat);
+    dismissPoiCard();
+    setShowModal(true);
+  };
+
+  const handlePoiRoutePlanner = () => {
+    if (!poiDetails) return;
+    const opened = tryOpenMapsDirectly(
+      poiDetails.lat, poiDetails.lng,
+      poiDetails.name, poiDetails.address,
+    );
+    if (!opened) setShowMapsPicker(true);
+  };
+
+  // ─── Offline fallback ───
+  if (!isOnline && !loading) {
+    return (
+      <View style={styles.container}>
+        <Header title="Karte" onBack={() => navigation.goBack()} />
+        <OfflineMapView tripId={tripId} activities={activities} stops={stops} isRoundTrip={tripData?.is_round_trip} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -418,8 +663,28 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         </div>
       )}
 
-      {/* Preview card */}
-      {previewPlace && !showModal && (
+      {/* Nearby Search chips */}
+      {!loading && !poiDetails && !previewPlace && (
+        <MapNearbySearch
+          onSearch={handleNearbySearch}
+          onClear={clearNearbyMarkers}
+          activeChipId={nearbyChipId}
+          resultCount={nearbyResultCount}
+        />
+      )}
+
+      {/* POI Detail Card (from POI click or nearby search result) */}
+      {poiDetails && !showModal && (
+        <MapPOICard
+          poi={poiDetails}
+          onAddActivity={openAddActivityFromPOI}
+          onRoutePlanner={handlePoiRoutePlanner}
+          onClose={dismissPoiCard}
+        />
+      )}
+
+      {/* Preview card (custom pin / search without placeId) */}
+      {previewPlace && !showModal && !poiDetails && (
         <View style={styles.previewCard}>
           <TouchableOpacity style={styles.previewClose} onPress={dismissPreview}>
             <Text style={styles.previewCloseText}>✕</Text>
@@ -449,7 +714,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
 
       {/* FAB */}
       {!loading && (
-        <TouchableOpacity style={[styles.fab, previewPlace && { bottom: 200 }]} onPress={() => setShowModal(true)}>
+        <TouchableOpacity
+          style={[styles.fab, (previewPlace || poiDetails) && { bottom: 200 }]}
+          onPress={() => setShowModal(true)}
+        >
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
@@ -520,9 +788,45 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </Modal>
 
+      {/* Maps App Picker (for POI route planning) */}
+      {poiDetails && (
+        <MapsAppPicker
+          visible={showMapsPicker}
+          lat={poiDetails.lat}
+          lng={poiDetails.lng}
+          label={poiDetails.name}
+          locationContext={poiDetails.address}
+          onClose={() => setShowMapsPicker(false)}
+        />
+      )}
+
     </View>
   );
 };
+
+/** Check if a place is currently open based on regularOpeningHours */
+function isCurrentlyOpen(hours: any): boolean {
+  try {
+    if (typeof hours.isOpen === 'function') return hours.isOpen();
+    // Fallback: check periods manually
+    const now = new Date();
+    const day = now.getDay(); // 0=Sunday
+    const time = now.getHours() * 100 + now.getMinutes();
+    const periods = hours.periods || [];
+    for (const period of periods) {
+      if (period.open?.day === day) {
+        const openTime = (period.open.hours || 0) * 100 + (period.open.minutes || 0);
+        const closeTime = period.close
+          ? (period.close.hours || 0) * 100 + (period.close.minutes || 0)
+          : 2400;
+        if (time >= openTime && time < closeTime) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },

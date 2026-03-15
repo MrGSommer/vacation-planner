@@ -248,7 +248,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           zoom: 8,
           mapTypeControl: false,
           streetViewControl: false,
-          mapId: 'vacation-planner-map',
+          mapId: '5617c0f0247bb2e3f910e4fd',
         });
         mapInstanceRef.current = map;
 
@@ -302,22 +302,37 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         });
 
         if (stops.length >= 2) {
-          const ds = new google.maps.DirectionsService();
-          const waypoints = stops.slice(1, -1).map((s: TripStop) => ({
-            location: new google.maps.LatLng(s.lat, s.lng), stopover: true,
-          }));
-          ds.route({
-            origin: new google.maps.LatLng(stops[0].lat, stops[0].lng),
-            destination: new google.maps.LatLng(stops[stops.length - 1].lat, stops[stops.length - 1].lng),
-            waypoints, travelMode: google.maps.TravelMode.DRIVING,
-          }, (result, status) => {
-            if (status === 'OK' && result) {
-              new google.maps.DirectionsRenderer({
-                map, directions: result, suppressMarkers: true,
-                polylineOptions: { strokeColor: colors.primary, strokeWeight: 4, strokeOpacity: 0.7 },
+          try {
+            const routesLib = await importMapsLibrary('routes');
+            const RouteClass = routesLib.Route;
+            const isRound = trip?.is_round_trip;
+            const origin = { lat: stops[0].lat, lng: stops[0].lng };
+            const destination = isRound
+              ? origin
+              : { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng };
+            const intermediates = isRound
+              ? stops.slice(1).map((s: TripStop) => ({ lat: s.lat, lng: s.lng }))
+              : stops.slice(1, -1).map((s: TripStop) => ({ lat: s.lat, lng: s.lng }));
+
+            const { routes: computedRoutes } = await RouteClass.computeRoutes({
+              origin, destination, intermediates,
+              travelMode: 'DRIVING', fields: ['path'],
+            });
+            if (computedRoutes?.[0]) {
+              const polylines = computedRoutes[0].createPolylines();
+              polylines.forEach((pl: any) => {
+                pl.setOptions({ strokeColor: colors.primary, strokeWeight: 4, strokeOpacity: 0.7 });
+                pl.setMap(map);
               });
             }
-          });
+          } catch {
+            // Fallback: simple polyline
+            const path = stops.map((s: TripStop) => ({ lat: s.lat, lng: s.lng }));
+            if (trip?.is_round_trip) path.push({ lat: stops[0].lat, lng: stops[0].lng });
+            new google.maps.Polyline({
+              map, path, strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6,
+            });
+          }
         }
 
         const hasPoints = stops.length > 0 || activities.some((a: Activity) => a.location_lat);

@@ -11,9 +11,10 @@ interface Props {
   onClose: () => void;
   stops: Activity[];
   travelInfo: Map<string, DirectionsResult>;
+  isRoundTrip?: boolean;
 }
 
-export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo }) => {
+export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
         validStops.forEach(s => bounds.extend({ lat: s.location_lat!, lng: s.location_lng! }));
 
         const map = new Map(mapRef.current!, {
-          mapId: 'route-map',
+          mapId: '5617c0f0247bb2e3f910e4fd',
           disableDefaultUI: true,
           zoomControl: true,
         });
@@ -109,25 +110,18 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           });
         });
 
-        // Draw route polyline
+        // Draw route via Routes API
         if (validStops.length >= 2) {
-          const directionsService = new google.maps.DirectionsService();
-          const directionsRenderer = new google.maps.DirectionsRenderer({
-            map,
-            suppressMarkers: true,
-            polylineOptions: {
-              strokeColor: colors.primary,
-              strokeWeight: 4,
-              strokeOpacity: 0.7,
-            },
-          });
+          const routesLib = await importMapsLibrary('routes');
+          const RouteClass = routesLib.Route;
 
           const origin = { lat: validStops[0].location_lat!, lng: validStops[0].location_lng! };
-          const dest = { lat: validStops[validStops.length - 1].location_lat!, lng: validStops[validStops.length - 1].location_lng! };
-          const waypoints = validStops.slice(1, -1).map(s => ({
-            location: { lat: s.location_lat!, lng: s.location_lng! },
-            stopover: true,
-          }));
+          const dest = isRoundTrip
+            ? origin
+            : { lat: validStops[validStops.length - 1].location_lat!, lng: validStops[validStops.length - 1].location_lng! };
+          const intermediates = isRoundTrip
+            ? validStops.slice(1).map(s => ({ lat: s.location_lat!, lng: s.location_lng! }))
+            : validStops.slice(1, -1).map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
 
           // Determine dominant travel mode from travelInfo
           const modeMap: Record<string, string> = { driving: 'DRIVING', transit: 'TRANSIT', walking: 'WALKING', bicycling: 'BICYCLING' };
@@ -136,18 +130,32 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           const gmMode = modeMap[dominantMode] || 'DRIVING';
 
           try {
-            const result = await directionsService.route({
+            const { routes: computedRoutes } = await RouteClass.computeRoutes({
               origin,
               destination: dest,
-              waypoints,
-              travelMode: google.maps.TravelMode[gmMode as keyof typeof google.maps.TravelMode] || google.maps.TravelMode.DRIVING,
+              intermediates,
+              travelMode: gmMode,
+              fields: ['path'],
             });
-            directionsRenderer.setDirections(result);
+
+            if (computedRoutes?.[0]) {
+              const polylines = computedRoutes[0].createPolylines();
+              polylines.forEach((pl: any) => {
+                pl.setOptions({
+                  strokeColor: colors.primary,
+                  strokeWeight: 4,
+                  strokeOpacity: 0.7,
+                });
+                pl.setMap(map);
+              });
+            }
           } catch {
             // Fallback: simple polyline
+            const path = validStops.map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
+            if (isRoundTrip) path.push({ lat: validStops[0].location_lat!, lng: validStops[0].location_lng! });
             new google.maps.Polyline({
               map,
-              path: validStops.map(s => ({ lat: s.location_lat!, lng: s.location_lng! })),
+              path,
               strokeColor: colors.primary,
               strokeWeight: 3,
               strokeOpacity: 0.6,
