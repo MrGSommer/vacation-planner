@@ -121,6 +121,8 @@ export const AppNavigator: React.FC = () => {
   const { session, loading, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
+  // Capture the initial URL before React Navigation overwrites it on route resolution
+  const initialPathRef = useRef(Platform.OS === 'web' ? window.location.pathname + window.location.search : '');
   const linking = useMemo(() => buildLinking(!!session), [!!session]);
   const [currentRoute, setCurrentRoute] = useState('');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -130,10 +132,13 @@ export const AppNavigator: React.FC = () => {
     { key: 'k', cmdOrCtrl: true, handler: () => setShowCommandPalette(v => !v) },
   ]);
 
-  // Extract invite token or deep link path from URL when user is not logged in
+  // Extract invite token or deep link path from the ORIGINAL URL (captured before
+  // React Navigation can overwrite it during route resolution)
   useEffect(() => {
     if (Platform.OS !== 'web' || session) return;
-    const path = window.location.pathname;
+    const fullPath = initialPathRef.current;
+    const path = fullPath.split('?')[0];
+    const search = fullPath.includes('?') ? fullPath.slice(fullPath.indexOf('?')) : '';
     const inviteMatch = path.match(/^\/invite\/(.+)$/);
     if (inviteMatch) {
       setPendingInviteToken(inviteMatch[1]);
@@ -145,7 +150,7 @@ export const AppNavigator: React.FC = () => {
       setPendingRedirectPath(path);
     } else {
       // Check for ?redirect= query param (e.g. /login?redirect=/share/token)
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(search);
       const redirect = params.get('redirect');
       if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
         setPendingRedirectPath(redirect);
