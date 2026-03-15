@@ -9,9 +9,9 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
 import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
-import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
+import { MapsAppPicker, tryOpenMapsDirectly } from '../map/MapsAppPicker';
 
 interface Props {
   visible: boolean;
@@ -33,7 +33,20 @@ function formatDE(dateStr: string): string {
 export const ActivityViewModal: React.FC<Props> = ({
   visible, activity, onClose, onEdit, onDelete, isEditor = true, userId, flightStatus,
 }) => {
+  const [showMapsPicker, setShowMapsPicker] = React.useState(false);
+
   if (!activity) return null;
+
+  const hasCoords = !!(activity.location_lat && activity.location_lng);
+
+  const handleRoutePlanner = () => {
+    if (!hasCoords) return;
+    const opened = tryOpenMapsDirectly(
+      activity.location_lat!, activity.location_lng!,
+      activity.location_name || undefined, activity.location_address || undefined,
+    );
+    if (!opened) setShowMapsPicker(true);
+  };
 
   const cat = ACTIVITY_CATEGORIES.find(c => c.id === activity.category);
   const catColor = CATEGORY_COLORS[activity.category] || colors.primary;
@@ -83,9 +96,9 @@ export const ActivityViewModal: React.FC<Props> = ({
               <View style={styles.infoRow}>
                 <Icon name="location-outline" size={iconSize.sm} color={colors.primary} />
                 <Text style={[styles.infoText, { flex: 1 }]}>{activity.location_name}</Text>
-                {activity.location_lat && activity.location_lng && (
+                {hasCoords && (
                   <TouchableOpacity
-                    onPress={() => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined)}
+                    onPress={handleRoutePlanner}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Icon name="open-outline" size={iconSize.xs} color={colors.secondary} />
@@ -95,6 +108,14 @@ export const ActivityViewModal: React.FC<Props> = ({
             )}
             {activity.location_address && activity.location_address !== activity.location_name && (
               <Text style={styles.addressText}>{activity.location_address}</Text>
+            )}
+
+            {/* Route planen button */}
+            {hasCoords && (
+              <TouchableOpacity style={styles.routePlanBtn} onPress={handleRoutePlanner}>
+                <Icon name="navigate-outline" size={iconSize.sm} color={colors.primary} />
+                <Text style={styles.routePlanText}>Route planen</Text>
+              </TouchableOpacity>
             )}
 
             {/* External links */}
@@ -262,6 +283,17 @@ export const ActivityViewModal: React.FC<Props> = ({
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
+
+      {hasCoords && (
+        <MapsAppPicker
+          visible={showMapsPicker}
+          lat={activity.location_lat!}
+          lng={activity.location_lng!}
+          label={activity.location_name || undefined}
+          locationContext={activity.location_address || undefined}
+          onClose={() => setShowMapsPicker(false)}
+        />
+      )}
     </Modal>
   );
 };
@@ -334,4 +366,21 @@ const styles = StyleSheet.create({
   closeBtn: { backgroundColor: colors.background },
   closeText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   mapsLinkIcon: { fontSize: 16, color: colors.textLight, marginLeft: spacing.xs },
+  routePlanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginLeft: 24 + spacing.sm,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.sm + 4,
+    backgroundColor: colors.primary + '10',
+    borderRadius: borderRadius.md,
+    alignSelf: 'flex-start',
+  },
+  routePlanText: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.primary,
+  },
 });

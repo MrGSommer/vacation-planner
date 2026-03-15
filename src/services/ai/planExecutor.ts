@@ -105,6 +105,7 @@ export const executePlan = async (
       fable_memory_enabled: true,
       fable_instruction: null,
       fable_recap: null,
+      is_round_trip: false,
     });
     finalTripId = trip.id;
   }

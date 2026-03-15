@@ -1,5 +1,18 @@
 import { Linking, Platform } from 'react-native';
 
+export type MapsProvider = 'google' | 'apple';
+
+export function openInMaps(
+  lat: number, lng: number, label?: string, locationContext?: string,
+  provider: MapsProvider = 'google',
+) {
+  if (provider === 'apple') {
+    openInAppleMaps(lat, lng, label);
+  } else {
+    openInGoogleMaps(lat, lng, label, locationContext);
+  }
+}
+
 export function openInGoogleMaps(lat: number, lng: number, label?: string, locationContext?: string) {
   // Build geo-aware search query — always include name so Google Maps opens the real Places entry
   // 1. Label + address → "Eiffel Tower, Champ de Mars, Paris, France"
@@ -29,6 +42,20 @@ export function openInGoogleMaps(lat: number, lng: number, label?: string, locat
     });
   } else {
     Linking.openURL(url!);
+  }
+}
+
+export function openInAppleMaps(lat: number, lng: number, label?: string) {
+  const q = label ? encodeURIComponent(label) : `${lat},${lng}`;
+
+  if (Platform.OS === 'ios') {
+    // iOS native: maps:// scheme
+    const nativeUrl = `maps://?q=${q}&ll=${lat},${lng}`;
+    Linking.openURL(nativeUrl);
+  } else {
+    // Web/macOS: maps.apple.com
+    const webUrl = `https://maps.apple.com/?q=${q}&ll=${lat},${lng}`;
+    Linking.openURL(webUrl);
   }
 }
 

@@ -71,6 +71,9 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
 
+  // Round trip
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
+
   // Fable settings
   const [fableEnabled, setFableEnabled] = useState(true);
   const [fableBudgetVisible, setFableBudgetVisible] = useState(true);
@@ -131,6 +134,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         if (trip.cover_image_url) {
           setCoverMode((trip as any).cover_image_attribution ? 'unsplash' : 'upload');
         }
+        setIsRoundTrip(trip.is_round_trip ?? false);
         setFableEnabled(trip.fable_enabled);
         setFableBudgetVisible(trip.fable_budget_visible);
         setFablePackingVisible(trip.fable_packing_visible);
@@ -352,6 +356,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         fable_packing_visible: fablePackingVisible,
         fable_web_search: fableWebSearch,
         fable_memory_enabled: fableMemoryEnabled,
+        is_round_trip: isRoundTrip,
       });
       navigation.goBack();
     } catch (e) {
@@ -584,6 +589,14 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                   </TouchableOpacity>
                 ))}
               </View>
+              <View style={styles.roundTripToggle}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Rundreise</Text>
+                  <Text style={styles.roundTripDesc}>Route kehrt zum Startort zurück</Text>
+                </View>
+                <Switch value={isRoundTrip} onValueChange={setIsRoundTrip} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" />
+              </View>
+
               <Input label="Notizen" placeholder="Optionale Notizen zur Reise..." value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
 
               <Text style={[styles.fieldLabel, { marginTop: spacing.lg }]}>Fable-Einstellungen</Text>
@@ -785,4 +798,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   footerButton: { flex: 1 },
   footerNext: { marginLeft: spacing.sm },
+  roundTripToggle: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
+  roundTripDesc: { ...typography.caption, color: colors.textSecondary },
 });

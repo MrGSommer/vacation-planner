@@ -141,6 +141,7 @@ export interface Trip {
   fable_memory_enabled: boolean;
   fable_instruction: string | null;
   fable_recap: string | null;
+  is_round_trip: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -135,14 +135,22 @@ export const AppNavigator: React.FC = () => {
   // Extract invite token or deep link path from the ORIGINAL URL (captured before
   // React Navigation can overwrite it during route resolution)
   useEffect(() => {
-    if (Platform.OS !== 'web' || session) return;
+    if (Platform.OS !== 'web') return;
     const fullPath = initialPathRef.current;
     const path = fullPath.split('?')[0];
     const search = fullPath.includes('?') ? fullPath.slice(fullPath.indexOf('?')) : '';
+
+    // Invite token: ALWAYS capture as fallback (even when authenticated)
     const inviteMatch = path.match(/^\/invite\/(.+)$/);
     if (inviteMatch) {
       setPendingInviteToken(inviteMatch[1]);
-    } else if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/)) {
+      return; // Don't process as redirect
+    }
+
+    // For other paths, only process when unauthenticated
+    if (session) return;
+
+    if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/)) {
       // Slideshow + share are public — don't require auth, let linking handle it
       return;
     } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
@@ -158,19 +166,34 @@ export const AppNavigator: React.FC = () => {
     }
   }, [session, setPendingInviteToken, setPendingRedirectPath]);
 
-  // After login: redirect to pending destination
+  // Invite token redirect: fires whenever session + token are both present
+  // Handles both same-page login AND auth-redirect page reloads (OAuth, email confirm)
+  useEffect(() => {
+    if (!session || !pendingInviteToken) return;
+    const attemptRedirect = (retries = 0) => {
+      if (retries > 20) {
+        setPendingInviteToken(null);
+        return;
+      }
+      if (!navigationRef.current?.getRootState()?.routes) {
+        setTimeout(() => attemptRedirect(retries + 1), 100);
+        return;
+      }
+      navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
+      setPendingInviteToken(null);
+    };
+    setTimeout(() => attemptRedirect(), 200);
+  }, [session, pendingInviteToken, setPendingInviteToken]);
+
+  // After login: redirect to pending path (non-invite deep links)
   useEffect(() => {
     if (!prevSessionRef.current && session) {
       setTimeout(() => {
-        if (pendingInviteToken) {
-          navigationRef.current?.navigate('AcceptInvite', { token: pendingInviteToken });
-          setPendingInviteToken(null);
-        } else if (pendingRedirectPath) {
+        if (pendingRedirectPath) {
           const path = pendingRedirectPath;
           setPendingRedirectPath(null);
           if (typeof window !== 'undefined') {
             window.history.replaceState(null, '', path);
-            // Wait until navigation state is fully initialized before triggering
             const attemptRedirect = (retries = 0) => {
               if (retries > 20) return;
               if (!navigationRef.current?.getRootState()?.routes) {
@@ -185,7 +208,7 @@ export const AppNavigator: React.FC = () => {
       }, 100);
     }
     prevSessionRef.current = session;
-  }, [session, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath]);
+  }, [session, pendingRedirectPath, setPendingRedirectPath]);
 
   // PASSWORD_RECOVERY event → navigate to ResetPassword screen
   useEffect(() => {

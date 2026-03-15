@@ -583,6 +583,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setShowMapModal(false)}
         stops={activities}
         travelInfo={travelInfo}
+        isRoundTrip={trip?.is_round_trip}
       />
 
       {showAiModal && user && (

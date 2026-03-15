@@ -11,6 +11,7 @@ interface Props {
   onClose: () => void;
   stops: Activity[];
   travelInfo: Map<string, DirectionsResult>;
+  isRoundTrip?: boolean;
 }
 
 const formatDE = (dateStr: string) => {
@@ -19,7 +20,7 @@ const formatDE = (dateStr: string) => {
   return `${d}.${m}.${y}`;
 };
 
-export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo }) => {
+export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip }) => {
   const mapRef = useRef<MapView>(null);
   const validStops = stops.filter(s => s.location_lat && s.location_lng);
 
@@ -92,7 +93,10 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
 
               {validStops.length >= 2 && (
                 <Polyline
-                  coordinates={validStops.map(s => ({ latitude: s.location_lat!, longitude: s.location_lng! }))}
+                  coordinates={[
+                    ...validStops.map(s => ({ latitude: s.location_lat!, longitude: s.location_lng! })),
+                    ...(isRoundTrip ? [{ latitude: validStops[0].location_lat!, longitude: validStops[0].location_lng! }] : []),
+                  ]}
                   strokeColor={colors.primary}
                   strokeWidth={3}
                 />

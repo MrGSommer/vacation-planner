@@ -151,3 +151,70 @@ export const formatDistance = (meters: number): string => {
   if (meters < 1000) return `${meters} m`;
   return `${(meters / 1000).toFixed(1)} km`;
 };
+
+// --- Directions caching (7-day TTL) ---
+
+const DIRECTIONS_CACHE_KEY = 'wf_directions_cache';
+const DIRECTIONS_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+interface CachedDirections {
+  result: DirectionsResult;
+  timestamp: number;
+}
+
+function directionsCacheKey(
+  origin: { lat: number; lng: number },
+  dest: { lat: number; lng: number },
+  mode: TravelMode,
+): string {
+  return `${origin.lat.toFixed(5)},${origin.lng.toFixed(5)}:${dest.lat.toFixed(5)},${dest.lng.toFixed(5)}:${mode}`;
+}
+
+function getDirectionsCache(): Record<string, CachedDirections> {
+  if (Platform.OS !== 'web') return {};
+  try {
+    const raw = localStorage.getItem(DIRECTIONS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setDirectionsCache(cache: Record<string, CachedDirections>): void {
+  if (Platform.OS !== 'web') return;
+  try {
+    localStorage.setItem(DIRECTIONS_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
+
+/** Cached directions — returns from cache if available and not expired, otherwise fetches fresh */
+export const getCachedDirections = async (
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  mode: TravelMode = 'driving',
+): Promise<DirectionsResult | null> => {
+  const key = directionsCacheKey(origin, destination, mode);
+  const cache = getDirectionsCache();
+  const entry = cache[key];
+
+  // Return cached if still valid
+  if (entry && Date.now() - entry.timestamp < DIRECTIONS_TTL) {
+    return entry.result;
+  }
+
+  // Fetch fresh
+  const result = await getDirections(origin, destination, mode);
+  if (result) {
+    cache[key] = { result, timestamp: Date.now() };
+    // Prune old entries (keep max 100)
+    const entries = Object.entries(cache);
+    if (entries.length > 100) {
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const pruned = Object.fromEntries(entries.slice(-100));
+      setDirectionsCache(pruned);
+    } else {
+      setDirectionsCache(cache);
+    }
+  }
+  return result;
+};

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image, ActivityIndicator, Switch } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -54,6 +54,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const [travelersCount, setTravelersCount] = useState(1);
   const [groupType, setGroupType] = useState<'solo' | 'couple' | 'family' | 'friends' | 'group'>('solo');
   const [notes, setNotes] = useState('');
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
 
   // Cover image
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
@@ -216,6 +217,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         fable_memory_enabled: true,
         fable_instruction: null,
         fable_recap: null,
+        is_round_trip: isRoundTrip,
       });
 
       // Upload own image after trip creation (needs tripId for storage path)
@@ -418,6 +420,14 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                   </TouchableOpacity>
                 ))}
               </View>
+              <View style={styles.roundTripToggle}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Rundreise</Text>
+                  <Text style={styles.roundTripDesc}>Route kehrt zum Startort zurück</Text>
+                </View>
+                <Switch value={isRoundTrip} onValueChange={setIsRoundTrip} trackColor={{ false: colors.border, true: colors.secondary }} thumbColor="#FFFFFF" />
+              </View>
+
               <Input label="Notizen" placeholder="Optionale Notizen zur Reise..." value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
             </>
           )}
@@ -512,4 +522,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   footerButton: { flex: 1 },
   footerNext: { marginLeft: spacing.sm },
+  roundTripToggle: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
+  roundTripDesc: { ...typography.caption, color: colors.textSecondary },
 });

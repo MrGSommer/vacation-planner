@@ -87,6 +87,8 @@ function removeFromStorage(key: string): void {
 }
 
 // --- cachedQuery ---
+// Strategy: Online = network-first (fresh data, update cache for offline)
+//           Offline = cache-first (localStorage fallback)
 
 export async function cachedQuery<T>(
   key: string,
@@ -94,60 +96,29 @@ export async function cachedQuery<T>(
   ttl: { fresh?: number; stale?: number } = {},
 ): Promise<T> {
   const freshMs = ttl.fresh ?? FRESH_TTL;
-  const staleMs = ttl.stale ?? STALE_TTL;
   const now = Date.now();
   const entry = cache.get(key);
+  const online = !isWeb() || navigator.onLine;
 
-  // Fresh hit
+  // Offline: return best available cached data
+  if (!online) {
+    if (entry) return entry.data;
+    const stored = loadFromStorage<T>(key);
+    if (stored) {
+      cache.set(key, stored);
+      return stored.data;
+    }
+    // No cached data — try network anyway (might work via SW)
+    return fetcher();
+  }
+
+  // Online: fresh in-memory hit — return immediately
   if (entry && now - entry.timestamp < freshMs) {
     return entry.data;
   }
 
-  // Stale hit — return stale data, revalidate in background
-  if (entry && now - entry.timestamp < staleMs) {
-    if (!inflight.has(key)) {
-      const p = fetcher().then(data => {
-        cache.set(key, { data, timestamp: Date.now() });
-        persistToStorage(key, data);
-        inflight.delete(key);
-        return data;
-      }).catch(() => {
-        inflight.delete(key);
-        return entry.data;
-      });
-      inflight.set(key, p);
-    }
-    return entry.data;
-  }
-
-  // Miss or expired — check localStorage before network
-  if (!entry && isWeb()) {
-    const stored = loadFromStorage<T>(key);
-    if (stored) {
-      // Offline: return persisted data directly
-      if (!navigator.onLine) {
-        cache.set(key, stored);
-        return stored.data;
-      }
-      // Online: use persisted as stale, revalidate in background
-      cache.set(key, stored);
-      if (!inflight.has(key)) {
-        const p = fetcher().then(data => {
-          cache.set(key, { data, timestamp: Date.now() });
-          persistToStorage(key, data);
-          inflight.delete(key);
-          return data;
-        }).catch(() => {
-          inflight.delete(key);
-          return stored.data;
-        });
-        inflight.set(key, p);
-      }
-      return stored.data;
-    }
-  }
-
-  // Deduplicate concurrent requests
+  // Online: always fetch fresh data from network
+  // Deduplicate concurrent requests for the same key
   if (inflight.has(key)) {
     return inflight.get(key)!;
   }
@@ -159,9 +130,8 @@ export async function cachedQuery<T>(
     return data;
   }).catch(err => {
     inflight.delete(key);
-    // Return stale data if available on error
+    // Network failed while online — fall back to cache
     if (entry) return entry.data;
-    // Try localStorage as last resort
     const stored = loadFromStorage<T>(key);
     if (stored) {
       cache.set(key, stored);
@@ -200,4 +170,33 @@ export function clearCache(): void {
   if (isWeb()) {
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }
+}
+
+// --- Online sync: purge stale localStorage entries ---
+// Call this when the app comes back online to remove stale cached data.
+// Entries older than maxAge are deleted so offline cache stays current.
+
+const PURGE_MAX_AGE = 5 * 60_000; // 5 minutes — anything older gets purged on reconnect
+
+export function purgeStaleStorage(): void {
+  if (!isWeb()) return;
+  const map = getStorageMap();
+  const now = Date.now();
+  let changed = false;
+  for (const key of Object.keys(map)) {
+    if (now - map[key].timestamp > PURGE_MAX_AGE) {
+      delete map[key];
+      // Also clear in-memory cache for this key
+      cache.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) saveStorageMap(map);
+}
+
+// Auto-purge when browser comes back online
+if (isWeb()) {
+  window.addEventListener('online', () => {
+    purgeStaleStorage();
+  });
 }

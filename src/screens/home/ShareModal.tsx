@@ -86,7 +86,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       setGeneratedUrl(null);
       loadExistingLink();
     }
-  }, [type]);
+  }, [type, role]);
 
   const loadMembers = async () => {
     setMembersLoading(true);

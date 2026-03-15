@@ -11,8 +11,8 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: clean up old caches (preserve wayfable-docs — persistent document cache)
-const PERSISTENT_CACHES = [CACHE_NAME, 'wayfable-docs'];
+// Activate: clean up old caches (preserve wayfable-docs + wayfable-map-tiles)
+const PERSISTENT_CACHES = [CACHE_NAME, 'wayfable-docs', 'wayfable-map-tiles'];
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -90,6 +90,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Cache-first for Mapbox tiles (pre-cached for offline maps)
+  if (url.hostname.includes('api.mapbox.com') && url.pathname.includes('/tiles/')) {
+    event.respondWith(
+      caches.open('wayfable-map-tiles').then((cache) =>
+        cache.match(request).then((cached) => {
+          if (cached) return cached;
+          return fetch(request).then((response) => {
+            if (response.ok) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
+        })
+      )
+    );
+    return;
+  }
+
   // Network-only for API calls (Supabase, Google, Stripe, Anthropic) and version check
   if (
     url.hostname.includes('supabase') ||
@@ -97,6 +115,7 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('maps.google') ||
     url.hostname.includes('stripe.com') ||
     url.hostname.includes('anthropic.com') ||
+    url.hostname.includes('api.mapbox.com') ||
     url.pathname.startsWith('/rest/') ||
     url.pathname.startsWith('/auth/') ||
     url.pathname === '/version.json'
