@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { NavigationContainer, NavigationContainerRef, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -48,81 +48,80 @@ import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const linking = {
-  prefixes: ['https://wayfable.ch', 'wayfable://'],
-  config: {
-    screens: {
-      // Both Auth and Main map to root — React Navigation uses whichever exists
-      Auth: { screens: { Welcome: '' } },
-      Main: { screens: { Home: '', Profile: 'profile' } },
-      AcceptInvite: 'invite/:token',
-      TripShare: 'share/:token',
-      SlideshowView: 'slideshow/:token',
-      SubscriptionSuccess: 'subscription-success',
-      SubscriptionCancel: 'subscription-cancel',
-      TripDetail: {
-        path: 'trip/:tripId',
-        parse: { tripId: String, openFable: (v: string) => v === 'true' },
+// Shared screens config — routes that exist regardless of auth state
+const SHARED_SCREENS = {
+  TripShare: 'share/:token',
+  SlideshowView: 'slideshow/:token',
+  Datenschutz: 'datenschutz',
+  AGB: 'agb',
+  Impressum: 'impressum',
+  ResetPassword: 'reset-password',
+} as const;
+
+// Authenticated-only screens config
+const AUTH_SCREENS = {
+  Main: { screens: { Home: '', Profile: 'profile' } },
+  AcceptInvite: 'invite/:token',
+  SubscriptionSuccess: 'subscription-success',
+  SubscriptionCancel: 'subscription-cancel',
+  TripDetail: {
+    path: 'trip/:tripId',
+    parse: { tripId: String, openFable: (v: string) => v === 'true' },
+  },
+  Itinerary: 'trip/:tripId/itinerary',
+  Map: 'trip/:tripId/map',
+  Photos: 'trip/:tripId/photos',
+  Budget: 'trip/:tripId/budget',
+  Packing: 'trip/:tripId/packing',
+  Stops: 'trip/:tripId/stops',
+  EditTrip: 'trip/:tripId/edit',
+  CreateTrip: 'trip/new',
+  EditProfile: 'profile/edit',
+  Notifications: 'notifications',
+  LanguageCurrency: 'settings/language',
+  FableSettings: 'settings/fable',
+  FableTripSettings: 'trip/:tripId/fable-settings',
+  Subscription: 'subscription',
+  FeedbackModal: 'feedback',
+  SupportChat: 'support',
+  AdminDashboard: 'admin',
+  BetaDashboard: 'admin/beta',
+  AdminUserList: 'admin/users',
+  AdminUserDetail: 'admin/users/:userId',
+  AdminEmailTest: 'admin/email-test',
+  AdminAnnouncements: 'admin/announcements',
+} as const;
+
+// Unauthenticated screens config
+const UNAUTH_SCREENS = {
+  Auth: { screens: { Welcome: '' } },
+} as const;
+
+function buildLinking(isAuthenticated: boolean) {
+  return {
+    prefixes: ['https://wayfable.ch', 'wayfable://'],
+    config: {
+      screens: {
+        ...(isAuthenticated ? AUTH_SCREENS : UNAUTH_SCREENS),
+        ...SHARED_SCREENS,
       },
-      Itinerary: 'trip/:tripId/itinerary',
-      Map: 'trip/:tripId/map',
-      Photos: 'trip/:tripId/photos',
-      Budget: 'trip/:tripId/budget',
-      Packing: 'trip/:tripId/packing',
-      Stops: 'trip/:tripId/stops',
-      EditTrip: 'trip/:tripId/edit',
-      CreateTrip: 'trip/new',
-      EditProfile: 'profile/edit',
-      Notifications: 'notifications',
-      LanguageCurrency: 'settings/language',
-      FableSettings: 'settings/fable',
-      FableTripSettings: 'trip/:tripId/fable-settings',
-      Subscription: 'subscription',
-      Datenschutz: 'datenschutz',
-      AGB: 'agb',
-      Impressum: 'impressum',
-      FeedbackModal: 'feedback',
-      SupportChat: 'support',
-      AdminDashboard: 'admin',
-      BetaDashboard: 'admin/beta',
-      AdminUserList: 'admin/users',
-      AdminUserDetail: 'admin/users/:userId',
-      AdminEmailTest: 'admin/email-test',
-      AdminAnnouncements: 'admin/announcements',
-      ResetPassword: 'reset-password',
     },
-  },
-  // Guard against crash when linking resolves a route not in the current navigator tree.
-  // On failure, manually resolve public/critical routes instead of falling back to root.
-  getStateFromPath: (path: string, options: any) => {
-    try {
-      return defaultGetStateFromPath(path, options);
-    } catch (e) {
-      console.warn('getStateFromPath failed for', path, e);
-
-      // Public routes that must work regardless of auth state
-      const shareMatch = path.match(/^\/share\/(.+?)(?:[?#]|$)/);
-      if (shareMatch) {
-        return { routes: [{ name: 'TripShare' as const, params: { token: shareMatch[1] } }] };
+    getStateFromPath: (path: string, options: any) => {
+      try {
+        return defaultGetStateFromPath(path, options);
+      } catch (e) {
+        console.warn('getStateFromPath failed for', path, e);
+        return undefined;
       }
-      const slideshowMatch = path.match(/^\/slideshow\/(.+?)(?:[?#]|$)/);
-      if (slideshowMatch) {
-        return { routes: [{ name: 'SlideshowView' as const, params: { token: slideshowMatch[1] } }] };
-      }
-      const inviteMatch = path.match(/^\/invite\/(.+?)(?:[?#]|$)/);
-      if (inviteMatch) {
-        return { routes: [{ name: 'AcceptInvite' as const, params: { token: inviteMatch[1] } }] };
-      }
-
-      return undefined;
-    }
-  },
-};
+    },
+  };
+}
 
 export const AppNavigator: React.FC = () => {
   const { session, loading, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
+  const linking = useMemo(() => buildLinking(!!session), [!!session]);
   const [currentRoute, setCurrentRoute] = useState('');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
 

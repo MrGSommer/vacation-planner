@@ -70,7 +70,24 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
     if (!user) return;
     setTestPushLoading(true);
     try {
-      // Refresh subscription first
+      // Detect PWA standalone mode
+      const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
+        || (window.navigator as any).standalone === true;
+
+      // Check permission in THIS context (browser vs PWA have separate permissions)
+      const permission = Notification.permission;
+
+      if (permission !== 'granted') {
+        Alert.alert('Push nicht erlaubt', `Notification.permission = "${permission}".\n\n${
+          isStandalone
+            ? 'PWA und Browser haben separate Berechtigungen. Bitte Push hier erneut aktivieren.'
+            : 'Bitte Push-Benachrichtigungen in den Browser-Einstellungen erlauben.'
+        }`);
+        setTestPushLoading(false);
+        return;
+      }
+
+      // Refresh subscription
       await refreshPushSubscription(user.id);
 
       // Check subscription state
@@ -78,32 +95,46 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
       const sub = await registration.pushManager.getSubscription();
 
       if (!sub) {
-        Alert.alert('Fehler', 'Keine aktive Push-Subscription. Bitte Push erneut aktivieren.');
+        Alert.alert('Keine Subscription', 'Keine aktive Push-Subscription. Bitte Push deaktivieren und erneut aktivieren.');
+        setTestPushLoading(false);
         return;
       }
 
-      // Count DB subscriptions for this user
+      // Count ALL DB subscriptions for this user (browser + PWA may have separate ones)
       const { data: dbSubs } = await supabase
         .from('push_subscriptions')
         .select('id, endpoint')
         .eq('user_id', user.id);
 
+      const endpointMatch = dbSubs?.some(s => s.endpoint === sub.endpoint);
+
       const info = [
+        `Modus: ${isStandalone ? 'PWA (standalone)' : 'Browser'}`,
+        `Permission: ${permission}`,
+        `SW: ${registration.active ? 'aktiv' : 'inaktiv'}`,
         `Endpoint: ...${sub.endpoint.slice(-40)}`,
         `DB-Subscriptions: ${dbSubs?.length ?? 0}`,
-        `Endpoint match: ${dbSubs?.some(s => s.endpoint === sub.endpoint) ? 'Ja' : 'NEIN'}`,
+        `Dieser Endpoint in DB: ${endpointMatch ? 'Ja' : 'NEIN'}`,
+        `VAPID: ${(process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY || '').substring(0, 10)}...`,
       ].join('\n');
 
-      // Send local notification as test
-      registration.showNotification('WayFable Test', {
-        body: 'Push-Benachrichtigungen funktionieren!',
+      // Send local notification (shows even in foreground on most platforms)
+      await registration.showNotification('WayFable Test', {
+        body: isStandalone ? 'PWA Push funktioniert!' : 'Browser Push funktioniert!',
         icon: '/icon-192.png',
         tag: 'test-push',
       });
 
-      Alert.alert('Push-Diagnose', `Lokale Test-Notification gesendet.\n\n${info}\n\nPrüfe send-push Edge Function Logs für Server-seitige Fehler.`);
+      Alert.alert(
+        'Push-Diagnose',
+        `Test-Notification gesendet.\n\n${info}\n\n${
+          !endpointMatch
+            ? '⚠️ Endpoint nicht in DB! Push deaktivieren und erneut aktivieren.'
+            : 'Wenn keine Notification erscheint: PWA minimieren und erneut versuchen (Foreground-Unterdrückung).'
+        }`
+      );
     } catch (e: any) {
-      Alert.alert('Fehler', e.message || 'Test-Push fehlgeschlagen');
+      Alert.alert('Fehler', `${e.message || 'Test-Push fehlgeschlagen'}\n\nTipp: Push deaktivieren, erneut aktivieren.`);
     } finally {
       setTestPushLoading(false);
     }

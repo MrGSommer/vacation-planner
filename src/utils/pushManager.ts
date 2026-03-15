@@ -104,12 +104,9 @@ export async function refreshPushSubscription(userId: string): Promise<void> {
       { onConflict: 'user_id,endpoint' }
     );
 
-    // Clean up stale subscriptions (old endpoints from rotated Apple URLs etc.)
-    await supabase
-      .from('push_subscriptions')
-      .delete()
-      .eq('user_id', userId)
-      .neq('endpoint', subscription.endpoint);
+    // Don't delete other endpoints — browser and PWA have separate push
+    // subscriptions (especially on iOS). Let send-push clean up expired
+    // endpoints via 404/410 responses from push services.
 
     console.log('Push: subscription refreshed, VAPID key prefix:', VAPID_PUBLIC_KEY.substring(0, 10));
   } catch (e) {
