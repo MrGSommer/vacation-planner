@@ -274,36 +274,24 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                 }}
               />
 
-              {isFeatureAllowed('ai') ? (
-                <TouchableOpacity
-                  style={styles.aiButton}
-                  onPress={() => setShowAiModal(true)}
-                  activeOpacity={0.8}
+              <TouchableOpacity
+                style={styles.aiButton}
+                onPress={() => setShowAiModal(true)}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={[...gradients.ocean]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.aiButtonGradient}
                 >
-                  <LinearGradient
-                    colors={[...gradients.ocean]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.aiButtonGradient}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={18} color="#FFFFFF" /><Text style={styles.aiButtonText}>Mit Fable planen</Text></View>
-                    <Text style={styles.aiButtonSubtext}>Dein Reisebegleiter hilft dir bei der Planung</Text>
-                    {aiCredits > 0 && (
-                      <Text style={styles.aiButtonSubtext}>{aiCredits} Inspirationen verfügbar</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.aiButton}>
-                  <UpgradePrompt
-                    iconName="sparkles-outline"
-                    title="Mit Fable planen"
-                    message="Kaufe Inspirationen um deinen Reisebegleiter zu nutzen"
-                    inline
-                    buyInspirations
-                  />
-                </View>
-              )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={18} color="#FFFFFF" /><Text style={styles.aiButtonText}>Mit Fable planen</Text></View>
+                  <Text style={styles.aiButtonSubtext}>Dein Reisebegleiter hilft dir bei der Planung</Text>
+                  {aiCredits > 0 && (
+                    <Text style={styles.aiButtonSubtext}>{aiCredits} Inspirationen verfügbar</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
 
               <Text style={styles.fieldLabel}>Headerbild</Text>
               {coverImageUrl ? (

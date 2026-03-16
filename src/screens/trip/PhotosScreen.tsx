@@ -25,6 +25,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
+import { SneakPeekOverlay } from '../../components/common/SneakPeekOverlay';
 import { formatDateShort, formatDateMedium, formatDateRange } from '../../utils/dateHelpers';
 import { parseISO } from 'date-fns';
 import { Icon } from '../../utils/icons';
@@ -46,28 +47,10 @@ type SortOrder = 'newest' | 'oldest';
 export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user, profile } = useAuthContext();
-  const { isFeatureAllowed } = useSubscription();
+  const { isFeatureAllowed, isSneakPeek, isPremium } = useSubscription();
   const { showToast } = useToast();
   usePresence(tripId, 'Fotos');
   const creatorName = profile ? getDisplayName(profile) : undefined;
-
-  if (!isFeatureAllowed('photos')) {
-    return (
-      <View style={styles.container}>
-        <Header title="Fotos" onBack={() => navigation.navigate('TripDetail', { tripId })} />
-        <UpgradePrompt
-          iconName="images-outline"
-          title="Foto-Galerie"
-          message="Halte deine schönsten Reisemomente fest"
-          highlights={[
-            { icon: 'cloud-upload-outline', text: 'Unbegrenzt Fotos hochladen' },
-            { icon: 'people-outline', text: 'Fotos mit Reisepartnern teilen' },
-            { icon: 'location-outline', text: 'Fotos auf der Karte anzeigen' },
-          ]}
-        />
-      </View>
-    );
-  }
 
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -277,6 +260,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async (photo: Photo) => {
+    if (readonlyMode) { showToast('Upgrade auf Premium um löschen zu können', 'info'); return; }
     if (!window.confirm('Möchtest du dieses Foto wirklich löschen?')) return;
     setDeleting(true);
     try {
@@ -331,6 +315,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Bulk delete
   const handleBulkDelete = async () => {
+    if (readonlyMode) { showToast('Upgrade auf Premium um löschen zu können', 'info'); return; }
     const count = selectedIds.size;
     if (count === 0) return;
     if (!window.confirm(`${count} Foto${count > 1 ? 's' : ''} unwiderruflich löschen?`)) return;
@@ -681,6 +666,31 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   };
 
+  // Free user on shared trip → can see but not edit
+  const isSharedReadonly = !isPremium && !!trip && trip.owner_id !== user?.id;
+  const photosSneakPeek = isSneakPeek('photos', photos.length > 0);
+  const readonlyMode = photosSneakPeek || isSharedReadonly;
+
+  if (!isFeatureAllowed('photos') && !readonlyMode && !isSharedReadonly) {
+    return (
+      <View style={styles.container}>
+        <Header title="Fotos" onBack={() => navigation.navigate('TripDetail', { tripId })} />
+        <UpgradePrompt
+          iconName="images-outline"
+          title="Foto-Galerie"
+          message="Halte deine schönsten Reisemomente fest — sortiert nach Tag, auf der Karte sichtbar"
+          heroGradient={['#FF6B6B', '#FF8B94']}
+          highlights={[
+            { icon: 'cloud-upload-outline', text: 'Unbegrenzt Fotos hochladen', detail: 'Direkt von der Kamera oder Galerie' },
+            { icon: 'calendar-outline', text: 'Nach Tag sortiert', detail: 'EXIF-Datum wird dem Reisetag zugeordnet' },
+            { icon: 'map-outline', text: 'Foto-Karte', detail: 'Alle Fotos auf der Karte sichtbar' },
+            { icon: 'play-circle-outline', text: 'Diashow & Teilen', detail: 'Slideshow mit Musik, gemeinsames Album' },
+          ]}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -702,8 +712,10 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       )}
 
+      {readonlyMode && <SneakPeekOverlay feature="Fotos" />}
+
       {/* Toolbar */}
-      {!loading && photos.length > 0 && (
+      {!loading && photos.length > 0 && !readonlyMode && (
         <View style={styles.toolbar}>
           <TouchableOpacity
             style={styles.sortButton}
@@ -837,7 +849,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       )}
 
       {/* Upload FAB */}
-      {!selectMode && (
+      {!selectMode && !readonlyMode && (
         <TouchableOpacity style={styles.fab} onPress={handleUpload} activeOpacity={0.8} disabled={uploading}>
           <LinearGradient colors={[colors.accent, colors.sky]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             {uploading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.fabText}>+</Text>}

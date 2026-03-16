@@ -21,6 +21,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { UpgradePrompt } from '../../components/common/UpgradePrompt';
+import { SneakPeekOverlay } from '../../components/common/SneakPeekOverlay';
 import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 import { RouteMapModal } from '../../components/map/RouteMapModal';
 import { AiTripModal } from '../../components/ai/AiTripModal';
@@ -40,7 +41,7 @@ interface CachedTravel {
 
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
-  const { isFeatureAllowed } = useSubscription();
+  const { isFeatureAllowed, isSneakPeek, isPremium } = useSubscription();
   const { user } = useAuthContext();
   usePresence(tripId, 'Stopps');
   const [showAiModal, setShowAiModal] = useState(false);
@@ -351,18 +352,25 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     return { origin, destination, waypoints };
   };
 
-  if (!isFeatureAllowed('stops')) {
+  // Free user on shared trip → can see but not edit
+  const isSharedReadonly = !isPremium && !!trip && trip.owner_id !== user?.id;
+  const stopsSneakPeek = isSneakPeek('stops', activities.length > 0);
+  const readonlyMode = stopsSneakPeek || isSharedReadonly;
+
+  if (!isFeatureAllowed('stops') && !stopsSneakPeek && !isSharedReadonly) {
     return (
       <View style={styles.container}>
         <Header title="Route & Stops" onBack={() => navigation.navigate('Main' as any, { screen: 'Home' })} />
         <UpgradePrompt
           iconName="map-outline"
           title="Routen & Stops"
-          message="Plane deine Route visuell auf der Karte"
+          message="Plane deine Route visuell — von Hotel zu Hotel, mit allen Zwischenstopps"
+          heroGradient={['#6C5CE7', '#74B9FF']}
           highlights={[
-            { icon: 'bed-outline', text: 'Übernachtungen & Hotels planen' },
-            { icon: 'navigate-outline', text: 'Zwischenstopps hinzufügen' },
-            { icon: 'car-outline', text: 'Route mit Google Maps öffnen' },
+            { icon: 'bed-outline', text: 'Hotels & Übernachtungen', detail: 'Check-in/out Daten, Buchungslinks & Notizen' },
+            { icon: 'navigate-outline', text: 'Zwischenstopps planen', detail: 'Sehenswürdigkeiten, Restaurants & Tankstellen' },
+            { icon: 'car-outline', text: 'Route berechnen', detail: 'Fahrtzeiten & Distanzen zwischen allen Stops' },
+            { icon: 'map-outline', text: 'Gesamtroute auf der Karte', detail: 'Alle Stops verbunden auf einer interaktiven Karte' },
           ]}
         />
         <TripBottomNav tripId={tripId} activeTab="Stops" />
@@ -376,11 +384,9 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Route & Stops"
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {isFeatureAllowed('ai') && (
-              <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
+            </TouchableOpacity>
             {activities.length >= 2 && (
               <TouchableOpacity onPress={() => setShowMapModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Icon name="map-outline" size={iconSize.md} color={colors.accent} />
@@ -390,6 +396,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       />
 
+      {readonlyMode && <SneakPeekOverlay feature="Stops" />}
+
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardDismissMode="on-drag" onScrollBeginDrag={() => { setShowTravelModePicker(null); setShowRouteMenu(null); }}>
         {loading ? (
           <StopsSkeleton />
@@ -398,8 +406,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
             iconName="map-outline"
             title="Keine Stops geplant"
             message="Füge Übernachtungen und Zwischenstopps hinzu"
-            actionLabel="Stop hinzufügen"
-            onAction={openAddModal}
+            actionLabel={readonlyMode ? undefined : "Stop hinzufügen"}
+            onAction={readonlyMode ? undefined : openAddModal}
           />
         ) : (
           activities.map((activity, i) => (
@@ -553,18 +561,20 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={openAddModal} activeOpacity={0.8}>
-        <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Icon name="add" size={28} color="#FFFFFF" />
-        </LinearGradient>
-      </TouchableOpacity>
+      {!readonlyMode && (
+        <TouchableOpacity style={styles.fab} onPress={openAddModal} activeOpacity={0.8}>
+          <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Icon name="add" size={28} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
 
       <ActivityViewModal
         visible={!!viewActivity}
         activity={viewActivity}
         onClose={() => setViewActivity(null)}
-        onEdit={(a) => { setViewActivity(null); openEditModal(a); }}
-        onDelete={(id) => { setViewActivity(null); handleDelete(id); }}
+        onEdit={readonlyMode ? () => { showToast('Upgrade auf Premium um zu bearbeiten', 'info'); } : (a) => { setViewActivity(null); openEditModal(a); }}
+        onDelete={readonlyMode ? () => { showToast('Upgrade auf Premium um zu löschen', 'info'); } : (id) => { setViewActivity(null); handleDelete(id); }}
       />
 
       <ActivityModal

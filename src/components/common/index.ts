@@ -24,6 +24,8 @@ export { BuyInspirationenModal } from './BuyInspirationenModal';
 export { UpdateBanner } from './UpdateBanner';
 export { PaymentWarningBanner } from './PaymentWarningBanner';
 export { TrialExpiredModal } from './TrialExpiredModal';
+export { TrialBanner } from './TrialBanner';
+export { SneakPeekOverlay } from './SneakPeekOverlay';
 export { ModalWrapper } from './ModalWrapper';
 export { HoverPressable } from './HoverPressable';
 export { InlineEditText } from './InlineEditText';

@@ -14,12 +14,13 @@ export const STRIPE_CONFIG = {
 
 export const TIER_LIMITS = {
   free: {
-    maxActiveTrips: 2,
-    maxPastTrips: 1,
+    maxActiveTrips: 1,
+    maxPastTrips: 0,
     maxCollaboratorsPerTrip: 2,
     photos: false,
     stops: false,
     ai: false,
+    budget: false,
   },
   premium: {
     maxActiveTrips: Infinity,
@@ -28,8 +29,15 @@ export const TIER_LIMITS = {
     photos: true,
     stops: true,
     ai: true,
+    budget: true,
   },
 } as const;
 
 export type SubscriptionTier = keyof typeof TIER_LIMITS;
-export type PremiumFeature = 'photos' | 'stops' | 'ai';
+export type PremiumFeature = 'photos' | 'stops' | 'ai' | 'budget';
+
+/** Days of free trial for new users */
+export const TRIAL_DAYS = 14;
+
+/** Auto-delete free user trips X days after end_date */
+export const FREE_TRIP_RETENTION_DAYS = 14;

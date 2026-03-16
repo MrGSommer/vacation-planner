@@ -12,8 +12,17 @@ import { Icon, IconName } from '../../utils/icons';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
+const FEATURES: { icon: IconName; title: string; desc: string }[] = [
+  { icon: 'airplane-outline', title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst' },
+  { icon: 'people-outline', title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
+  { icon: 'images-outline', title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
+  { icon: 'map-outline', title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
+  { icon: 'wallet-outline', title: 'Budget & Ausgaben', desc: 'Tracke Kosten und teile fair auf' },
+  { icon: 'sparkles-outline', title: 'Reisebegleiter Fable', desc: '20 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
+];
+
 export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
-  const { isPremium, aiCredits } = useSubscription();
+  const { isPremium, isTrialing, trialDaysLeft, aiCredits } = useSubscription();
   const { user } = useAuth();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
 
@@ -25,7 +34,8 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  if (isPremium) {
+  // Active premium subscriber (not trialing)
+  if (isPremium && !isTrialing) {
     return (
       <View style={styles.container}>
         <Header title="Abonnement" onBack={() => navigation.goBack()} />
@@ -49,18 +59,30 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.hero}
         >
           <Text style={styles.heroTitle}>WayFable Premium</Text>
-          <Text style={styles.heroSubtitle}>Entfessle das volle Potenzial deiner Reiseplanung</Text>
+          <Text style={styles.heroSubtitle}>
+            {isTrialing
+              ? `Dein Premium-Test endet in ${trialDaysLeft} ${trialDaysLeft === 1 ? 'Tag' : 'Tagen'}`
+              : 'Entfessle das volle Potenzial deiner Reiseplanung'
+            }
+          </Text>
         </LinearGradient>
+
+        {/* Trial countdown notice */}
+        {isTrialing && (
+          <View style={styles.trialNotice}>
+            <Icon name="time-outline" size={20} color={trialDaysLeft <= 3 ? colors.error : colors.accent} />
+            <Text style={styles.trialNoticeText}>
+              {trialDaysLeft <= 3
+                ? `Nur noch ${trialDaysLeft} ${trialDaysLeft === 1 ? 'Tag' : 'Tage'}! Sichere dir jetzt Premium.`
+                : 'Abonniere jetzt, damit du nach dem Test keine Features verlierst.'
+              }
+            </Text>
+          </View>
+        )}
 
         {/* Features */}
         <View style={styles.features}>
-          {([
-            { icon: 'airplane-outline' as IconName, title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst' },
-            { icon: 'people-outline' as IconName, title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
-            { icon: 'images-outline' as IconName, title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
-            { icon: 'map-outline' as IconName, title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
-            { icon: 'sparkles-outline' as IconName, title: 'Reisebegleiter Fable', desc: '30 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
-          ]).map((f, i) => (
+          {FEATURES.map((f, i) => (
             <View key={i} style={styles.featureRow}>
               <Icon name={f.icon} size={24} color={colors.secondary} />
               <View style={styles.featureInfo}>
@@ -112,7 +134,9 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             end={{ x: 1, y: 0 }}
             style={styles.ctaGradient}
           >
-            <Text style={styles.ctaText}>Jetzt upgraden</Text>
+            <Text style={styles.ctaText}>
+              {isTrialing ? 'Jetzt Premium sichern' : 'Jetzt upgraden'}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -126,6 +150,8 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.inspirationDesc}>
             Nutze Fable, deinen Reisebegleiter, auch ohne Abo.{'\n'}
             20 Inspirationen für CHF 5 — du hast aktuell {aiCredits}.
+            {'\n'}
+            <Text style={styles.inspirationKeepNote}>Gekaufte Inspirationen bleiben auch bei Kündigung erhalten.</Text>
           </Text>
           <TouchableOpacity
             style={styles.inspirationButton}
@@ -157,10 +183,21 @@ const styles = StyleSheet.create({
   },
   heroTitle: { ...typography.h1, color: '#FFFFFF', marginBottom: spacing.sm },
   heroSubtitle: { ...typography.body, color: 'rgba(255,255,255,0.9)', textAlign: 'center' },
+  trialNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent + '15',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    padding: spacing.md,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  trialNoticeText: { ...typography.bodySmall, color: colors.text, flex: 1, lineHeight: 20 },
   features: { marginBottom: spacing.xl },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
-  featureIcon: { marginRight: spacing.md },
-  featureInfo: { flex: 1 },
+  featureInfo: { flex: 1, marginLeft: spacing.md },
   featureTitle: { ...typography.body, fontWeight: '600' },
   featureDesc: { ...typography.caption, color: colors.textSecondary },
   billingToggle: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl },
@@ -200,7 +237,6 @@ const styles = StyleSheet.create({
   ctaText: { ...typography.button, color: '#FFFFFF', fontSize: 18 },
   terms: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.md },
   activeContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  activeIcon: { marginBottom: spacing.md },
   activeTitle: { ...typography.h2, marginBottom: spacing.sm },
   activeMessage: { ...typography.body, color: colors.textSecondary },
   inspirationSection: {
@@ -213,6 +249,7 @@ const styles = StyleSheet.create({
   },
   inspirationTitle: { ...typography.h3, marginBottom: spacing.sm, textAlign: 'center' },
   inspirationDesc: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md, lineHeight: 22 },
+  inspirationKeepNote: { fontStyle: 'italic', color: colors.textLight },
   inspirationButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.xl,

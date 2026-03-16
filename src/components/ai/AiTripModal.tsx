@@ -13,6 +13,7 @@ import { useAiPlanner, AiPhase, ConflictResolution } from '../../hooks/useAiPlan
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
+import { UpgradePrompt } from '../common/UpgradePrompt';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
@@ -418,6 +419,51 @@ export const AiTripModal: React.FC<Props> = ({
       );
     }
 
+    // Full-screen Fable pitch when user has no Inspirationen
+    if (!canSendMessages && (phase === 'conversing' || phase === 'idle')) {
+      const handleBuyPress = () => {
+        if (Platform.OS === 'web') {
+          setShowBuyModal(true);
+        } else {
+          onClose();
+          navigation.navigate('Subscription');
+        }
+      };
+
+      return isPremium ? (
+        // Premium user with 0 credits — just buy Inspirationen
+        <UpgradePrompt
+          iconName="sparkles"
+          title="Keine Inspirationen mehr"
+          message="Kaufe Inspirationen um Fable weiter nutzen zu können."
+          buyInspirations
+          heroGradient={gradients.sunset}
+          onPress={handleBuyPress}
+          highlights={[
+            { icon: 'chatbubbles-outline', text: 'Reisepläne erstellen', detail: 'Fable plant deine Reise Tag für Tag' },
+            { icon: 'list-outline', text: 'Packlisten generieren', detail: 'Nie wieder etwas vergessen' },
+            { icon: 'wallet-outline', text: 'Budget-Kategorien', detail: 'Ausgaben intelligent aufteilen' },
+          ]}
+        />
+      ) : (
+        // Free user — full feature showcase + buy option
+        <UpgradePrompt
+          iconName="sparkles"
+          title="Dein KI-Reisebegleiter"
+          message="Fable plant deine Reise, erstellt Packlisten, schlägt Budget-Kategorien vor und vieles mehr."
+          heroGradient={gradients.sunset}
+          secondaryLabel="Inspirationen kaufen"
+          onSecondaryPress={handleBuyPress}
+          highlights={[
+            { icon: 'map-outline', text: 'Komplette Reisepläne', detail: 'Fable erstellt Tag-für-Tag Pläne mit Aktivitäten' },
+            { icon: 'chatbubbles-outline', text: 'Persönliche Beratung', detail: 'Frage Fable nach Tipps, Restaurants & Geheimtipps' },
+            { icon: 'list-outline', text: 'Packlisten & Budget', detail: 'Automatische Packlisten und Budget-Vorschläge' },
+            { icon: 'calendar-outline', text: 'Tagesplanung', detail: 'Optimiere einzelne Tage mit lokalen Empfehlungen' },
+          ]}
+        />
+      );
+    }
+
     // Chat view (conversing or plan_review)
     const isPlanReview = phase === 'plan_review';
 
@@ -814,23 +860,6 @@ export const AiTripModal: React.FC<Props> = ({
           </TouchableOpacity>
         )}
 
-        {/* Free user upsell banner */}
-        {!canSendMessages && !isPlanReview && (
-          <View style={styles.freeUserBanner}>
-            <Text style={styles.freeUserText}>Kaufe Inspirationen um mitzuschreiben</Text>
-            <TouchableOpacity onPress={() => {
-              if (Platform.OS === 'web') {
-                setShowBuyModal(true);
-              } else {
-                onClose();
-                navigation.navigate('Subscription');
-              }
-            }}>
-              <Text style={styles.freeUserAction}>Inspirationen kaufen</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Input (conversing or adjust mode) */}
         {(!isPlanReview || adjustMode) && !fableDisabled && (
           <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
@@ -979,20 +1008,6 @@ const styles = StyleSheet.create({
   },
   senderNameRight: { alignSelf: 'flex-end', color: colors.textLight },
   senderNameLeft: { alignSelf: 'flex-start', color: colors.textSecondary },
-
-  // Free user upsell
-  freeUserBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.primary + '10',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  freeUserText: { ...typography.bodySmall, color: colors.textSecondary, flex: 1 },
-  freeUserAction: { ...typography.bodySmall, fontWeight: '700', color: colors.primary },
 
   // Credit indicator per message
   creditIndicator: {

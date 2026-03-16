@@ -19,6 +19,7 @@ export interface Profile {
   stripe_subscription_id: string | null;
   subscription_period_end: string | null;
   ai_credits_balance: number;
+  ai_credits_purchased: number;
   ai_credits_monthly_quota: number;
   ai_custom_instruction: string | null;
   fable_name_visible: boolean;
@@ -128,7 +129,7 @@ export interface Trip {
   cover_image_attribution: string | null;
   start_date: string;
   end_date: string;
-  status: 'planning' | 'upcoming' | 'active' | 'completed';
+  status: 'planning' | 'upcoming' | 'active' | 'completed' | 'archived';
   currency: string;
   travelers_count: number;
   group_type: 'solo' | 'couple' | 'family' | 'friends' | 'group';

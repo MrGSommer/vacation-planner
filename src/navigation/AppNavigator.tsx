@@ -37,6 +37,7 @@ import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { AdminEmailTestScreen } from '../screens/admin/AdminEmailTestScreen';
 import { AdminAnnouncementsScreen } from '../screens/admin/AdminAnnouncementsScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
+import { CardSetupScreen } from '../screens/auth/CardSetupScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { SlideshowViewScreen } from '../screens/slideshow/SlideshowViewScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
@@ -118,7 +119,7 @@ function buildLinking(isAuthenticated: boolean) {
 }
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
+  const { session, loading, profile, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   // Capture the initial URL before React Navigation overwrites it on route resolution
@@ -231,6 +232,24 @@ export const AppNavigator: React.FC = () => {
     }
   }, [session, pendingSetPassword, clearPendingSetPassword]);
 
+  // New trialing user without Stripe customer → show card setup
+  const cardSetupShownRef = useRef(false);
+  useEffect(() => {
+    if (!session || !profile || cardSetupShownRef.current) return;
+    if (
+      profile.subscription_status === 'trialing' &&
+      !profile.stripe_customer_id &&
+      !pendingInviteToken &&
+      !pendingRedirectPath &&
+      !passwordRecovery
+    ) {
+      cardSetupShownRef.current = true;
+      setTimeout(() => {
+        navigationRef.current?.navigate('CardSetup');
+      }, 300);
+    }
+  }, [session, profile, pendingInviteToken, pendingRedirectPath, passwordRecovery]);
+
   if (loading) return <LoadingScreen />;
 
   const showFab = session && currentRoute !== 'Feedback' && currentRoute !== 'FeedbackModal' && currentRoute !== 'SupportChat';
@@ -278,6 +297,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AdminEmailTest" component={AdminEmailTestScreen} />
               <Stack.Screen name="AdminAnnouncements" component={AdminAnnouncementsScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+              <Stack.Screen name="CardSetup" component={CardSetupScreen} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthNavigator} />

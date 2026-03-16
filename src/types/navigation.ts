@@ -37,6 +37,7 @@ export type RootStackParamList = {
   BetaDashboard: undefined;
   ResetPassword: undefined;
   SlideshowView: { token: string };
+  CardSetup: undefined;
 };
 
 export type MainTabParamList = {
@@ -49,4 +50,5 @@ export type AuthStackParamList = {
   Login: undefined;
   SignUp: undefined;
   SignUpSuccess: { email: string };
+  CardSetup: undefined;
 };

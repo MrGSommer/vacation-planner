@@ -333,6 +333,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           {tab === 'share' && (
             <>
+              {type === 'collaborate' && !canAddCollaborator(nonOwnerMembers.length) && (
+                <View style={{ backgroundColor: '#FFF3E0', padding: spacing.sm, borderRadius: borderRadius.md, marginBottom: spacing.sm }}>
+                  <Text style={{ ...typography.bodySmall, color: '#E65100' }}>
+                    Teilnehmer-Limit erreicht. Upgrade auf Premium für unbegrenzte Teilnehmer.
+                  </Text>
+                </View>
+              )}
               <Text style={styles.label}>Art des Links</Text>
               <View style={styles.toggleRow}>
                 <TouchableOpacity

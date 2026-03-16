@@ -24,6 +24,7 @@ import { UpgradePrompt } from '../../components/common/UpgradePrompt';
 import { ShareModal } from '../home/ShareModal';
 import { ClearTripModal } from '../../components/common/ClearTripModal';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useTripContext } from '../../contexts/TripContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { BOTTOM_NAV_HEIGHT } from '../../components/common/TripBottomNav';
 import { importMapsLibrary, PlaceAutocomplete, PlaceResult } from '../../components/common/PlaceAutocomplete';
@@ -55,7 +56,8 @@ function buildInfoContent(act: Activity, dayInfo?: DayInfo): string {
 export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
-  const { isFeatureAllowed, aiCredits } = useSubscription();
+  const { trips: allTrips } = useTripContext();
+  const { isFeatureAllowed, aiCredits, isTripEditable, isPremium } = useSubscription();
   const insets = useSafeAreaInsets();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activityCount, setActivityCount] = useState(0);
@@ -386,6 +388,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   if (loading || !trip) return <TripDetailSkeleton />;
 
+  const editable = isTripEditable(tripId, allTrips);
+
   const rawThemeColor = trip.theme_color || colors.secondary;
   const themeColor = ensureContrast(rawThemeColor);
   const themeTint = tintWithWhite(rawThemeColor, 0.92);
@@ -510,49 +514,27 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Photos + Fable Grid */}
           <View style={styles.gridRow}>
-            {isFeatureAllowed('photos') ? (
-              <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: themeTint }]}
-                onPress={() => navigation.navigate('Photos', { tripId })}
-                activeOpacity={0.7}
-              >
-                <Icon name="images" size={22} color={colors.primary} />
-                <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
-                {photoCount > 0 && <Text style={[styles.gridCardInfo, { color: themeColor }]}>{photoCount}</Text>}
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: colors.primary + '08', opacity: 0.5 }]}
-                onPress={() => navigation.navigate('Subscription')}
-                activeOpacity={0.7}
-              >
-                <Icon name="images-outline" size={22} color={colors.primary} />
-                <Text style={styles.gridCardTitle}>Fotos</Text>
-                <Text style={styles.gridCardInfo}>Premium</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[styles.gridCard, { backgroundColor: themeTint }]}
+              onPress={() => navigation.navigate('Photos', { tripId })}
+              activeOpacity={0.7}
+            >
+              <Icon name="images" size={22} color={colors.primary} />
+              <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
+              {photoCount > 0 && <Text style={[styles.gridCardInfo, { color: themeColor }]}>{photoCount}</Text>}
+            </TouchableOpacity>
 
-            {isFeatureAllowed('ai') ? (
-              <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: themeTint }]}
-                onPress={() => setShowAiModal(true)}
-                activeOpacity={0.7}
-              >
-                <Icon name="sparkles" size={22} color={colors.accent} />
-                <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
-                <Text style={[styles.gridCardInfo, { color: colors.accent }]}>{aiCredits} Inspirationen</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.gridCard, { backgroundColor: colors.accent + '08', opacity: 0.5 }]}
-                onPress={() => navigation.navigate('Subscription')}
-                activeOpacity={0.7}
-              >
-                <Icon name="sparkles" size={22} color={colors.accent} />
-                <Text style={styles.gridCardTitle}>Fable</Text>
-                <Text style={styles.gridCardInfo}>Inspirationen kaufen</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[styles.gridCard, { backgroundColor: themeTint }]}
+              onPress={() => setShowAiModal(true)}
+              activeOpacity={0.7}
+            >
+              <Icon name="sparkles" size={22} color={colors.accent} />
+              <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
+              <Text style={[styles.gridCardInfo, { color: colors.accent }]}>
+                {aiCredits > 0 ? `${aiCredits} Inspirationen` : 'Reisebegleiter'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Post-Trip Recap */}
@@ -573,9 +555,11 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                     <TouchableOpacity onPress={handleExportToMaps} style={styles.mapActionBtn}>
                       <Icon name="download-outline" size={18} color={themeColor} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.mapActionBtn}>
-                      <Icon name="search-outline" size={18} color={themeColor} />
-                    </TouchableOpacity>
+                    {editable && (
+                      <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.mapActionBtn}>
+                        <Icon name="search-outline" size={18} color={themeColor} />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.mapActionBtn}>
                       <Icon name="expand-outline" size={18} color={themeColor} />
                     </TouchableOpacity>
@@ -726,11 +710,15 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       <Modal visible={showMenu} transparent animationType="none" onRequestClose={() => setShowMenu(false)}>
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1}>
           <View style={[styles.menuDropdown, menuPos && { ...(menuPos.top != null ? { top: menuPos.top } : { bottom: menuPos.bottom }), right: menuPos.right }]}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
-              <Icon name="create-outline" size={18} color={colors.text} />
-              <Text style={styles.menuLabel}>Bearbeiten</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
+            {editable && (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); navigation.navigate('EditTrip', { tripId }); }}>
+                  <Icon name="create-outline" size={18} color={colors.text} />
+                  <Text style={styles.menuLabel}>Bearbeiten</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+              </>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowShareModal(true); }}>
               <Icon name="share-outline" size={18} color={colors.text} />
               <Text style={styles.menuLabel}>Teilen & Drucken</Text>
@@ -740,11 +728,24 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <Icon name="time-outline" size={18} color={colors.text} />
               <Text style={styles.menuLabel}>Verlauf</Text>
             </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
-              <Icon name="trash-outline" size={18} color={colors.error} />
-              <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
-            </TouchableOpacity>
+            {editable && (
+              <>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setShowClearModal(true); }}>
+                  <Icon name="trash-outline" size={18} color={colors.error} />
+                  <Text style={[styles.menuLabel, { color: colors.error }]}>Reise leeren</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {!editable && (
+              <>
+                <View style={styles.menuDivider} />
+                <View style={[styles.menuItem, { opacity: 0.5 }]}>
+                  <Icon name="lock-closed-outline" size={18} color={colors.textSecondary} />
+                  <Text style={[styles.menuLabel, { color: colors.textSecondary }]}>Nur lesen (Premium für mehr)</Text>
+                </View>
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>

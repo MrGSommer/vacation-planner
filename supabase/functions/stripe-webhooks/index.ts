@@ -37,12 +37,12 @@ async function resolveProfile(
   supabase: ReturnType<typeof createClient>,
   customerId: string | null,
   clientReferenceId: string | null,
-): Promise<{ id: string; ai_credits_balance: number } | null> {
+): Promise<{ id: string; ai_credits_balance: number; ai_credits_purchased: number } | null> {
   // 1. Try by stripe_customer_id
   if (customerId) {
     const { data } = await supabase
       .from('profiles')
-      .select('id, ai_credits_balance')
+      .select('id, ai_credits_balance, ai_credits_purchased')
       .eq('stripe_customer_id', customerId)
       .single();
     if (data) return data;
@@ -52,7 +52,7 @@ async function resolveProfile(
   if (clientReferenceId) {
     const { data } = await supabase
       .from('profiles')
-      .select('id, ai_credits_balance')
+      .select('id, ai_credits_balance, ai_credits_purchased')
       .eq('id', clientReferenceId)
       .single();
 
@@ -147,10 +147,11 @@ Deno.serve(async (req) => {
         // Get profile info before downgrade for the notification
         const { data: cancelProfile } = await supabase
           .from('profiles')
-          .select('email, first_name, last_name')
+          .select('email, first_name, last_name, ai_credits_purchased')
           .eq('stripe_customer_id', customerId)
           .single();
 
+        // Preserve purchased Inspirationen, only remove subscription-granted credits
         await supabase
           .from('profiles')
           .update({
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
             subscription_status: 'canceled',
             stripe_subscription_id: null,
             subscription_period_end: null,
-            ai_credits_balance: 0,
+            ai_credits_balance: cancelProfile?.ai_credits_purchased ?? 0,
             ai_credits_monthly_quota: 0,
           })
           .eq('stripe_customer_id', customerId);
@@ -223,6 +224,20 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'setup_intent.succeeded': {
+        // Card was successfully stored — ensure stripe_customer_id is linked
+        const si = event.data.object as any;
+        const siCustomerId = typeof si.customer === 'string' ? si.customer : si.customer?.id;
+        const siUserId = si.metadata?.supabase_user_id;
+        if (siCustomerId && siUserId) {
+          await supabase
+            .from('profiles')
+            .update({ stripe_customer_id: siCustomerId })
+            .eq('id', siUserId);
+        }
+        break;
+      }
+
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
@@ -240,6 +255,7 @@ Deno.serve(async (req) => {
             .from('profiles')
             .update({
               ai_credits_balance: (profile.ai_credits_balance || 0) + 20,
+              ai_credits_purchased: (profile.ai_credits_purchased || 0) + 20,
             })
             .eq('id', profile.id);
         } else if (session.mode === 'subscription') {

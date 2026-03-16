@@ -25,7 +25,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { isAdmin } = useAdmin();
   const { trips } = useTrips();
-  const { isPremium, aiCredits, isFeatureAllowed, paymentWarning, paymentErrorMessage } = useSubscription();
+  const { isPremium, isTrialing, trialDaysLeft, aiCredits, isFeatureAllowed, paymentWarning, paymentErrorMessage } = useSubscription();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [stripeLoading, setStripeLoading] = useState<'portal' | null>(null);
@@ -148,7 +148,10 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.subscriptionRow}>
           <Text style={styles.subscriptionLabel}>Status</Text>
           <Text style={[styles.subscriptionValue, isPremium && { color: colors.secondary }]}>
-            {isPremium ? 'Premium' : 'Free'}
+            {isTrialing
+              ? `Premium-Test (noch ${trialDaysLeft} ${trialDaysLeft === 1 ? 'Tag' : 'Tage'})`
+              : isPremium ? 'Premium' : 'Free'
+            }
           </Text>
         </View>
         <View style={styles.subscriptionRow}>

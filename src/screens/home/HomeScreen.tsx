@@ -19,8 +19,10 @@ import { EmptyState, Avatar, PaymentWarningBanner } from '../../components/commo
 import { HomeScreenSkeleton } from '../../components/skeletons/HomeScreenSkeleton';
 import { NotificationPrompt } from '../../components/common/NotificationPrompt';
 import { ShareModal } from './ShareModal';
+import { TrialBanner } from '../../components/common/TrialBanner';
 import { Icon, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
+import { FREE_TRIP_RETENTION_DAYS } from '../../config/stripe';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -50,7 +52,9 @@ const TripCard: React.FC<{
   onDuplicate: () => void;
   onEdit: () => void;
   isPast?: boolean;
-}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast }) => {
+  isReadonly?: boolean;
+  deletionDaysLeft?: number | null;
+}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast, isReadonly, deletionDaysLeft }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const btnRef = useRef<View>(null);
@@ -111,6 +115,19 @@ const TripCard: React.FC<{
             </Text>
             {countdownText && (
               <Text style={styles.cardCountdown}>{countdownText}</Text>
+            )}
+            {isReadonly && !isPast && (
+              <View style={styles.readonlyBadge}>
+                <Icon name="lock-closed" size={10} color="#FFFFFF" />
+                <Text style={styles.readonlyBadgeText}>Nur lesen</Text>
+              </View>
+            )}
+            {deletionDaysLeft != null && deletionDaysLeft > 0 && (
+              <View style={styles.deletionBadge}>
+                <Text style={styles.deletionBadgeText}>
+                  Wird in {deletionDaysLeft} {deletionDaysLeft === 1 ? 'Tag' : 'Tagen'} archiviert
+                </Text>
+              </View>
             )}
           </View>
           <TouchableOpacity
@@ -191,7 +208,7 @@ const Separator = () => <View style={styles.separator} />;
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips, remove } = useTrips();
   const { user } = useAuthContext();
-  const { paymentWarning, paymentErrorMessage } = useSubscription();
+  const { paymentWarning, paymentErrorMessage, isPremium, isTrialing } = useSubscription();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [shareTrip, setShareTrip] = useState<Trip | null>(null);
@@ -248,6 +265,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
     return { activeTrips: active, pastTrips: past, recentlyCompleted: recent };
   }, [trips]);
+
+  // Determine which active trip is editable (free users: only newest)
+  const editableTripId = useMemo(() => {
+    if (isPremium) return null; // all editable
+    if (activeTrips.length === 0) return null;
+    // Newest by start_date
+    const sorted = [...activeTrips].sort((a, b) => b.start_date.localeCompare(a.start_date));
+    return sorted[0].id;
+  }, [activeTrips, isPremium]);
+
+  // Calculate deletion countdown for free user past trips
+  const getDeletionDaysLeft = useCallback((trip: Trip): number | null => {
+    if (isPremium) return null;
+    const endDate = new Date(trip.end_date);
+    const deleteDate = new Date(endDate);
+    deleteDate.setDate(deleteDate.getDate() + FREE_TRIP_RETENTION_DAYS);
+    const now = new Date();
+    const daysLeft = Math.ceil((deleteDate.getTime() - now.getTime()) / 86400000);
+    return daysLeft > 0 && daysLeft <= FREE_TRIP_RETENTION_DAYS ? daysLeft : null;
+  }, [isPremium]);
 
   const loadCollaborators = useCallback(async () => {
     if (trips.length === 0) return;
@@ -437,6 +474,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           {user && <NotificationPrompt userId={user.id} />}
 
+          <TrialBanner />
+
           {fableJob && (
             <TouchableOpacity
               style={styles.fableBanner}
@@ -481,30 +520,34 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           ))}
 
-          {activeTrips.map((trip, index) => (
-            <React.Fragment key={trip.id}>
-              {index > 0 && <Separator />}
-              <SwipeableRow
-                actions={[
-                  { icon: 'copy-outline', color: colors.primary, onPress: () => handleDuplicateTrip(trip) },
-                  { icon: 'share-outline', color: colors.secondary, onPress: () => setShareTrip(trip) },
-                  { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteTrip(trip) },
-                ]}
-                disabled={Platform.OS === 'web'}
-              >
-                <TripCard
-                  trip={trip}
-                  collaborators={collabMap[trip.id] || []}
-                  currentUserId={user?.id || ''}
-                  onPress={() => handleTripPress(trip)}
-                  onShare={() => setShareTrip(trip)}
-                  onDelete={() => handleDeleteTrip(trip)}
-                  onDuplicate={() => handleDuplicateTrip(trip)}
-                  onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
-                />
-              </SwipeableRow>
-            </React.Fragment>
-          ))}
+          {activeTrips.map((trip, index) => {
+            const isReadonly = !isPremium && editableTripId !== null && editableTripId !== trip.id;
+            return (
+              <React.Fragment key={trip.id}>
+                {index > 0 && <Separator />}
+                <SwipeableRow
+                  actions={[
+                    { icon: 'copy-outline', color: colors.primary, onPress: () => handleDuplicateTrip(trip) },
+                    { icon: 'share-outline', color: colors.secondary, onPress: () => setShareTrip(trip) },
+                    { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteTrip(trip) },
+                  ]}
+                  disabled={Platform.OS === 'web'}
+                >
+                  <TripCard
+                    trip={trip}
+                    collaborators={collabMap[trip.id] || []}
+                    currentUserId={user?.id || ''}
+                    onPress={() => handleTripPress(trip)}
+                    onShare={() => setShareTrip(trip)}
+                    onDelete={() => handleDeleteTrip(trip)}
+                    onDuplicate={() => handleDuplicateTrip(trip)}
+                    onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
+                    isReadonly={isReadonly}
+                  />
+                </SwipeableRow>
+              </React.Fragment>
+            );
+          })}
 
           {pastTrips.length > 0 && (
             <>
@@ -540,6 +583,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                       onDuplicate={() => handleDuplicateTrip(trip)}
                       onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
                       isPast
+                      deletionDaysLeft={getDeletionDaysLeft(trip)}
                     />
                   </SwipeableRow>
                 </React.Fragment>
@@ -665,6 +709,10 @@ const styles = StyleSheet.create({
   cardDestination: { ...typography.body, color: 'rgba(255,255,255,0.9)', marginBottom: 4 },
   cardDates: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
   cardCountdown: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' as const, marginTop: 2 },
+  readonlyBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, backgroundColor: 'rgba(0,0,0,0.4)', alignSelf: 'flex-start' as const, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
+  readonlyBadgeText: { ...typography.caption, color: '#FFFFFF', fontSize: 10, fontWeight: '600' as const },
+  deletionBadge: { backgroundColor: colors.error + 'CC', alignSelf: 'flex-start' as const, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
+  deletionBadgeText: { ...typography.caption, color: '#FFFFFF', fontSize: 10, fontWeight: '600' as const },
   deleteBtn: { padding: spacing.xs },
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
   cardMenu: {

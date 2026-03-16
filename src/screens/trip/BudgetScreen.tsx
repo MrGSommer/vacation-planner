@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshCon
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, TripBottomNav } from '../../components/common';
+import { UpgradePrompt } from '../../components/common/UpgradePrompt';
+import { SneakPeekOverlay } from '../../components/common/SneakPeekOverlay';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { ReceiptScanModal } from '../../components/budget/ReceiptScanModal';
@@ -18,6 +20,7 @@ import { AddExpenseModal } from '../../components/budget/AddExpenseModal';
 import { EditExpenseModal } from '../../components/budget/EditExpenseModal';
 import { useBudget } from '../../hooks/useBudget';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { getTrip } from '../../api/trips';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
 import { Trip, Expense, BudgetCategory } from '../../types/database';
@@ -36,7 +39,8 @@ type TabType = 'budget' | 'expenses';
 export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user } = useAuthContext();
-  const { isFeatureAllowed } = useSubscription();
+  const { isFeatureAllowed, isSneakPeek, isPremium } = useSubscription();
+  const { showToast } = useToast();
   usePresence(tripId, 'Budget');
   const [showAiModal, setShowAiModal] = useState(false);
   const [tab, setTab] = useState<TabType>('expenses');
@@ -310,18 +314,49 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [removeReceipt, refresh]);
 
+  // Free user on shared trip → can see but not edit
+  const isSharedReadonly = !isPremium && !!trip && trip.owner_id !== user?.id;
+  const budgetSneakPeek = isSneakPeek('budget', expenses.length > 0 || categories.length > 0);
+  const readonlyMode = budgetSneakPeek || isSharedReadonly;
+
+  const guardAction = (action: string = 'bearbeiten') => {
+    showToast(`Upgrade auf Premium um ${action} zu können`, 'info');
+  };
+
+  // Budget feature gating — show upgrade showcase for free users without data
+  if (!isFeatureAllowed('budget') && !readonlyMode && !isSharedReadonly) {
+    return (
+      <View style={styles.container}>
+        <Header title="Budget & Ausgaben" />
+        <UpgradePrompt
+          iconName="wallet-outline"
+          title="Budget & Ausgaben"
+          message="Behalte den Überblick über deine Reisekosten — von Kategorien bis zur fairen Aufteilung"
+          heroGradient={['#4ECDC4', '#2ECC71']}
+          highlights={[
+            { icon: 'pie-chart-outline', text: 'Ausgaben nach Kategorie', detail: 'Essen, Transport, Unterkunft & mehr' },
+            { icon: 'receipt-outline', text: 'Quittungen scannen', detail: 'Beleg fotografieren, Betrag wird erkannt' },
+            { icon: 'people-outline', text: 'Faire Aufteilung', detail: 'Wer schuldet wem? Automatisch berechnet' },
+            { icon: 'bar-chart-outline', text: 'Budget-Übersicht', detail: 'Tages- und Gesamtbudget im Blick' },
+          ]}
+        />
+        <TripBottomNav tripId={tripId} activeTab="Budget" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Header
         title="Budget & Ausgaben"
         rightAction={
-          isFeatureAllowed('ai') ? (
-            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
-            </TouchableOpacity>
-          ) : undefined
+          <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
+          </TouchableOpacity>
         }
       />
+
+      {readonlyMode && <SneakPeekOverlay feature="Budget" />}
 
       {loading && !trip ? (
         <BudgetSkeleton />
@@ -376,9 +411,9 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                   personalLimit={cat.personal_limit}
                   currency={currency}
                   scope={cat.scope}
-                  onEdit={cat.id !== '__uncategorized__' ? () => setEditingCategory(cat) : undefined}
-                  onDelete={cat.id !== '__uncategorized__' ? () => handleDeleteCategory(cat.id, cat.name) : undefined}
-                  onSetPersonalLimit={cat.id !== '__uncategorized__' && cat.scope === 'group' ? () => handleSetPersonalLimit(cat) : undefined}
+                  onEdit={cat.id !== '__uncategorized__' ? () => readonlyMode ? guardAction('bearbeiten') : setEditingCategory(cat) : undefined}
+                  onDelete={cat.id !== '__uncategorized__' ? () => readonlyMode ? guardAction('löschen') : handleDeleteCategory(cat.id, cat.name) : undefined}
+                  onSetPersonalLimit={cat.id !== '__uncategorized__' && cat.scope === 'group' ? () => readonlyMode ? guardAction('bearbeiten') : handleSetPersonalLimit(cat) : undefined}
                 />
               ))}
 
@@ -386,9 +421,11 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 <Text style={styles.emptyText}>Noch keine Kategorien erstellt</Text>
               )}
 
-              <TouchableOpacity style={styles.addCatButton} onPress={() => setShowAddCategory(true)} activeOpacity={0.7}>
-                <Text style={styles.addCatText}>+ Kategorie hinzufügen</Text>
-              </TouchableOpacity>
+              {!readonlyMode && (
+                <TouchableOpacity style={styles.addCatButton} onPress={() => setShowAddCategory(true)} activeOpacity={0.7}>
+                  <Text style={styles.addCatText}>+ Kategorie hinzufügen</Text>
+                </TouchableOpacity>
+              )}
             </>
           ) : (
             /* ===== EXPENSES TAB ===== */
@@ -400,7 +437,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                 currency={currency}
                 currentUserId={user?.id || ''}
                 groupExpenses={groupExpenses}
-                onSettle={handleSettle}
+                onSettle={readonlyMode ? () => guardAction('bearbeiten') : handleSettle}
               />
 
               {filteredExpenses.length === 0 && filteredReceipts.length === 0 ? (
@@ -440,7 +477,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                       return (
                         <SwipeableRow
                           key={`r-${receipt.id}`}
-                          actions={[
+                          actions={readonlyMode ? [] : [
                             { icon: 'trash-outline', color: colors.error, onPress: () => handleReceiptDelete(receipt.id) },
                           ]}
                         >
@@ -450,10 +487,10 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                             collaborators={collaborators}
                             currentUserId={user?.id || ''}
                             categories={categories}
-                            onUpdate={handleReceiptUpdate}
-                            onComplete={handleReceiptComplete}
-                            onReopen={handleReceiptReopen}
-                            onDelete={handleReceiptDelete}
+                            onUpdate={readonlyMode ? () => guardAction('bearbeiten') : handleReceiptUpdate}
+                            onComplete={readonlyMode ? () => guardAction('bearbeiten') : handleReceiptComplete}
+                            onReopen={readonlyMode ? () => guardAction('bearbeiten') : handleReceiptReopen}
+                            onDelete={readonlyMode ? () => guardAction('löschen') : handleReceiptDelete}
                             onCategoryCreated={() => refresh()}
                           />
                         </SwipeableRow>
@@ -463,7 +500,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                     return (
                       <SwipeableRow
                         key={`e-${exp.id}`}
-                        actions={[
+                        actions={readonlyMode ? [] : [
                           { icon: 'create-outline', color: colors.primary, onPress: () => setEditingExpense(exp) },
                           { icon: 'trash-outline', color: colors.error, onPress: () => handleDeleteExpense(exp.id) },
                         ]}
@@ -474,8 +511,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
                           currentUserId={user?.id}
                           showPaidBy={exp.scope === 'group'}
                           collaborators={collaborators}
-                          onPress={() => setEditingExpense(exp)}
-                          onLongPress={() => handleDeleteExpense(exp.id)}
+                          onPress={() => readonlyMode ? guardAction('bearbeiten') : setEditingExpense(exp)}
+                          onLongPress={() => readonlyMode ? guardAction('löschen') : handleDeleteExpense(exp.id)}
                         />
                       </SwipeableRow>
                     );
@@ -487,8 +524,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         </ScrollView>
       )}
 
-      {/* Scan FAB (expenses tab only, AI-gated) */}
-      {tab === 'expenses' && isFeatureAllowed('ai') && (
+      {/* Scan FAB (expenses tab only, AI-gated, not in sneak-peek) */}
+      {tab === 'expenses' && !readonlyMode && (
         <TouchableOpacity
           style={styles.scanFab}
           onPress={() => setShowReceiptScan(true)}
@@ -505,8 +542,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
 
-      {/* FAB */}
-      <TouchableOpacity
+      {/* FAB (hidden in sneak-peek mode) */}
+      {!readonlyMode && <TouchableOpacity
         style={styles.fab}
         onPress={() => tab === 'budget' ? setShowAddCategory(true) : setShowAddExpense(true)}
         activeOpacity={0.8}
@@ -519,7 +556,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         >
           <Text style={styles.fabText}>+</Text>
         </LinearGradient>
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       {/* Modals */}
       <AddCategoryModal

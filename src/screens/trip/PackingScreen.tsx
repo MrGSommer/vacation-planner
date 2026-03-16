@@ -443,11 +443,9 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         title="Packliste"
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {isFeatureAllowed('ai') && (
-              <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setShowTemplatePicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Icon name="clipboard-outline" size={iconSize.md} color={colors.accent} />
             </TouchableOpacity>
@@ -489,8 +487,8 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
           message="Starte mit einer Vorlage oder lass Fable eine Packliste erstellen"
           actionLabel="Vorlage wählen"
           onAction={() => setShowTemplatePicker(true)}
-          secondaryActionLabel={isFeatureAllowed('ai') ? 'Fable vorschlagen lassen' : undefined}
-          onSecondaryAction={isFeatureAllowed('ai') ? () => { setAiAutoMessage('Erstelle eine Packliste für diese Reise basierend auf Reiseziel, Dauer und Wetter.'); setShowAiModal(true); } : undefined}
+          secondaryActionLabel="Fable vorschlagen lassen"
+          onSecondaryAction={() => { setAiAutoMessage('Erstelle eine Packliste für diese Reise basierend auf Reiseziel, Dauer und Wetter.'); setShowAiModal(true); }}
         />
       ) : (
         <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={colors.primary} />}>

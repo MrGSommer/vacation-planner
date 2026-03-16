@@ -592,11 +592,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       <Header
         title="Programm"
         rightAction={
-          isFeatureAllowed('ai') ? (
-            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
-            </TouchableOpacity>
-          ) : undefined
+          <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
+          </TouchableOpacity>
         }
       />
 

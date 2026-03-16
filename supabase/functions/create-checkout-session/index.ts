@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { priceId, mode } = await req.json();
+    const { priceId, mode, cancelPath, successPath } = await req.json();
     if (!priceId) return json({ error: 'priceId fehlt' }, origin, 400);
     if (!mode) return json({ error: 'mode fehlt' }, origin, 400);
 
@@ -103,8 +103,8 @@ Deno.serve(async (req) => {
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': '1',
       'mode': mode,
-      'success_url': `${SITE_URL}/subscription-success`,
-      'cancel_url': `${SITE_URL}/subscription-cancel`,
+      'success_url': `${SITE_URL}${successPath || '/subscription-success'}`,
+      'cancel_url': `${SITE_URL}${cancelPath || '/subscription-cancel'}`,
       'metadata[supabase_user_id]': user.id,
     });
 
