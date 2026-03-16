@@ -20,6 +20,13 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY')!;
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://wayfable.ch';
 
+// Server-side price IDs (fallback when client env vars are not bundled)
+const PRICES: Record<string, string> = {
+  monthly: 'price_1SxlEiGtIWkM8nDay8lOyYFi',
+  yearly: 'price_1SxlEoGtIWkM8nDafyxYhBKm',
+  inspirationen: 'price_1SxlEwGtIWkM8nDajb7o9wz7',
+};
+
 async function getUser(token: string) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: { 'Authorization': `Bearer ${token}`, 'apikey': SERVICE_ROLE_KEY },
@@ -78,9 +85,14 @@ Deno.serve(async (req) => {
     } catch {
       return json({ error: 'Ungültiger Request-Body' }, origin, 400);
     }
-    const { priceId, mode, cancelPath, successPath } = body;
-    if (!priceId) return json({ error: `priceId fehlt (got: ${JSON.stringify(body)})` }, origin, 400);
+    const { priceId: clientPriceId, mode, cancelPath, successPath, product } = body;
     if (!mode) return json({ error: 'mode fehlt' }, origin, 400);
+    // Resolve price: client priceId → product alias → mode-based default
+    const priceId = clientPriceId
+      || (product && PRICES[product])
+      || (mode === 'payment' ? PRICES.inspirationen : '')
+      || '';
+    if (!priceId) return json({ error: 'priceId oder product fehlt' }, origin, 400);
 
     // Auth
     const authHeader = req.headers.get('Authorization');

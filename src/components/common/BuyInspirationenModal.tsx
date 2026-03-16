@@ -31,6 +31,7 @@ export const BuyInspirationenModal: React.FC<BuyInspirationenModalProps> = ({
       const res = await supabase.functions.invoke('create-checkout-session', {
         body: {
           priceId: STRIPE_CONFIG.priceAiCredits,
+          product: 'inspirationen',
           mode: 'payment',
           cancelPath,
         },

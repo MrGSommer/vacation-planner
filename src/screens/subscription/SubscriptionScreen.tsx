@@ -169,7 +169,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
               try {
                 const cancelPath = window.location.pathname;
                 const res = await supabase.functions.invoke('create-checkout-session', {
-                  body: { priceId: STRIPE_CONFIG.priceAiCredits, mode: 'payment', cancelPath },
+                  body: { priceId: STRIPE_CONFIG.priceAiCredits, product: 'inspirationen', mode: 'payment', cancelPath },
                 });
                 if (res.error) throw new Error(res.error.message);
                 if (res.data?.url) { window.location.href = res.data.url; }
