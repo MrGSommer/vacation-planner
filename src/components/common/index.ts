@@ -19,7 +19,6 @@ export { DocumentPicker } from './DocumentPicker';
 export { Skeleton } from './Skeleton';
 export { ErrorBoundary } from './ErrorBoundary';
 export { FloatingFeedbackButton } from './FloatingFeedbackButton';
-export { StripeBuyButton } from './StripeBuyButton';
 export { BuyInspirationenModal } from './BuyInspirationenModal';
 export { UpdateBanner } from './UpdateBanner';
 export { PaymentWarningBanner } from './PaymentWarningBanner';

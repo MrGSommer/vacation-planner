@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '../../components/common';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../hooks/useAuth';
-import { getSubscriptionUrl, getInspirationsUrl } from '../../api/stripe';
+import { getSubscriptionUrl } from '../../api/stripe';
+import { supabase } from '../../api/supabase';
+import { STRIPE_CONFIG } from '../../config/stripe';
 import { requireOnline } from '../../utils/offlineGate';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
@@ -25,6 +27,8 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const { isPremium, isTrialing, trialDaysLeft, aiCredits } = useSubscription();
   const { user } = useAuth();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
+  const [buyLoading, setBuyLoading] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
 
   const handleSubscribe = () => {
     if (!requireOnline('Zahlungen')) return;
@@ -153,18 +157,35 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             {'\n'}
             <Text style={styles.inspirationKeepNote}>Gekaufte Inspirationen bleiben auch bei Kündigung erhalten.</Text>
           </Text>
+          {buyError && <Text style={styles.buyError}>{buyError}</Text>}
           <TouchableOpacity
-            style={styles.inspirationButton}
-            onPress={() => {
+            style={[styles.inspirationButton, buyLoading && { opacity: 0.7 }]}
+            disabled={buyLoading}
+            onPress={async () => {
               if (!requireOnline('Zahlungen')) return;
-              if (!user) return;
-              if (Platform.OS === 'web') {
-                window.location.href = getInspirationsUrl(user.id, user.email || '');
+              if (!user || Platform.OS !== 'web') return;
+              setBuyLoading(true);
+              setBuyError(null);
+              try {
+                const cancelPath = window.location.pathname;
+                const res = await supabase.functions.invoke('create-checkout-session', {
+                  body: { priceId: STRIPE_CONFIG.priceAiCredits, mode: 'payment', cancelPath },
+                });
+                if (res.error) throw new Error(res.error.message);
+                if (res.data?.url) { window.location.href = res.data.url; }
+                else { throw new Error('Keine Checkout-URL erhalten'); }
+              } catch (e) {
+                setBuyError((e as Error).message || 'Fehler');
+                setBuyLoading(false);
               }
             }}
             activeOpacity={0.8}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={16} color="#FFFFFF" /><Text style={styles.inspirationButtonText}>Inspirationen kaufen</Text></View>
+            {buyLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={16} color="#FFFFFF" /><Text style={styles.inspirationButtonText}>Inspirationen kaufen</Text></View>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -250,11 +271,15 @@ const styles = StyleSheet.create({
   inspirationTitle: { ...typography.h3, marginBottom: spacing.sm, textAlign: 'center' },
   inspirationDesc: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md, lineHeight: 22 },
   inspirationKeepNote: { fontStyle: 'italic', color: colors.textLight },
+  buyError: { ...typography.caption, color: colors.error, marginBottom: spacing.sm, textAlign: 'center' },
   inspirationButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minHeight: 40,
   },
   inspirationButtonText: { ...typography.button, color: '#FFFFFF' },
 });

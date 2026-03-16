@@ -72,8 +72,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { priceId, mode, cancelPath, successPath } = await req.json();
-    if (!priceId) return json({ error: 'priceId fehlt' }, origin, 400);
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: 'Ungültiger Request-Body' }, origin, 400);
+    }
+    const { priceId, mode, cancelPath, successPath } = body;
+    if (!priceId) return json({ error: `priceId fehlt (got: ${JSON.stringify(body)})` }, origin, 400);
     if (!mode) return json({ error: 'mode fehlt' }, origin, 400);
 
     // Auth
@@ -96,21 +102,24 @@ Deno.serve(async (req) => {
       await saveCustomerId(user.id, customerId);
     }
 
-    // Create checkout session
-    const session = await stripePost('/checkout/sessions', {
+    // Create checkout session (let Stripe auto-detect payment methods)
+    const sessionParams: Record<string, string> = {
       'customer': customerId,
-      'payment_method_types[0]': 'card',
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': '1',
       'mode': mode,
       'success_url': `${SITE_URL}${successPath || '/subscription-success'}`,
       'cancel_url': `${SITE_URL}${cancelPath || '/subscription-cancel'}`,
       'metadata[supabase_user_id]': user.id,
-    });
+      'locale': 'de',
+    };
+
+    const session = await stripePost('/checkout/sessions', sessionParams);
 
     return json({ url: session.url }, origin);
   } catch (e) {
-    console.error('create-checkout-session error:', e);
-    return json({ error: (e as Error).message }, origin, 500);
+    const msg = (e as Error).message || String(e);
+    console.error('create-checkout-session error:', msg);
+    return json({ error: msg }, origin, 500);
   }
 });

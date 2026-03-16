@@ -12,8 +12,16 @@ type Props = { navigation: NativeStackNavigationProp<any> };
 export const SubscriptionSuccessScreen: React.FC<Props> = ({ navigation }) => {
   const { refreshProfile } = useAuth();
 
+  // Poll profile to pick up webhook changes (may take a few seconds)
   useEffect(() => {
     refreshProfile?.();
+    let count = 0;
+    const interval = setInterval(() => {
+      refreshProfile?.();
+      count++;
+      if (count >= 5) clearInterval(interval);
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
