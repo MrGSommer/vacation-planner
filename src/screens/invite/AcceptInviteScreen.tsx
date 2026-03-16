@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button } from '../../components/common';
 import { getInviteByToken, acceptInvite, getCollaborators } from '../../api/invitations';
@@ -15,7 +15,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AcceptInvite'>;
 
 export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
   const { token } = route.params;
-  const { session } = useAuthContext();
+  const { session, setPendingInviteToken } = useAuthContext();
   const { showToast } = useToast();
   const [invitation, setInvitation] = useState<TripInvitation | null>(null);
   const [trip, setTrip] = useState<{ id: string; name: string; destination: string } | null>(null);
@@ -38,6 +38,13 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
     })();
   }, [token]);
 
+  // Auto-accept after login: when session appears and we have invitation data
+  useEffect(() => {
+    if (session && invitation && !done && !accepting) {
+      handleAccept();
+    }
+  }, [session, invitation]);
+
   const handleAccept = async () => {
     if (!session?.user?.id || !invitation) return;
     setAccepting(true);
@@ -59,6 +66,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
       } catch (e) {
         console.error('Auto-adjust group_type failed:', e);
       }
+      setPendingInviteToken(null);
       setDone(true);
     } catch (e: any) {
       setError(e.message || 'Fehler beim Annehmen der Einladung');
@@ -71,6 +79,16 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
     if (invitation) {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }, { name: 'TripDetail', params: { tripId: invitation.trip_id } }] });
     }
+  };
+
+  const handleGoToLogin = () => {
+    setPendingInviteToken(token);
+    navigation.navigate('Auth', { screen: 'Login' } as any);
+  };
+
+  const handleGoToSignUp = () => {
+    setPendingInviteToken(token);
+    navigation.navigate('Auth', { screen: 'SignUp' } as any);
   };
 
   if (loading) {
@@ -87,7 +105,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.center}>
         <Text style={styles.errorIcon}>😕</Text>
         <Text style={styles.errorText}>{error}</Text>
-        <Button title="Zur Startseite" onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })} style={styles.btn} />
+        <Button title="Zur Startseite" onPress={() => navigation.reset({ index: 0, routes: [session ? { name: 'Main' } : { name: 'Auth' }] })} style={styles.btn} />
       </View>
     );
   }
@@ -103,6 +121,29 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
+  // Not authenticated — show invite details with login/register prompt
+  if (!session) {
+    return (
+      <View style={styles.center}>
+        <View style={styles.card}>
+          <Icon name="mail-outline" size={48} color={colors.primary} />
+          <Text style={styles.title}>Einladung</Text>
+          {trip && <Text style={styles.tripName}>{trip.name}</Text>}
+          {trip && <Text style={styles.subtitle}>{trip.destination}</Text>}
+          <Text style={styles.roleText}>
+            Rolle: {invitation?.role === 'editor' ? 'Bearbeiter' : 'Betrachter'}
+          </Text>
+          <Text style={styles.authHint}>Melde dich an oder erstelle ein Konto, um diese Einladung anzunehmen.</Text>
+          <Button title="Anmelden" onPress={handleGoToLogin} style={styles.btn} />
+          <TouchableOpacity onPress={handleGoToSignUp} style={styles.signUpLink}>
+            <Text style={styles.signUpLinkText}>Noch kein Konto? <Text style={styles.signUpBold}>Registrieren</Text></Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Authenticated — show accept button
   return (
     <View style={styles.center}>
       <View style={styles.card}>
@@ -132,14 +173,16 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     ...shadows.lg,
   },
-  cardIcon: { fontSize: 48, marginBottom: spacing.md },
   title: { ...typography.h2, textAlign: 'center', marginBottom: spacing.xs },
   tripName: { ...typography.h3, color: colors.primary, textAlign: 'center' },
   subtitle: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
   roleText: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.lg },
+  authHint: { ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 20 },
   btn: { marginTop: spacing.md, width: '100%' },
+  signUpLink: { alignItems: 'center', marginTop: spacing.lg },
+  signUpLinkText: { ...typography.body, color: colors.textSecondary },
+  signUpBold: { color: colors.primary, fontWeight: '600' },
   errorIcon: { fontSize: 48, marginBottom: spacing.md },
   errorText: { ...typography.body, color: colors.error, textAlign: 'center', marginBottom: spacing.lg },
-  successIcon: { fontSize: 48, marginBottom: spacing.md },
   errorSmall: { ...typography.bodySmall, color: colors.error, textAlign: 'center', marginBottom: spacing.sm },
 });

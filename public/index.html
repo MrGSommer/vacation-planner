@@ -31,6 +31,16 @@
     <meta name="apple-mobile-web-app-title" content="WayFable" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
 
+    <!-- Font preloading for faster rendering -->
+    <link rel="preload" as="font" type="font/ttf" crossorigin href="/assets/node_modules/@expo-google-fonts/plus-jakarta-sans/400Regular/PlusJakartaSans_400Regular.ttf" />
+    <link rel="preload" as="font" type="font/ttf" crossorigin href="/assets/node_modules/@expo-google-fonts/plus-jakarta-sans/600SemiBold/PlusJakartaSans_600SemiBold.ttf" />
+    <link rel="preload" as="font" type="font/ttf" crossorigin href="/assets/node_modules/@expo-google-fonts/plus-jakarta-sans/700Bold/PlusJakartaSans_700Bold.ttf" />
+
+    <style>
+      /* Force font-display: swap for all @font-face rules */
+      @font-face { font-display: swap !important; }
+    </style>
+
     <style id="expo-reset">
       html,
       body {

@@ -50,6 +50,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // Shared screens config — routes that exist regardless of auth state
 const SHARED_SCREENS = {
+  AcceptInvite: 'invite/:token',
   TripShare: 'share/:token',
   SlideshowView: 'slideshow/:token',
   Datenschutz: 'datenschutz',
@@ -61,7 +62,6 @@ const SHARED_SCREENS = {
 // Authenticated-only screens config
 const AUTH_SCREENS = {
   Main: { screens: { Home: '', Profile: 'profile' } },
-  AcceptInvite: 'invite/:token',
   SubscriptionSuccess: 'subscription-success',
   SubscriptionCancel: 'subscription-cancel',
   TripDetail: {
@@ -140,17 +140,18 @@ export const AppNavigator: React.FC = () => {
     const path = fullPath.split('?')[0];
     const search = fullPath.includes('?') ? fullPath.slice(fullPath.indexOf('?')) : '';
 
-    // Invite token: ALWAYS capture as fallback (even when authenticated)
+    // Invite token: ALWAYS capture (even when authenticated) so post-login redirect works
     const inviteMatch = path.match(/^\/invite\/(.+)$/);
     if (inviteMatch) {
       setPendingInviteToken(inviteMatch[1]);
-      return; // Don't process as redirect
+      // Route is now in SHARED_SCREENS — React Navigation handles navigation
+      return;
     }
 
     // For other paths, only process when unauthenticated
     if (session) return;
 
-    if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/)) {
+    if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/) || path.match(/^\/invite\/.+$/)) {
       // Slideshow + share are public — don't require auth, let linking handle it
       return;
     } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
@@ -262,7 +263,6 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="LanguageCurrency" component={LanguageCurrencyScreen} />
               <Stack.Screen name="FableSettings" component={FableSettingsScreen} />
               <Stack.Screen name="FableTripSettings" component={FableTripSettingsScreen} />
-              <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
               <Stack.Screen name="SubscriptionSuccess" component={SubscriptionSuccessScreen} />
               <Stack.Screen name="SubscriptionCancel" component={SubscriptionCancelScreen} />
@@ -282,6 +282,7 @@ export const AppNavigator: React.FC = () => {
           ) : (
             <Stack.Screen name="Auth" component={AuthNavigator} />
           )}
+          <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
           <Stack.Screen name="TripShare" component={TripShareScreen} />
           <Stack.Screen name="SlideshowView" component={SlideshowViewScreen} />
         </Stack.Navigator>
