@@ -145,7 +145,10 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
 
         <Text style={styles.terms}>
-          Jederzeit kündbar. Es gelten unsere AGB.
+          Jederzeit kündbar. Es gelten unsere{' '}
+          <Text style={styles.termsLink} onPress={() => navigation.navigate('AGB')}>AGB</Text>
+          {' '}und{' '}
+          <Text style={styles.termsLink} onPress={() => navigation.navigate('Datenschutz')}>Datenschutzerklärung</Text>.
         </Text>
 
         {/* Inspirationen for everyone */}
@@ -256,7 +259,8 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
   },
   ctaText: { ...typography.button, color: '#FFFFFF', fontSize: 18 },
-  terms: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.md },
+  terms: { ...typography.caption, color: colors.textLight, textAlign: 'center', marginTop: spacing.md, lineHeight: 20 },
+  termsLink: { color: colors.primary, textDecorationLine: 'underline' as const },
   activeContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   activeTitle: { ...typography.h2, marginBottom: spacing.sm },
   activeMessage: { ...typography.body, color: colors.textSecondary },
