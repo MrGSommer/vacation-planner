@@ -15,11 +15,16 @@ import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryField
 import { formatDateShort } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useTripContext } from '../../contexts/TripContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 
 export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
+  const { isTripEditable } = useSubscription();
+  const { trips } = useTripContext();
+  const editable = isTripEditable(tripId, trips);
   const mapRef = useRef<MapView>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [stops, setStops] = useState<TripStop[]>([]);
@@ -221,9 +226,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       </MapView>
 
       {/* FAB */}
+      {editable && (
       <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
         <Icon name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
+      )}
 
       {/* Selected activity bottom sheet */}
       {selected && (

@@ -61,7 +61,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const { canAddCollaborator, isFeatureAllowed } = useSubscription();
   const [tab, setTab] = useState<Tab>('share');
   const [type, setType] = useState<'info' | 'collaborate'>('collaborate');
-  const [role, setRole] = useState<'editor' | 'viewer'>('viewer');
+  // Simplified: info=viewer, collaborate=editor
+  const role = type === 'collaborate' ? 'editor' : 'viewer';
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<CollaboratorWithProfile[]>([]);
@@ -86,7 +87,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       setGeneratedUrl(null);
       loadExistingLink();
     }
-  }, [type, role]);
+  }, [type]);
 
   const loadMembers = async () => {
     setMembersLoading(true);
@@ -171,7 +172,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const handleClose = () => {
     setGeneratedUrl(null);
     setType('collaborate');
-    setRole('viewer');
     setTab('share');
     setShowTransferModal(false);
     setTransferTargetId(null);
@@ -347,7 +347,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   onPress={() => setType('info')}
                 >
                   <Text style={[styles.toggleText, type === 'info' && styles.toggleTextActive]}>
-                    Info teilen
+                    Betrachter
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -355,34 +355,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   onPress={() => setType('collaborate')}
                 >
                   <Text style={[styles.toggleText, type === 'collaborate' && styles.toggleTextActive]}>
-                    Zusammenarbeit
+                    Bearbeiter
                   </Text>
                 </TouchableOpacity>
               </View>
-
-              {type === 'collaborate' && (
-                <>
-                  <Text style={styles.label}>Rolle</Text>
-                  <View style={styles.toggleRow}>
-                    <TouchableOpacity
-                      style={[styles.toggleBtn, role === 'viewer' && styles.toggleActive]}
-                      onPress={() => setRole('viewer')}
-                    >
-                      <Text style={[styles.toggleText, role === 'viewer' && styles.toggleTextActive]}>
-                        Betrachter
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.toggleBtn, role === 'editor' && styles.toggleActive]}
-                      onPress={() => setRole('editor')}
-                    >
-                      <Text style={[styles.toggleText, role === 'editor' && styles.toggleTextActive]}>
-                        Bearbeiter
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
 
               {loading ? (
                 <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
@@ -411,20 +387,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                         />
                       </View>
                       <View style={styles.configRow}>
-                        <Text style={styles.configLabel}>Stopps</Text>
-                        <Switch
-                          value={shareConfig.stops}
-                          onValueChange={(v) => handleToggleShareConfig('stops', v)}
-                          trackColor={{ false: colors.border, true: colors.secondary }}
-                          thumbColor="#FFFFFF"
-                        />
-                      </View>
-                      <View style={styles.configRow}>
                         <Text style={[styles.configLabel, !isFeatureAllowed('photos') && styles.configLabelDisabled]}>
                           Fotos{!isFeatureAllowed('photos') ? ' (Premium)' : ''}
                         </Text>
                         <Switch
-                          value={shareConfig.photos}
+                          value={isFeatureAllowed('photos') && shareConfig.photos}
                           onValueChange={(v) => handleToggleShareConfig('photos', v)}
                           trackColor={{ false: colors.border, true: colors.secondary }}
                           thumbColor="#FFFFFF"
@@ -432,12 +399,27 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                         />
                       </View>
                       <View style={styles.configRow}>
-                        <Text style={styles.configLabel}>Budget</Text>
+                        <Text style={[styles.configLabel, !isFeatureAllowed('stops') && styles.configLabelDisabled]}>
+                          Stopps{!isFeatureAllowed('stops') ? ' (Premium)' : ''}
+                        </Text>
                         <Switch
-                          value={shareConfig.budget}
+                          value={isFeatureAllowed('stops') && shareConfig.stops}
+                          onValueChange={(v) => handleToggleShareConfig('stops', v)}
+                          trackColor={{ false: colors.border, true: colors.secondary }}
+                          thumbColor="#FFFFFF"
+                          disabled={!isFeatureAllowed('stops')}
+                        />
+                      </View>
+                      <View style={styles.configRow}>
+                        <Text style={[styles.configLabel, !isFeatureAllowed('budget') && styles.configLabelDisabled]}>
+                          Budget{!isFeatureAllowed('budget') ? ' (Premium)' : ''}
+                        </Text>
+                        <Switch
+                          value={isFeatureAllowed('budget') && shareConfig.budget}
                           onValueChange={(v) => handleToggleShareConfig('budget', v)}
                           trackColor={{ false: colors.border, true: colors.secondary }}
                           thumbColor="#FFFFFF"
+                          disabled={!isFeatureAllowed('budget')}
                         />
                       </View>
                       <View style={styles.configRow}>

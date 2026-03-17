@@ -91,6 +91,17 @@ const createInviteLinkInternal = async (
   return { token: data.token, url: `${BASE_URL}/${prefix}/${data.token}`, share_config: data.share_config ?? null };
 };
 
+// Helper: deactivate all active links for a trip+type
+// Note: unique index is on (trip_id, type) — NOT role — so we deactivate ALL roles
+const deactivateLinks = async (tripId: string, type: 'info' | 'collaborate') => {
+  await supabase
+    .from('trip_invitations')
+    .update({ is_active: false })
+    .eq('trip_id', tripId)
+    .eq('type', type)
+    .eq('is_active', true);
+};
+
 // Get existing active link or create a new one
 export const getOrCreateInviteLink = async (
   tripId: string,
@@ -98,27 +109,37 @@ export const getOrCreateInviteLink = async (
   type: 'info' | 'collaborate',
   role: 'editor' | 'viewer' = 'viewer',
 ): Promise<{ token: string; url: string; share_config: ShareConfig | null }> => {
-  // Look for existing active link for this trip+type(+role for collaborate)
-  const query = supabase
+  // Look for existing active link — unique index guarantees at most 1 per (trip_id, type)
+  const { data: rows, error: fetchError } = await supabase
     .from('trip_invitations')
-    .select('token, type, share_config')
+    .select('token, type, role, share_config')
     .eq('trip_id', tripId)
     .eq('type', type)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .limit(1);
+  if (fetchError) throw fetchError;
 
-  // For collaborate links, also filter by role (separate links per role)
-  if (type === 'collaborate') {
-    query.eq('role', role);
-  }
-
-  const { data: existing } = await query.single();
-
-  if (existing) {
+  if (rows && rows.length > 0) {
+    const existing = rows[0];
+    // If existing link has different role, deactivate and create new
+    if (existing.role !== role) {
+      await deactivateLinks(tripId, type);
+      return createInviteLinkInternal(tripId, invitedBy, type, role);
+    }
     const prefix = type === 'info' ? 'share' : 'invite';
     return { token: existing.token, url: `${BASE_URL}/${prefix}/${existing.token}`, share_config: existing.share_config ?? null };
   }
 
-  return createInviteLinkInternal(tripId, invitedBy, type, role);
+  // No existing link — create one. On 409 conflict, deactivate and retry.
+  try {
+    return await createInviteLinkInternal(tripId, invitedBy, type, role);
+  } catch (e: any) {
+    if (e?.code === '23505' || e?.status === 409) {
+      await deactivateLinks(tripId, type);
+      return createInviteLinkInternal(tripId, invitedBy, type, role);
+    }
+    throw e;
+  }
 };
 
 // Reset an invite link: deactivate old, create new
@@ -128,20 +149,7 @@ export const resetInviteLink = async (
   type: 'info' | 'collaborate',
   role: 'editor' | 'viewer' = 'viewer',
 ): Promise<{ token: string; url: string }> => {
-  // Deactivate existing active links for this trip+type(+role for collaborate)
-  const deactivateQuery = supabase
-    .from('trip_invitations')
-    .update({ is_active: false })
-    .eq('trip_id', tripId)
-    .eq('type', type)
-    .eq('is_active', true);
-
-  if (type === 'collaborate') {
-    deactivateQuery.eq('role', role);
-  }
-
-  await deactivateQuery;
-
+  await deactivateLinks(tripId, type);
   return createInviteLinkInternal(tripId, invitedBy, type, role);
 };
 

@@ -22,6 +22,7 @@ import { ItinerarySkeleton } from '../../components/skeletons/ItinerarySkeleton'
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useTripContext } from '../../contexts/TripContext';
 import { usePlanGeneration } from '../../contexts/PlanGenerationContext';
 import { useWeather } from '../../hooks/useWeather';
 import { useFlightStatus, getFlightStatusLabel, isVerifiedFlight } from '../../hooks/useFlightStatus';
@@ -50,7 +51,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { showToast } = useToast();
   const { user } = useAuthContext();
-  const { isFeatureAllowed } = useSubscription();
+  const { isFeatureAllowed, isTripEditable } = useSubscription();
+  const { trips: allTrips } = useTripContext();
+  const editable = isTripEditable(tripId, allTrips);
   usePresence(tripId, 'Programm');
   const { isGenerating: isPlanGenerating, tripId: generatingTripId } = usePlanGeneration();
   const isGeneratingThisTrip = isPlanGenerating && generatingTripId === tripId;
@@ -755,6 +758,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       </View>
 
       {/* Quick-add bar */}
+      {editable && (
       <View style={styles.quickAddBar}>
         {([
           { label: 'Aktivität', category: 'activity', icon: 'bicycle-outline' as const },
@@ -776,13 +780,16 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           </TouchableOpacity>
         ))}
       </View>
+      )}
 
       {/* FAB */}
+      {editable && (
       <TouchableOpacity style={styles.fab} onPress={() => { setModalActivity(null); setModalDefaultCategory(undefined); setModalDefaultCategoryData(selectedDate ? { date: selectedDate } : {}); setShowModal(true); }} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Icon name="add" size={iconSize.xl} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
+      )}
 
       <ContextMenu
         visible={!!contextMenu}
@@ -797,6 +804,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setViewActivity(null)}
         onEdit={(a) => { setViewActivity(null); openEdit(a); }}
         onDelete={(id) => { setViewActivity(null); handleDelete(id); }}
+        isEditor={editable}
         flightStatus={viewActivity ? flightStatuses.get(viewActivity.id) : undefined}
       />
 

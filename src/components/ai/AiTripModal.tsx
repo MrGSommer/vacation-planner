@@ -422,6 +422,11 @@ export const AiTripModal: React.FC<Props> = ({
     // Full-screen Fable pitch when user has no Inspirationen
     if (!canSendMessages && (phase === 'conversing' || phase === 'idle')) {
       const handleBuyPress = () => {
+        onClose();
+        navigation.navigate('Subscription');
+      };
+
+      const handleBuyInspirations = () => {
         if (Platform.OS === 'web') {
           setShowBuyModal(true);
         } else {
@@ -438,7 +443,7 @@ export const AiTripModal: React.FC<Props> = ({
           message="Kaufe Inspirationen um Fable weiter nutzen zu können."
           buyInspirations
           heroGradient={gradients.sunset}
-          onPress={handleBuyPress}
+          onPress={handleBuyInspirations}
           highlights={[
             { icon: 'chatbubbles-outline', text: 'Reisepläne erstellen', detail: 'Fable plant deine Reise Tag für Tag' },
             { icon: 'list-outline', text: 'Packlisten generieren', detail: 'Nie wieder etwas vergessen' },
@@ -453,7 +458,7 @@ export const AiTripModal: React.FC<Props> = ({
           message="Fable plant deine Reise, erstellt Packlisten, schlägt Budget-Kategorien vor und vieles mehr."
           heroGradient={gradients.sunset}
           secondaryLabel="Inspirationen kaufen"
-          onSecondaryPress={handleBuyPress}
+          onSecondaryPress={handleBuyInspirations}
           highlights={[
             { icon: 'map-outline', text: 'Komplette Reisepläne', detail: 'Fable erstellt Tag-für-Tag Pläne mit Aktivitäten' },
             { icon: 'chatbubbles-outline', text: 'Persönliche Beratung', detail: 'Frage Fable nach Tipps, Restaurants & Geheimtipps' },

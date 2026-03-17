@@ -9,6 +9,7 @@ export const getTrips = async (userId: string): Promise<Trip[]> => {
     const { data, error } = await supabase
       .from('trips')
       .select('*')
+      .neq('status', 'archived')
       .order('start_date', { ascending: false });
     if (error) throw error;
     return (data ?? []) as Trip[];
@@ -21,8 +22,9 @@ export const getTrip = async (tripId: string): Promise<Trip> => {
       .from('trips')
       .select('*')
       .eq('id', tripId)
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) throw new Error('Trip nicht gefunden');
     return data;
   });
 };

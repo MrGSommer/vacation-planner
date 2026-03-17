@@ -10,6 +10,8 @@ import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { useTrips } from '../../hooks/useTrips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useTripContext } from '../../contexts/TripContext';
 import { getTrip, uploadCoverImage } from '../../api/trips';
 import { requireOnline } from '../../utils/offlineGate';
 import { getDays, getActivities, getActivitiesForTrip, deleteDay, shiftDaysToNewDates, deleteAllDays } from '../../api/itineraries';
@@ -47,6 +49,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [saving, setSaving] = useState(false);
   const { user } = useAuthContext();
   const { showToast } = useToast();
+  const { isTripEditable, canAddCollaborator } = useSubscription();
+  const { trips } = useTripContext();
   const [loadingTrip, setLoadingTrip] = useState(true);
   const [originalTrip, setOriginalTrip] = useState<Trip | null>(null);
   const [step, setStep] = useState(0);
@@ -69,7 +73,6 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
   const [members, setMembers] = useState<CollaboratorWithProfile[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
 
   // Round trip
   const [isRoundTrip, setIsRoundTrip] = useState(false);
@@ -371,7 +374,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!user) return;
     setInviteLoading(true);
     try {
-      const { url } = await createInviteLink(tripId, user.id, 'collaborate', inviteRole);
+      const { url } = await createInviteLink(tripId, user.id, 'collaborate', 'editor');
       if (Platform.OS === 'web' && navigator.share) {
         try { await navigator.share({ title: name, url }); return; } catch {}
       }
@@ -413,6 +416,15 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       setMembers(prev => prev.map(m => (m.id === member.id ? { ...m, role: newRole } : m)));
     } catch { showToast('Fehler', 'error'); }
   };
+
+  const editable = isTripEditable(tripId, trips);
+
+  useEffect(() => {
+    if (!loadingTrip && !editable) {
+      showToast('Nur mit Premium bearbeitbar', 'error');
+      navigation.goBack();
+    }
+  }, [loadingTrip, editable]);
 
   if (loadingTrip) return (
     <View style={styles.container}>
@@ -643,27 +655,15 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={styles.stepTitle}>Teilnehmer</Text>
 
               {/* Invite */}
-              <Text style={styles.fieldLabel}>Einladen als</Text>
               <View style={styles.inviteRow}>
-                <View style={styles.roleToggle}>
-                  <TouchableOpacity
-                    style={[styles.roleBtn, inviteRole === 'viewer' && styles.roleBtnActive]}
-                    onPress={() => setInviteRole('viewer')}
-                  >
-                    <Text style={[styles.roleBtnText, inviteRole === 'viewer' && styles.roleBtnTextActive]}>Betrachter</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.roleBtn, inviteRole === 'editor' && styles.roleBtnActive]}
-                    onPress={() => setInviteRole('editor')}
-                  >
-                    <Text style={[styles.roleBtnText, inviteRole === 'editor' && styles.roleBtnTextActive]}>Bearbeiter</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={styles.inviteBtn} onPress={handleCreateInvite} disabled={inviteLoading}>
+                <TouchableOpacity style={[styles.inviteBtn, !canAddCollaborator(nonOwnerMembers.length) && { opacity: 0.5 }]} onPress={handleCreateInvite} disabled={inviteLoading || !canAddCollaborator(nonOwnerMembers.length)}>
                   {inviteLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.inviteBtnText}>Link kopieren</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="link-outline" size={16} color="#fff" />
+                      <Text style={styles.inviteBtnText}>Einladungslink kopieren</Text>
+                    </View>
                   )}
                 </TouchableOpacity>
               </View>
