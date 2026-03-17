@@ -6,6 +6,7 @@ import { getStops } from '../../api/stops';
 import { getBudgetCategories } from '../../api/budgets';
 import { getPackingLists, getPackingItems } from '../../api/packing';
 import { printTripHtml, exportTripPdf, PrintData, PrintOptions } from '../../utils/printHelper';
+import { fetchWeatherData } from '../../hooks/useWeather';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../common';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
@@ -48,12 +49,26 @@ async function loadPrintData(tripId: string, options: PrintOptions): Promise<Pri
     allPackingItems = itemArrays.flat();
   }
 
+  // Fetch weather data (best-effort, don't block on failure)
+  let weather;
+  if (options.itinerary) {
+    try {
+      weather = await fetchWeatherData(
+        tripId, trip.start_date, trip.end_date,
+        trip.destination_lat, trip.destination_lng,
+      );
+    } catch {
+      // Weather is optional — continue without it
+    }
+  }
+
   return {
     trip,
     days: daysWithActivities,
     stops: stopsData,
     budgetCategories: budgetData,
     packingItems: allPackingItems,
+    weather,
   };
 }
 
