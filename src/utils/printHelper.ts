@@ -1,8 +1,12 @@
 import { Platform } from 'react-native';
 import { Activity, ItineraryDay, TripStop, BudgetCategory, PackingItem, Trip } from '../types/database';
+import { CollaboratorWithProfile } from '../api/invitations';
 import { getDeviceLocale } from './dateHelpers';
 import { CATEGORY_COLORS } from './categoryFields';
+import { getDisplayName } from './profileHelpers';
 import { WeatherDay } from '../hooks/useWeather';
+
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export interface PrintData {
   trip: Trip;
@@ -11,13 +15,16 @@ export interface PrintData {
   budgetCategories: BudgetCategory[];
   packingItems: PackingItem[];
   weather?: Map<string, WeatherDay>;
+  collaborators?: CollaboratorWithProfile[];
 }
 
 export interface PrintOptions {
   itinerary: boolean;
   stops: boolean;
+  map: boolean;
   budget: boolean;
   packing: boolean;
+  participants: boolean;
   notes: boolean;
 }
 
@@ -266,6 +273,65 @@ function renderStops(data: PrintData): string {
   return html;
 }
 
+function renderMap(data: PrintData): string {
+  if (!data.stops.length || !GOOGLE_MAPS_API_KEY) return '';
+
+  // Build markers for each stop with labels
+  const markers = data.stops.map((stop, i) => {
+    const label = String.fromCharCode(65 + (i % 26)); // A, B, C...
+    const color = stop.type === 'overnight' ? '0xFF6B6B' : '0x4ECDC4';
+    return `markers=color:${color}%7Clabel:${label}%7C${stop.lat},${stop.lng}`;
+  }).join('&');
+
+  // Build path connecting stops in order
+  const pathCoords = data.stops.map(s => `${s.lat},${s.lng}`).join('|');
+  const path = `path=color:0x4A90D9CC%7Cweight:3%7C${pathCoords}`;
+
+  const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=760x500&scale=2&maptype=roadmap&${markers}&${path}&key=${GOOGLE_MAPS_API_KEY}`;
+
+  // Legend
+  const legend = data.stops.map((stop, i) => {
+    const label = String.fromCharCode(65 + (i % 26));
+    const dotColor = stop.type === 'overnight' ? '#FF6B6B' : '#4ECDC4';
+    const nights = stop.nights ? ` · ${stop.nights} Nächte` : '';
+    return `<span class="map-legend-item"><span class="stop-dot-sm" style="background:${dotColor}">${label}</span> ${escapeHtml(stop.name)}${nights}</span>`;
+  }).join('');
+
+  return `<div class="print-section">
+    <h2>Karte & Route</h2>
+    <div class="map-container">
+      <img src="${mapUrl}" alt="Route" class="map-img" />
+    </div>
+    <div class="map-legend">${legend}</div>
+  </div>`;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Organisator',
+  editor: 'Bearbeiter',
+  viewer: 'Betrachter',
+};
+
+function renderParticipants(data: PrintData): string {
+  if (!data.collaborators?.length) return '';
+
+  let html = '<div class="print-section"><h2>Teilnehmer</h2><table class="participants-table"><tbody>';
+
+  for (const collab of data.collaborators) {
+    const name = getDisplayName(collab.profile);
+    const role = ROLE_LABELS[collab.role] || collab.role;
+    const email = collab.profile.email || '';
+    html += `<tr>
+      <td class="participant-name"><strong>${escapeHtml(name)}</strong></td>
+      <td class="participant-email">${escapeHtml(email)}</td>
+      <td class="participant-role">${escapeHtml(role)}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function renderBudget(data: PrintData): string {
   if (!data.budgetCategories.length) return '';
   let html = '<div class="print-section"><h2>Budget</h2><table class="budget-table"><thead><tr><th>Kategorie</th><th>Budget</th></tr></thead><tbody>';
@@ -399,6 +465,20 @@ export function buildPrintHtml(data: PrintData, options: PrintOptions): string {
     .pack-list li { padding: 3px 0; break-inside: avoid; }
     .checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid #888; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 
+    /* Map */
+    .map-container { text-align: center; margin-bottom: 12px; }
+    .map-img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #eee; }
+    .map-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    .map-legend-item { font-size: 12px; color: #555; white-space: nowrap; }
+    .stop-dot-sm { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 700; margin-right: 4px; vertical-align: middle; }
+
+    /* Participants */
+    .participants-table { width: 100%; border-collapse: collapse; }
+    .participants-table td { padding: 8px; border-bottom: 1px solid #eee; }
+    .participant-name { font-size: 14px; }
+    .participant-email { font-size: 13px; color: #777; }
+    .participant-role { font-size: 12px; color: #999; text-align: right; white-space: nowrap; }
+
     /* Footer */
     .footer { margin-top: 40px; text-align: center; color: #999; font-size: 11px; border-top: 1px solid #eee; padding-top: 12px; }
     .footer-brand { color: #FF6B6B; font-weight: 600; }
@@ -418,8 +498,10 @@ export function buildPrintHtml(data: PrintData, options: PrintOptions): string {
 </head>
 <body>
   ${renderHeader(data.trip)}
+  ${options.participants ? renderParticipants(data) : ''}
   ${options.itinerary ? renderItinerary(data) : ''}
   ${options.stops ? renderStops(data) : ''}
+  ${options.map ? renderMap(data) : ''}
   ${options.budget ? renderBudget(data) : ''}
   ${options.packing ? renderPackingList(data) : ''}
   ${options.notes ? renderNotes(data) : ''}

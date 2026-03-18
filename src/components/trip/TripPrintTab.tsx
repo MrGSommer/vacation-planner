@@ -5,6 +5,7 @@ import { getDays, getActivities } from '../../api/itineraries';
 import { getStops } from '../../api/stops';
 import { getBudgetCategories } from '../../api/budgets';
 import { getPackingLists, getPackingItems } from '../../api/packing';
+import { getCollaborators } from '../../api/invitations';
 import { printTripHtml, exportTripPdf, PrintData, PrintOptions } from '../../utils/printHelper';
 import { fetchWeatherData } from '../../hooks/useWeather';
 import { useToast } from '../../contexts/ToastContext';
@@ -19,19 +20,22 @@ interface Props {
 const OPTION_LABELS: Record<keyof PrintOptions, string> = {
   itinerary: 'Tagesplan',
   stops: 'Stops & Route',
+  map: 'Karte mit Stops',
   budget: 'Budget',
   packing: 'Packliste',
+  participants: 'Teilnehmer',
   notes: 'Notizen',
 };
 
 async function loadPrintData(tripId: string, options: PrintOptions): Promise<PrintData> {
   const trip = await getTrip(tripId);
 
-  const [daysData, stopsData, budgetData, packingLists] = await Promise.all([
+  const [daysData, stopsData, budgetData, packingLists, collaboratorsData] = await Promise.all([
     options.itinerary ? getDays(tripId) : Promise.resolve([]),
-    options.stops ? getStops(tripId) : Promise.resolve([]),
+    (options.stops || options.map) ? getStops(tripId) : Promise.resolve([]),
     options.budget ? getBudgetCategories(tripId) : Promise.resolve([]),
     options.packing ? getPackingLists(tripId) : Promise.resolve([]),
+    options.participants ? getCollaborators(tripId) : Promise.resolve([]),
   ]);
 
   const daysWithActivities = await Promise.all(
@@ -69,6 +73,7 @@ async function loadPrintData(tripId: string, options: PrintOptions): Promise<Pri
     budgetCategories: budgetData,
     packingItems: allPackingItems,
     weather,
+    collaborators: collaboratorsData,
   };
 }
 
@@ -77,8 +82,10 @@ export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
   const [options, setOptions] = useState<PrintOptions>({
     itinerary: true,
     stops: true,
+    map: true,
     budget: true,
     packing: true,
+    participants: false,
     notes: true,
   });
   const [loading, setLoading] = useState(false);
