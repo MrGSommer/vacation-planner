@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, Keyboard, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Pressable, Modal, StyleSheet, Keyboard, Platform } from 'react-native';
 import { Button } from './Button';
 import { Input } from './Input';
 import { TimePickerInput } from './TimePickerInput';
@@ -109,8 +109,9 @@ export const ActivityModal: React.FC<Props> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); onCancel(); }}>
-        <TouchableOpacity activeOpacity={1} onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); }}>
+      <View style={styles.overlay}>
+        {/* Dismiss spacer — pushes content to bottom */}
+        <Pressable style={styles.dismissArea} onPress={() => { if (Platform.OS !== 'web') Keyboard.dismiss(); onCancel(); }} />
         <View style={styles.content}>
           <Text style={styles.title}>
             {activity ? 'Bearbeiten' : 'Hinzufügen'}
@@ -186,14 +187,14 @@ export const ActivityModal: React.FC<Props> = ({
             />
           </View>
         </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  dismissArea: { flex: 1 },
   content: { backgroundColor: colors.card, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.xl, maxHeight: '80%' },
   title: { ...typography.h2, marginBottom: spacing.lg },
   fieldLabel: { ...typography.bodySmall, fontWeight: '600', marginBottom: spacing.sm },
