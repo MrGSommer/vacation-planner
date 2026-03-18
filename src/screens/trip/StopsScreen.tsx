@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -59,6 +59,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [addTransportDefaults, setAddTransportDefaults] = useState<Record<string, any> | null>(null);
+  const loadIdRef = useRef(0); // Cancellation token for concurrent loadData calls
 
   // Travel mode picker & route menu
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
@@ -89,27 +90,67 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     return category === 'hotel' ? 1 : 0;
   };
 
-  // Transport type → icon name mapping
-  const TRANSPORT_ICONS: Record<string, string> = {
-    Flug: 'airplane-outline',
-    Zug: 'train-outline',
-    Bus: 'bus-outline',
-    Auto: 'car-outline',
-    'Fähre': 'boat-outline',
-    Taxi: 'car-sport-outline',
-  };
+  // Transport type → icon: use centralized getActivityIconName from icons.tsx
 
-  /** Find a matching transport activity between two adjacent stops */
-  const findTransportBetween = (prevStop: Activity, nextStop: Activity): Activity | null => {
+  /** Set of transport IDs already matched to a slot (prevents showing same transport twice) */
+  const usedTransportIds = useRef(new Set<string>());
+
+  /** Find ALL matching transport activities between two adjacent stops */
+  const findTransportsBetween = (prevStop: Activity, nextStop: Activity): Activity[] => {
     const prevDate = getActivityDate(prevStop.category, prevStop.category_data || {}) || '';
+    // For hotels, use check_out_date as effective departure from prev stop
+    const effectivePrevDate = prevStop.category === 'hotel'
+      ? (prevStop.category_data?.check_out_date || prevDate)
+      : prevDate;
     const nextDate = getActivityDate(nextStop.category, nextStop.category_data || {}) || '9999-12-31';
+    const results: Activity[] = [];
     for (const t of transportActivities) {
+      if (usedTransportIds.current.has(t.id)) continue;
       const tDate = t.category_data?.departure_date;
       if (!tDate) continue;
-      // Transport departure date falls between prev and next stop dates
-      if (tDate >= prevDate && tDate <= nextDate) return t;
+      // Transport departure falls after prev stop ends and up to next stop start
+      if (tDate >= effectivePrevDate && tDate <= nextDate) {
+        usedTransportIds.current.add(t.id);
+        results.push(t);
+      }
     }
-    return null;
+    return results;
+  };
+
+  /** Find all transports arriving at/before the first stop (Anreise) */
+  const findArrivalTransports = (firstStop: Activity): Activity[] => {
+    const firstDate = getActivityDate(firstStop.category, firstStop.category_data || {}) || '9999-12-31';
+    const results: Activity[] = [];
+    for (const t of transportActivities) {
+      if (usedTransportIds.current.has(t.id)) continue;
+      const tDate = t.category_data?.departure_date;
+      if (!tDate) continue;
+      // Transport on same day or before first stop = arrival transport
+      if (tDate <= firstDate) {
+        usedTransportIds.current.add(t.id);
+        results.push(t);
+      }
+    }
+    return results;
+  };
+
+  /** Find all transports departing on/after the last stop (Abreise) */
+  const findDepartureTransports = (lastStop: Activity): Activity[] => {
+    const lastDate = getActivityDate(lastStop.category, lastStop.category_data || {}) || '';
+    const effectiveDate = lastStop.category === 'hotel'
+      ? (lastStop.category_data?.check_out_date || lastDate)
+      : lastDate;
+    const results: Activity[] = [];
+    for (const t of transportActivities) {
+      if (usedTransportIds.current.has(t.id)) continue;
+      const tDate = t.category_data?.departure_date;
+      if (!tDate) continue;
+      if (tDate >= effectiveDate) {
+        usedTransportIds.current.add(t.id);
+        results.push(t);
+      }
+    }
+    return results;
   };
 
   const isActivityToday = (activity: Activity): boolean => {
@@ -129,12 +170,15 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const loadData = useCallback(async () => {
+    const thisLoadId = ++loadIdRef.current; // Cancel previous concurrent calls
     try {
       const [t, acts, fetchedDays] = await Promise.all([
         getTrip(tripId),
         getActivitiesForTrip(tripId),
         getDays(tripId),
       ]);
+      if (loadIdRef.current !== thisLoadId) return; // Cancelled
+
       setTrip(t);
       setDays(fetchedDays);
 
@@ -146,11 +190,9 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           const dateA = getActivityDate(a.category, a.category_data || {}) || '9999-12-31';
           const dateB = getActivityDate(b.category, b.category_data || {}) || '9999-12-31';
           if (dateA !== dateB) return dateA.localeCompare(dateB);
-          // Same date: hotels go last
           const weightA = getCategorySortWeight(a.category);
           const weightB = getCategorySortWeight(b.category);
           if (weightA !== weightB) return weightA - weightB;
-          // Same date + same category weight: sort by time
           const timeA = getActivityTime(a);
           const timeB = getActivityTime(b);
           return timeA.localeCompare(timeB);
@@ -158,7 +200,6 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       setActivities(filtered);
 
       // Extract transport activities for connection badges
-      // Sort by date + time for correct matching order
       const transports = acts
         .filter(a => a.category === 'transport')
         .sort((a, b) => {
@@ -172,7 +213,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       setTransportActivities(transports);
 
       // Load cached travel info from category_data
-      const cached = new Map<string, DirectionsResult>();
+      const initialTravel = new Map<string, DirectionsResult>();
       const needsCalc: { actId: string; prev: Activity; curr: Activity }[] = [];
 
       for (let i = 1; i < filtered.length; i++) {
@@ -183,36 +224,40 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         const cd = curr.category_data || {};
         const c: CachedTravel | undefined = cd.travel_from_prev;
 
-        // Check if cache is valid (same origin + dest coordinates)
         if (c && c.origin_lat === prev.location_lat && c.origin_lng === prev.location_lng
           && c.dest_lat === curr.location_lat && c.dest_lng === curr.location_lng) {
-          cached.set(curr.id, { duration: c.duration, distance: c.distance, mode: c.mode });
+          initialTravel.set(curr.id, { duration: c.duration, distance: c.distance, mode: c.mode });
         } else {
           needsCalc.push({ actId: curr.id, prev, curr });
         }
       }
-      setTravelInfo(cached);
+      setTravelInfo(initialTravel);
 
       // Calculate missing routes in background
       if (needsCalc.length > 0) {
         setCalculating(new Set(needsCalc.map(n => n.actId)));
-        for (const { actId, prev, curr } of needsCalc) {
+        for (const { actId, prev: prevStop, curr } of needsCalc) {
+          if (loadIdRef.current !== thisLoadId) return; // Cancelled
           const mode: TravelMode = curr.category_data?.travel_from_prev?.mode || 'driving';
           const result = await getDirections(
-            { lat: prev.location_lat!, lng: prev.location_lng! },
+            { lat: prevStop.location_lat!, lng: prevStop.location_lng! },
             { lat: curr.location_lat!, lng: curr.location_lng! },
             mode,
           );
+          if (loadIdRef.current !== thisLoadId) return; // Cancelled
           if (result) {
-            cached.set(actId, result);
-            setTravelInfo(new Map(cached));
+            setTravelInfo(prevMap => {
+              const next = new Map(prevMap);
+              next.set(actId, result);
+              return next;
+            });
             // Persist to DB
             const cacheData: CachedTravel = {
               duration: result.duration,
               distance: result.distance,
               mode: result.mode,
-              origin_lat: prev.location_lat!,
-              origin_lng: prev.location_lng!,
+              origin_lat: prevStop.location_lat!,
+              origin_lng: prevStop.location_lng!,
               dest_lat: curr.location_lat!,
               dest_lng: curr.location_lng!,
             };
@@ -220,8 +265,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
               category_data: { ...curr.category_data, travel_from_prev: cacheData },
             }).catch(() => {});
           }
-          setCalculating(prev => {
-            const next = new Set(prev);
+          setCalculating(prevCalc => {
+            const next = new Set(prevCalc);
             next.delete(actId);
             return next;
           });
@@ -230,7 +275,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (loadIdRef.current === thisLoadId) setLoading(false);
     }
   }, [tripId]);
 
@@ -268,8 +313,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
     );
 
     if (result) {
-      setTravelInfo(prev => {
-        const next = new Map(prev);
+      setTravelInfo(prevMap => {
+        const next = new Map(prevMap);
         next.set(activityId, result);
         return next;
       });
@@ -472,36 +517,58 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
             actionLabel={readonlyMode ? undefined : "Stop hinzufügen"}
             onAction={readonlyMode ? undefined : openAddModal}
           />
-        ) : (
-          activities.map((activity, i) => {
-            // Check if a transport activity connects this stop to the previous one
-            const matchingTransport = i > 0 ? findTransportBetween(activities[i - 1], activity) : null;
+        ) : (() => {
+          // Reset used transport IDs for each render pass
+          usedTransportIds.current = new Set();
+
+          // Pre-compute arrival transports (before first stop) — e.g. multi-leg flights, airport transfer
+          const arrivalTransports = activities.length > 0 ? findArrivalTransports(activities[0]) : [];
+          // Pre-compute departure transports (after last stop)
+          const departureTransports = activities.length > 0 ? findDepartureTransports(activities[activities.length - 1]) : [];
+
+          /** Render a transport badge card */
+          const renderTransportBadge = (t: Activity) => (
+            <TouchableOpacity
+              key={t.id}
+              style={styles.transportBadge}
+              onPress={() => setViewActivity(t)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name={getActivityIconName('transport', t.category_data)}
+                size={16}
+                color={CATEGORY_COLORS.transport}
+              />
+              <View style={styles.transportBadgeContent}>
+                <Text style={styles.transportBadgeTitle} numberOfLines={1}>{t.title}</Text>
+                {(() => {
+                  const detail = formatCategoryDetail('transport', t.category_data || {});
+                  return detail ? <Text style={styles.transportBadgeDetail} numberOfLines={1}>{detail}</Text> : null;
+                })()}
+              </View>
+              <Icon name="chevron-forward" size={14} color={CATEGORY_COLORS.transport} />
+            </TouchableOpacity>
+          );
+
+          return <>
+          {/* Arrival transports before first stop (Anreise — multi-leg, airport transfer, etc.) */}
+          {arrivalTransports.length > 0 && (
+            <View style={styles.travelSection}>
+              {arrivalTransports.map(renderTransportBadge)}
+            </View>
+          )}
+
+          {activities.map((activity, i) => {
+            // Find ALL transport activities connecting this stop to the previous one
+            const matchingTransports = i > 0 ? findTransportsBetween(activities[i - 1], activity) : [];
 
             return (
             <View key={activity.id}>
               {i > 0 && (
                 <View style={styles.travelSection}>
-                  {matchingTransport ? (
-                    // --- Transport activity badge (replaces Google Directions) ---
-                    <TouchableOpacity
-                      style={styles.transportBadge}
-                      onPress={() => setViewActivity(matchingTransport)}
-                      activeOpacity={0.7}
-                    >
-                      <Icon
-                        name={(TRANSPORT_ICONS[matchingTransport.category_data?.transport_type] || 'swap-horizontal-outline') as any}
-                        size={16}
-                        color={CATEGORY_COLORS.transport}
-                      />
-                      <View style={styles.transportBadgeContent}>
-                        <Text style={styles.transportBadgeTitle} numberOfLines={1}>{matchingTransport.title}</Text>
-                        {(() => {
-                          const detail = formatCategoryDetail('transport', matchingTransport.category_data || {});
-                          return detail ? <Text style={styles.transportBadgeDetail} numberOfLines={1}>{detail}</Text> : null;
-                        })()}
-                      </View>
-                      <Icon name="chevron-forward" size={14} color={CATEGORY_COLORS.transport} />
-                    </TouchableOpacity>
+                  {matchingTransports.length > 0 ? (
+                    // --- Transport activity badges (multi-transport support) ---
+                    matchingTransports.map(renderTransportBadge)
                   ) : activity.location_lat && activities[i - 1].location_lat ? (
                     // --- Google Directions fallback (existing behavior) ---
                     <>
@@ -678,8 +745,16 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
           );
-          })
-        )}
+          })}
+
+          {/* Departure transports after last stop (Abreise — airport transfer, multi-leg, etc.) */}
+          {departureTransports.length > 0 && (
+            <View style={styles.travelSection}>
+              {departureTransports.map(renderTransportBadge)}
+            </View>
+          )}
+          </>;
+        })()}
       </ScrollView>
 
       {!readonlyMode && (

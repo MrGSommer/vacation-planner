@@ -283,7 +283,8 @@ function renderStops(data: PrintData): string {
   if (!data.stops.length) return '';
   let html = '<div class="print-section"><h2>Stops &amp; Route</h2><ol class="stops-list">';
 
-  for (const stop of data.stops) {
+  for (let idx = 0; idx < data.stops.length; idx++) {
+    const stop = data.stops[idx];
     const isOvernight = stop.type === 'overnight';
     const dotColor = isOvernight ? '#FF6B6B' : '#4ECDC4';
     const dates = stop.arrival_date
@@ -291,7 +292,7 @@ function renderStops(data: PrintData): string {
       : '';
     const nights = stop.nights ? ` \u00B7 ${stop.nights} N\u00E4chte` : '';
     html += `<li>
-      <span class="stop-dot" style="background:${dotColor}">${stop.sort_order + 1}</span>
+      <span class="stop-dot" style="background:${dotColor}">${idx + 1}</span>
       <strong>${escapeHtml(stop.name)}</strong>
       <span class="stop-meta">${isOvernight ? '\u00DCbernachtung' : 'Wegpunkt'}${nights}${dates}</span>
       ${stop.address ? `<br><span class="stop-addr">${escapeHtml(stop.address)}</span>` : ''}

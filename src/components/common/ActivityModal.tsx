@@ -85,7 +85,7 @@ export const ActivityModal: React.FC<Props> = ({
         setCategoryData(defaultCategoryData || {});
       }
     }
-  }, [visible, activity]);
+  }, [visible, activity, defaultCategory, defaultCategoryData]);
 
   const handleSave = () => {
     onSave({

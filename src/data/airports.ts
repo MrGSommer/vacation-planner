@@ -1197,6 +1197,12 @@ function normalize(str: string): string {
 }
 
 /** Search airports by city name, airport name, or IATA code */
+// Pre-computed normalized country names (hoisted to avoid rebuild per search call)
+const normalizedCountryNames = new Map<string, string>();
+for (const [code, name] of Object.entries(COUNTRY_NAMES)) {
+  normalizedCountryNames.set(code, normalize(name));
+}
+
 export function searchAirports(query: string, limit = 8): Airport[] {
   const q = normalize(query.trim());
   if (q.length < 2) return [];
@@ -1205,13 +1211,7 @@ export function searchAirports(query: string, limit = 8): Airport[] {
   const exactIata = AIRPORTS.filter(a => a.iata.toLowerCase() === q);
   if (exactIata.length > 0) return exactIata.slice(0, limit);
 
-  // Pre-compute country name lookups (avoid re-normalizing per airport)
-  const countryNameCache = new Map<string, string>();
-  const getCountryN = (code: string) => {
-    let cached = countryNameCache.get(code);
-    if (!cached) { cached = normalize(COUNTRY_NAMES[code] || ''); countryNameCache.set(code, cached); }
-    return cached;
-  };
+  const getCountryN = (code: string) => normalizedCountryNames.get(code) || '';
 
   // Score-based matching
   const scored = AIRPORTS

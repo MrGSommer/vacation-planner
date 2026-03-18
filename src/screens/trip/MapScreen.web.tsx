@@ -76,6 +76,9 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const isOnline = useNetworkStatus();
   const mapRef = useRef<HTMLDivElement | null>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
+  const mapMarkersRef = useRef<any[]>([]);
+  const mapPolylinesRef = useRef<any[]>([]);
+  const mapInfoWindowsRef = useRef<google.maps.InfoWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tripData, setTripData] = useState<Trip | null>(null);
   const [days, setDays] = useState<ItineraryDay[]>([]);
@@ -257,6 +260,14 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [nearbyMarkers, handlePoiClick]);
 
   const initMap = useCallback(async () => {
+    // Cleanup previous markers, polylines, info windows to prevent memory leaks
+    mapMarkersRef.current.forEach(m => { try { m.map = null; } catch {} });
+    mapMarkersRef.current = [];
+    mapPolylinesRef.current.forEach(p => { try { p.setMap(null); } catch {} });
+    mapPolylinesRef.current = [];
+    mapInfoWindowsRef.current.forEach(iw => { try { iw.close(); } catch {} });
+    mapInfoWindowsRef.current = [];
+
     try {
       const [t, s, a, fetchedDays] = await Promise.all([
         getTrip(tripId),
@@ -357,9 +368,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           content: pin.element,
           gmpClickable: true,
         });
+        mapMarkersRef.current.push(marker);
         const infoWindow = new google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif"><strong>${stop.name}</strong><br/>${stop.type === 'overnight' ? `🏠 ${stop.arrival_date && stop.departure_date ? `${stop.arrival_date} – ${stop.departure_date} (${stop.nights} N.)` : `${stop.nights} Nacht/Nächte`}` : '📍 Zwischenstopp'}<br/><small>${stop.address || ''}</small></div>`,
         });
+        mapInfoWindowsRef.current.push(infoWindow);
         marker.addEventListener('gmp-click', () => openInfo(infoWindow, marker));
       });
 
@@ -381,7 +394,9 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           content: pin.element,
           gmpClickable: true,
         });
+        mapMarkersRef.current.push(marker);
         const infoWindow = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
+        mapInfoWindowsRef.current.push(infoWindow);
         marker.addEventListener('gmp-click', () => openInfo(infoWindow, marker));
       });
 
@@ -411,7 +426,9 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             content: depPin.element,
             gmpClickable: true,
           });
+          mapMarkersRef.current.push(depMarker);
           const depInfo = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
+          mapInfoWindowsRef.current.push(depInfo);
           depMarker.addEventListener('gmp-click', () => openInfo(depInfo, depMarker));
 
           const arrGlyph = document.createElement('span');
@@ -425,18 +442,21 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             content: arrPin.element,
             gmpClickable: true,
           });
+          mapMarkersRef.current.push(arrMarker);
           const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
+          mapInfoWindowsRef.current.push(arrInfo);
           arrMarker.addEventListener('gmp-click', () => openInfo(arrInfo, arrMarker));
 
           // Build polyline path (dep → arr)
           const path: { lat: number; lng: number }[] = [depPos, arrPos];
 
           const polyOpts = getTransportPolylineOptions(transportType);
-          new google.maps.Polyline({
+          const polyline = new google.maps.Polyline({
             path,
             map,
             ...polyOpts,
           });
+          mapPolylinesRef.current.push(polyline);
         }
       });
 
@@ -472,20 +492,21 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
                 strokeOpacity: 0.7,
               });
               pl.setMap(map);
+              mapPolylinesRef.current.push(pl);
             });
           }
         } catch (routeErr) {
           console.warn('Routes API error, falling back to polyline:', routeErr);
-          // Fallback: simple straight-line polyline
           const path = s.map((st: TripStop) => ({ lat: st.lat, lng: st.lng }));
           if (t.is_round_trip) path.push({ lat: s[0].lat, lng: s[0].lng });
-          new google.maps.Polyline({
+          const fallbackPl = new google.maps.Polyline({
             map,
             path,
             strokeColor: colors.primary,
             strokeWeight: 3,
             strokeOpacity: 0.6,
           });
+          mapPolylinesRef.current.push(fallbackPl);
         }
       }
 
@@ -829,12 +850,26 @@ function isCurrentlyOpen(hours: any): boolean {
     const time = now.getHours() * 100 + now.getMinutes();
     const periods = hours.periods || [];
     for (const period of periods) {
-      if (period.open?.day === day) {
-        const openTime = (period.open.hours || 0) * 100 + (period.open.minutes || 0);
-        const closeTime = period.close
-          ? (period.close.hours || 0) * 100 + (period.close.minutes || 0)
-          : 2400;
-        if (time >= openTime && time < closeTime) return true;
+      const openDay = period.open?.day;
+      const openTime = (period.open?.hours || 0) * 100 + (period.open?.minutes || 0);
+      const closeDay = period.close?.day;
+      const closeTime = period.close
+        ? (period.close.hours || 0) * 100 + (period.close.minutes || 0)
+        : 2400;
+
+      if (openDay === day) {
+        // Same-day closing or 24h open (closeTime=2400)
+        if (closeDay === day || closeDay === undefined) {
+          if (time >= openTime && time < closeTime) return true;
+        }
+        // Overnight: closes next day — open from openTime until midnight
+        if (closeDay !== undefined && closeDay !== day) {
+          if (time >= openTime) return true;
+        }
+      }
+      // Check if we're in the overnight carry-over (after midnight, before close)
+      if (closeDay === day && openDay !== day) {
+        if (time < closeTime) return true;
       }
     }
     return false;

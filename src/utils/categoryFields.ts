@@ -313,6 +313,7 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
 
 function formatDE(dateStr: string): string {
   if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-');
-  return `${d}.${m}.${y}`;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (!match) return dateStr;
+  return `${match[3]}.${match[2]}.${match[1]}`;
 }

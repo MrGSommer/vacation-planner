@@ -378,7 +378,7 @@ const AIRPORT_MAP: Record<string, { city: string; name: string }> = {
   // Irland (weitere)
   SNN: { city: 'Shannon', name: 'Shannon Airport' },
   ORK: { city: 'Cork', name: 'Cork Airport' },
-  KNO: { city: 'Knock', name: 'Ireland West Airport' },
+  NOC: { city: 'Knock', name: 'Ireland West Airport' },
 
   // Niederlande (weitere)
   EIN: { city: 'Eindhoven', name: 'Eindhoven Airport' },
@@ -1157,7 +1157,6 @@ const AIRPORT_MAP: Record<string, { city: string; name: string }> = {
 
   // Weitere europäische Inseln
   ACH: { city: 'Altenrhein', name: 'St. Gallen-Altenrhein' },
-  SMI: { city: 'Samos', name: 'Samos Airport' },
   GPA: { city: 'Patras', name: 'Patras Airport' },
 
   // Gibraltar, Andorra
@@ -1282,6 +1281,11 @@ async function getAirportInfo(iata: string): Promise<{ city: string; name: strin
       const airport = data?.response?.[0];
       if (airport) {
         const info = { city: airport.city || iata, name: airport.name || iata };
+        // Cap cache size to prevent unbounded memory growth
+        if (airportApiCache.size >= 500) {
+          const firstKey = airportApiCache.keys().next().value;
+          if (firstKey) airportApiCache.delete(firstKey);
+        }
         airportApiCache.set(iata, info);
         return info;
       }
@@ -1449,7 +1453,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Nicht authentifiziert' }, origin, 401);
 
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '');
     const user = await getUser(token);
     if (!user?.id) return json({ error: 'Auth fehlgeschlagen' }, origin, 401);
 
@@ -1525,9 +1529,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Ungültiges Flugnummern-Format (z.B. LX1234)' }, origin, 400);
     }
 
-    // Validate flight_date if provided (YYYY-MM-DD)
-    const dateParam = (typeof flight_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(flight_date))
-      ? flight_date : undefined;
+    // Validate flight_date if provided (YYYY-MM-DD, must be a valid calendar date)
+    const dateParam = (() => {
+      if (typeof flight_date !== 'string') return undefined;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(flight_date)) return undefined;
+      const d = new Date(flight_date + 'T00:00:00Z');
+      return isNaN(d.getTime()) ? undefined : flight_date;
+    })();
 
     // Build candidate flight numbers: original + zero-padded variant
     const candidates = [normalized];

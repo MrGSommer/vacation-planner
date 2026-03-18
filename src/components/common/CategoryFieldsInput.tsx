@@ -30,7 +30,6 @@ const DATE_PAIRS: Record<string, string> = {
 
 export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange, tripStartDate, tripEndDate }) => {
   const baseFields = CATEGORY_FIELDS[category];
-  if (!baseFields || baseFields.length === 0) return null;
 
   // For transport: base fields = [transport_type selector], then add type-specific fields
   const transportTypeFields = useMemo(() => {
@@ -39,8 +38,8 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
   }, [category, data.transport_type]);
 
   const fields = category === 'transport'
-    ? [...baseFields, ...transportTypeFields]
-    : baseFields;
+    ? [...(baseFields || []), ...transportTypeFields]
+    : (baseFields || []);
 
   const isFlightTransport = category === 'transport' && data.transport_type === 'Flug';
   const hasMultiLegs = isFlightTransport && Array.isArray(data.flight_legs) && data.flight_legs.length >= 2;
@@ -364,6 +363,9 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
     onChange(updates);
   };
 
+  // Guard: no fields for this category — placed after all hooks
+  if (!baseFields || baseFields.length === 0) return null;
+
   return (
     <View style={styles.container}>
       {renderFieldList(visiblePrimary)}
@@ -537,18 +539,13 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
                 value={leg.dep_name || ''}
                 onChangeText={(v) => updateLeg(i, { dep_name: v, dep_iata: '' })}
                 onSelect={(airport: Airport) => {
-                  const updated = {
-                    dep_iata: airport.iata,
-                    dep_name: `${airport.city} (${airport.iata})`,
-                  };
-                  updateLeg(i, updated);
+                  const newLegs = [...legs];
+                  newLegs[i] = { ...newLegs[i], dep_iata: airport.iata, dep_name: `${airport.city} (${airport.iata})` };
                   // Link to previous leg's arrival
                   if (i > 0) {
-                    const newLegs = [...legs];
-                    newLegs[i] = { ...newLegs[i], ...updated };
                     newLegs[i - 1] = { ...newLegs[i - 1], arr_iata: airport.iata, arr_name: `${airport.city} (${airport.iata})` };
-                    onChange(newLegs);
                   }
+                  onChange(newLegs);
                 }}
               />
               <AirportAutocomplete
@@ -557,18 +554,13 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
                 value={leg.arr_name || ''}
                 onChangeText={(v) => updateLeg(i, { arr_name: v, arr_iata: '' })}
                 onSelect={(airport: Airport) => {
-                  const updated = {
-                    arr_iata: airport.iata,
-                    arr_name: `${airport.city} (${airport.iata})`,
-                  };
-                  updateLeg(i, updated);
+                  const newLegs = [...legs];
+                  newLegs[i] = { ...newLegs[i], arr_iata: airport.iata, arr_name: `${airport.city} (${airport.iata})` };
                   // Link to next leg's departure
                   if (i < legs.length - 1) {
-                    const newLegs = [...legs];
-                    newLegs[i] = { ...newLegs[i], ...updated };
                     newLegs[i + 1] = { ...newLegs[i + 1], dep_iata: airport.iata, dep_name: `${airport.city} (${airport.iata})` };
-                    onChange(newLegs);
                   }
+                  onChange(newLegs);
                 }}
               />
             </View>

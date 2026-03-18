@@ -8,8 +8,16 @@ const ensureGoogleMaps = (): Promise<void> => {
   if (Platform.OS !== 'web') return Promise.resolve();
   if (mapsLoading) return mapsLoading;
   mapsLoading = new Promise<void>((resolve, reject) => {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 200; // 10s max (200 * 50ms)
     const waitForApi = () => {
       if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
+      attempts++;
+      if (attempts >= MAX_ATTEMPTS) {
+        mapsLoading = null; // Reset so retry is possible
+        reject(new Error('Google Maps API timed out'));
+        return;
+      }
       setTimeout(waitForApi, 50);
     };
     if ((window as any).google?.maps?.importLibrary) { resolve(); return; }
@@ -20,7 +28,10 @@ const ensureGoogleMaps = (): Promise<void> => {
     script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places,marker&loading=async`;
     script.async = true;
     script.onload = () => waitForApi();
-    script.onerror = () => reject(new Error('Failed to load Google Maps'));
+    script.onerror = () => {
+      mapsLoading = null; // Reset so retry is possible on next call
+      reject(new Error('Failed to load Google Maps'));
+    };
     document.head.appendChild(script);
   });
   return mapsLoading;

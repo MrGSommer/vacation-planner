@@ -24,6 +24,11 @@ export const AirportAutocomplete: React.FC<Props> = ({ label, placeholder, value
     if (value !== undefined && value !== query) setQuery(value);
   }, [value]);
 
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
   const search = useCallback((text: string) => {
     if (!text.trim() || text.length < 2) {
       setResults([]);

@@ -53,18 +53,40 @@ function getTransportPolylineOptions(transportType: string): google.maps.Polylin
   }
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip, transportActivities }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const polylinesRef = useRef<any[]>([]);
+  const infoWindowsRef = useRef<google.maps.InfoWindow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible || !mapRef.current) return;
 
+    // Cleanup previous map objects
+    const cleanupMapObjects = () => {
+      markersRef.current.forEach(m => { try { m.map = null; } catch {} });
+      markersRef.current = [];
+      polylinesRef.current.forEach(p => { try { p.setMap(null); } catch {} });
+      polylinesRef.current = [];
+      infoWindowsRef.current.forEach(iw => { try { iw.close(); } catch {} });
+      infoWindowsRef.current = [];
+    };
+
+    let cancelled = false;
+
     const initMap = async () => {
+      cleanupMapObjects();
+
       try {
         const { Map } = await importMapsLibrary('maps');
         const { AdvancedMarkerElement } = await importMapsLibrary('marker');
+        if (cancelled) return;
 
         const validStops = stops.filter(s => s.location_lat && s.location_lng);
         if (validStops.length === 0) {
@@ -83,11 +105,11 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
         map.fitBounds(bounds, 50);
         mapInstanceRef.current = map;
 
-        // Add numbered markers with InfoWindows
         const formatDE = (dateStr: string) => {
           if (!dateStr) return '';
-          const [y, m, d] = dateStr.split('-');
-          return `${d}.${m}.${y}`;
+          const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+          if (!match) return escapeHtml(dateStr);
+          return `${match[3]}.${match[2]}.${match[1]}`;
         };
 
         let openInfoWindow: google.maps.InfoWindow | null = null;
@@ -113,8 +135,9 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
             title: stop.title,
             gmpClickable: true,
           });
+          markersRef.current.push(marker);
 
-          // Build InfoWindow content
+          // Build InfoWindow content — escape user data to prevent XSS
           const catLabel = stop.category === 'hotel' ? 'Unterkunft' : 'Zwischenstopp';
           const cd = stop.category_data || {};
           let dateInfo = '';
@@ -128,12 +151,12 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           let travelLine = '';
           const travel = travelInfo.get(stop.id);
           if (travel) {
-            travelLine = `<div style="margin-top:4px;font-size:12px;color:#636E72;">Anfahrt: ${formatDuration(travel.duration)} · ${formatDistance(travel.distance)}</div>`;
+            travelLine = `<div style="margin-top:4px;font-size:12px;color:#636E72;">Anfahrt: ${escapeHtml(formatDuration(travel.duration))} · ${escapeHtml(formatDistance(travel.distance))}</div>`;
           }
 
           const infoContent = `
             <div style="font-family:system-ui;max-width:220px;">
-              <div style="font-weight:bold;font-size:14px;">${stop.title}</div>
+              <div style="font-weight:bold;font-size:14px;">${escapeHtml(stop.title)}</div>
               <div style="font-size:12px;color:${markerColor};margin-top:2px;">${catLabel}</div>
               ${dateInfo ? `<div style="font-size:12px;color:#636E72;margin-top:4px;">${dateInfo}</div>` : ''}
               ${travelLine}
@@ -141,6 +164,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           `;
 
           const infoWindow = new google.maps.InfoWindow({ content: infoContent });
+          infoWindowsRef.current.push(infoWindow);
 
           marker.addEventListener('gmp-click', () => {
             if (openInfoWindow) openInfoWindow.close();
@@ -149,10 +173,13 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           });
         });
 
+        if (cancelled) return;
+
         // Draw route via Routes API
         if (validStops.length >= 2) {
           const routesLib = await importMapsLibrary('routes');
           const RouteClass = routesLib.Route;
+          if (cancelled) return;
 
           const origin = { lat: validStops[0].location_lat!, lng: validStops[0].location_lng! };
           const dest = isRoundTrip
@@ -162,7 +189,6 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
             ? validStops.slice(1).map(s => ({ lat: s.location_lat!, lng: s.location_lng! }))
             : validStops.slice(1, -1).map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
 
-          // Determine dominant travel mode from travelInfo
           const modeMap: Record<string, string> = { driving: 'DRIVING', transit: 'TRANSIT', walking: 'WALKING', bicycling: 'BICYCLING' };
           const modes = Array.from(travelInfo.values()).map(t => t.mode).filter(Boolean);
           const dominantMode = modes.length > 0 ? modes[0] : 'driving';
@@ -177,18 +203,18 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
               fields: ['path'],
             });
 
+            if (cancelled) return;
+
             if (computedRoutes?.[0]) {
               const polylines = computedRoutes[0].createPolylines();
               polylines.forEach((pl: any) => {
-                pl.setOptions({
-                  strokeColor: colors.primary,
-                  strokeWeight: 4,
-                  strokeOpacity: 0.7,
-                });
+                pl.setOptions({ strokeColor: colors.primary, strokeWeight: 4, strokeOpacity: 0.7 });
                 pl.setMap(map);
+                polylinesRef.current.push(pl);
               });
             }
           } catch {
+            if (cancelled) return;
             // Fallback: simple polylines — transport-type-aware if available
             if (transportActivities && transportActivities.length > 0) {
               for (let i = 1; i < validStops.length; i++) {
@@ -197,7 +223,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
                 const transport = findTransportForSegment(prev, curr, transportActivities);
                 const transportType = transport?.category_data?.transport_type || '';
                 const opts = transportType ? getTransportPolylineOptions(transportType) : { strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6 };
-                new google.maps.Polyline({
+                const pl = new google.maps.Polyline({
                   map,
                   path: [
                     { lat: prev.location_lat!, lng: prev.location_lng! },
@@ -205,41 +231,41 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
                   ],
                   ...opts,
                 });
+                polylinesRef.current.push(pl);
               }
               if (isRoundTrip) {
-                new google.maps.Polyline({
+                const pl = new google.maps.Polyline({
                   map,
                   path: [
                     { lat: validStops[validStops.length - 1].location_lat!, lng: validStops[validStops.length - 1].location_lng! },
                     { lat: validStops[0].location_lat!, lng: validStops[0].location_lng! },
                   ],
-                  strokeColor: colors.primary,
-                  strokeWeight: 3,
-                  strokeOpacity: 0.6,
+                  strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6,
                 });
+                polylinesRef.current.push(pl);
               }
             } else {
               const path = validStops.map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
               if (isRoundTrip) path.push({ lat: validStops[0].location_lat!, lng: validStops[0].location_lng! });
-              new google.maps.Polyline({
-                map,
-                path,
-                strokeColor: colors.primary,
-                strokeWeight: 3,
-                strokeOpacity: 0.6,
+              const pl = new google.maps.Polyline({
+                map, path, strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6,
               });
+              polylinesRef.current.push(pl);
             }
           }
         }
       } catch (e) {
-        setError('Karte konnte nicht geladen werden');
+        if (!cancelled) setError('Karte konnte nicht geladen werden');
       }
     };
 
-    // Small delay to ensure DOM is ready
     const timer = setTimeout(initMap, 100);
-    return () => clearTimeout(timer);
-  }, [visible, stops, transportActivities]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      cleanupMapObjects();
+    };
+  }, [visible, stops, transportActivities, travelInfo, isRoundTrip]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

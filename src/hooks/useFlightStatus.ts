@@ -184,6 +184,8 @@ export function useFlightStatus(
   tripEndDate: string,
 ): Map<string, FlightInfo> {
   const [statuses, setStatuses] = useState<Map<string, FlightInfo>>(new Map());
+  const statusesRef = useRef(statuses);
+  useEffect(() => { statusesRef.current = statuses; }, [statuses]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initialFetchDone = useRef(false);
 
@@ -257,8 +259,8 @@ export function useFlightStatus(
 
     const results = await Promise.allSettled(
       flightEntries.map(async ({ activityId, flightIata, flightDate, depTime, arrTime }) => {
-        // Skip frozen flights — use cached status, don't hit API
-        const existing = statuses.get(activityId);
+        // Skip frozen flights — use ref for current value (avoids stale closure)
+        const existing = statusesRef.current.get(activityId);
         if (existing?.frozen) return null;
         if (isFlightFrozen(flightDate, arrTime, depTime, existing?.status)) {
           // Mark as frozen in cache so we never fetch again
