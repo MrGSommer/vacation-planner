@@ -116,7 +116,7 @@ export const ActivityModal: React.FC<Props> = ({
             {activity ? 'Bearbeiten' : 'Hinzufügen'}
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
-            <Input label="Titel" placeholder="z.B. Stadtführung" value={title} onChangeText={setTitle} />
+            <Input label="Titel" placeholder="z.B. Stadtführung" value={title} onChangeText={setTitle} autoFocus />
 
             <Text style={styles.fieldLabel}>Kategorie</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
