@@ -116,10 +116,16 @@ function renderTransportDetails(data: Record<string, any>): string {
   const parts: string[] = [];
 
   if (data.departure_station_name && data.arrival_station_name) {
-    parts.push(`<span class="detail-route">${escapeHtml(data.departure_station_name)} \u2192 ${escapeHtml(data.arrival_station_name)}</span>`);
+    const route = data.via_airport_name
+      ? `${escapeHtml(data.departure_station_name)} \u2192 ${escapeHtml(data.via_airport_name)} \u2192 ${escapeHtml(data.arrival_station_name)}`
+      : `${escapeHtml(data.departure_station_name)} \u2192 ${escapeHtml(data.arrival_station_name)}`;
+    parts.push(`<span class="detail-route">${route}</span>`);
   }
   if (data.reference_number) {
-    parts.push(`<span class="detail-ref">${escapeHtml(data.reference_number)}</span>`);
+    const flightRef = data.via_flight_number
+      ? `${escapeHtml(data.reference_number)} + ${escapeHtml(data.via_flight_number)}`
+      : escapeHtml(data.reference_number);
+    parts.push(`<span class="detail-ref">${flightRef}</span>`);
   }
   if (data.carrier) {
     parts.push(`<span class="detail-carrier">${escapeHtml(data.carrier)}</span>`);
@@ -182,7 +188,7 @@ function renderHeader(trip: Trip): string {
 
 function renderItinerary(data: PrintData): string {
   if (!data.days.length) return '';
-  let html = '<h2>Tagesplan</h2>';
+  let html = '<div class="print-section"><h2>Tagesplan</h2>';
 
   for (const day of data.days) {
     const dayNum = getDayNumber(data.trip.start_date, day.date);
@@ -234,12 +240,13 @@ function renderItinerary(data: PrintData): string {
     }
     html += '</div>';
   }
+  html += '</div>';
   return html;
 }
 
 function renderStops(data: PrintData): string {
   if (!data.stops.length) return '';
-  let html = '<h2>Stops &amp; Route</h2><ol class="stops-list">';
+  let html = '<div class="print-section"><h2>Stops &amp; Route</h2><ol class="stops-list">';
 
   for (const stop of data.stops) {
     const isOvernight = stop.type === 'overnight';
@@ -255,13 +262,13 @@ function renderStops(data: PrintData): string {
       ${stop.address ? `<br><span class="stop-addr">${escapeHtml(stop.address)}</span>` : ''}
     </li>`;
   }
-  html += '</ol>';
+  html += '</ol></div>';
   return html;
 }
 
 function renderBudget(data: PrintData): string {
   if (!data.budgetCategories.length) return '';
-  let html = '<h2>Budget</h2><table class="budget-table"><thead><tr><th>Kategorie</th><th>Budget</th></tr></thead><tbody>';
+  let html = '<div class="print-section"><h2>Budget</h2><table class="budget-table"><thead><tr><th>Kategorie</th><th>Budget</th></tr></thead><tbody>';
 
   let total = 0;
   for (let i = 0; i < data.budgetCategories.length; i++) {
@@ -279,7 +286,7 @@ function renderBudget(data: PrintData): string {
     html += `<tr class="total"><td><strong>Total</strong></td><td class="amount"><strong>${total} ${data.trip.currency}</strong></td></tr>`;
   }
 
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   return html;
 }
 
@@ -293,7 +300,7 @@ function renderPackingList(data: PrintData): string {
     grouped[cat].push(item);
   }
 
-  let html = '<h2>Packliste</h2>';
+  let html = '<div class="print-section"><h2>Packliste</h2>';
   for (const [category, items] of Object.entries(grouped)) {
     html += `<h3 class="pack-cat">${escapeHtml(category)}</h3><ul class="pack-list">`;
     for (const item of items) {
@@ -302,12 +309,13 @@ function renderPackingList(data: PrintData): string {
     }
     html += '</ul>';
   }
+  html += '</div>';
   return html;
 }
 
 function renderNotes(data: PrintData): string {
   if (!data.trip.notes) return '';
-  return `<h2>Notizen</h2><p>${escapeHtml(data.trip.notes)}</p>`;
+  return `<div class="print-section"><h2>Notizen</h2><p>${escapeHtml(data.trip.notes)}</p></div>`;
 }
 
 function writePrintHtml(win: Window, html: string): void {
@@ -396,11 +404,15 @@ export function buildPrintHtml(data: PrintData, options: PrintOptions): string {
     .footer-brand { color: #FF6B6B; font-weight: 600; }
     .footer-date { display: block; color: #bbb; margin-top: 2px; }
 
+    /* Page breaks: each section on its own page */
+    .print-section + .print-section { page-break-before: always; }
+
     @media print {
       body { padding: 0; }
       body::before { margin: 0 0 20px 0; }
       h2 { page-break-after: avoid; }
       .day { page-break-inside: avoid; }
+      .print-section + .print-section { page-break-before: always; }
     }
   </style>
 </head>
@@ -420,10 +432,37 @@ export async function printTripHtml(data: PrintData, options: PrintOptions): Pro
   const html = buildPrintHtml(data, options);
 
   if (Platform.OS === 'web') {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      writePrintHtml(printWindow, html);
-      printWindow.onload = () => printWindow.print();
+    // Use hidden iframe to avoid popup blockers in PWA/web
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-10000px';
+    iframe.style.left = '-10000px';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (iframeDoc && iframe.contentWindow) {
+      iframeDoc.open();
+      iframeDoc.write(html);
+      iframeDoc.close();
+
+      // Wait for content to render, then trigger print
+      setTimeout(() => {
+        try {
+          iframe.contentWindow!.focus();
+          iframe.contentWindow!.print();
+        } catch {
+          // Fallback: open in new window
+          const w = window.open('', '_blank');
+          if (w) { writePrintHtml(w, html); setTimeout(() => w.print(), 300); }
+        }
+        // Clean up iframe after print dialog closes
+        setTimeout(() => {
+          try { document.body.removeChild(iframe); } catch { /* already removed */ }
+        }, 2000);
+      }, 300);
     }
   } else {
     const { printAsync } = await import('expo-print');

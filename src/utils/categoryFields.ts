@@ -21,6 +21,8 @@ export const TRANSPORT_TYPE_FIELDS: Record<string, CategoryField[]> = {
     { key: 'arrival_station', label: 'Zielflughafen', type: 'airport', placeholder: 'z.B. Lissabon' },
     { key: 'departure_date', label: 'Abflugdatum', type: 'date', placeholder: 'YYYY-MM-DD', pair: 'left' },
     { key: 'reference_number', label: 'Flugnummer', type: 'text', placeholder: 'z.B. LX1234 (optional)', pair: 'right' },
+    { key: 'via_airport', label: 'Zwischenstopp', type: 'airport', placeholder: 'z.B. Istanbul (optional)' },
+    { key: 'via_flight_number', label: 'Anschlussflug', type: 'text', placeholder: 'z.B. TK1890 (optional)', secondary: true },
     { key: 'carrier', label: 'Airline', type: 'text', placeholder: 'z.B. Swiss, Lufthansa', secondary: true },
     { key: 'departure_time', label: 'Abflugzeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'left' },
     { key: 'arrival_time', label: 'Ankunftszeit', type: 'time', placeholder: 'HH:MM', secondary: true, pair: 'right' },
@@ -154,9 +156,17 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
   switch (category) {
     case 'transport': {
       const parts: string[] = [];
-      if (data.reference_number) parts.push(data.reference_number);
+      if (data.reference_number) {
+        const flightNums = data.via_flight_number
+          ? `${data.reference_number} + ${data.via_flight_number}`
+          : data.reference_number;
+        parts.push(flightNums);
+      }
       if (data.departure_station_name && data.arrival_station_name) {
-        parts.push(`${data.departure_station_name} → ${data.arrival_station_name}`);
+        const route = data.via_airport_name
+          ? `${data.departure_station_name} → ${data.via_airport_name} → ${data.arrival_station_name}`
+          : `${data.departure_station_name} → ${data.arrival_station_name}`;
+        parts.push(route);
       }
       if (data.departure_time && data.arrival_time) {
         parts.push(`${data.departure_time}–${data.arrival_time}`);

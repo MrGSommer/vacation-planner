@@ -188,6 +188,23 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
       );
     }
 
+    // Multi-leg route display after via_airport
+    if (fieldKey === 'via_airport' && isFlightTransport && data.via_airport && data.departure_station && data.arrival_station) {
+      widgets.push(
+        <MultiLegRouteDisplay
+          key="multi-leg-route"
+          depIata={data.departure_station}
+          depName={data.departure_station_name || data.departure_station}
+          viaIata={data.via_airport}
+          viaName={data.via_airport_name || data.via_airport}
+          arrIata={data.arrival_station}
+          arrName={data.arrival_station_name || data.arrival_station}
+          flightNumber={data.reference_number}
+          viaFlightNumber={data.via_flight_number}
+        />,
+      );
+    }
+
     // Flight lookup widget after reference_number
     if (fieldKey === 'reference_number' && isFlightTransport) {
       widgets.push(
@@ -419,6 +436,164 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, f
   );
 };
 
+// --- Multi-Leg Route Display ---
+
+interface MultiLegRouteDisplayProps {
+  depIata: string;
+  depName: string;
+  viaIata: string;
+  viaName: string;
+  arrIata: string;
+  arrName: string;
+  flightNumber?: string;
+  viaFlightNumber?: string;
+}
+
+const MultiLegRouteDisplay: React.FC<MultiLegRouteDisplayProps> = ({
+  depIata, depName, viaIata, viaName, arrIata, arrName, flightNumber, viaFlightNumber,
+}) => {
+  // Extract short city name (strip IATA suffix like "Zürich (ZRH)" → "Zürich")
+  const shortName = (name: string) => name.replace(/\s*\([A-Z]{3}\)\s*$/, '');
+
+  return (
+    <View style={multiLegStyles.container}>
+      <Text style={multiLegStyles.title}>Mehrstreckenflug</Text>
+      <View style={multiLegStyles.route}>
+        {/* Leg 1 */}
+        <View style={multiLegStyles.leg}>
+          {flightNumber && <Text style={multiLegStyles.flightBadge}>{flightNumber}</Text>}
+          <View style={multiLegStyles.legRoute}>
+            <View style={multiLegStyles.legAirport}>
+              <Text style={multiLegStyles.iataCode}>{depIata}</Text>
+              <Text style={multiLegStyles.cityName} numberOfLines={1}>{shortName(depName)}</Text>
+            </View>
+            <View style={multiLegStyles.legArrow}>
+              <View style={multiLegStyles.legLine} />
+              <Text style={multiLegStyles.arrowIcon}>{'✈'}</Text>
+            </View>
+            <View style={multiLegStyles.legAirport}>
+              <Text style={multiLegStyles.iataCode}>{viaIata}</Text>
+              <Text style={multiLegStyles.cityName} numberOfLines={1}>{shortName(viaName)}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Stopover marker */}
+        <View style={multiLegStyles.stopover}>
+          <View style={multiLegStyles.stopoverDot} />
+          <Text style={multiLegStyles.stopoverLabel}>Umstieg</Text>
+        </View>
+
+        {/* Leg 2 */}
+        <View style={multiLegStyles.leg}>
+          {viaFlightNumber && <Text style={multiLegStyles.flightBadge}>{viaFlightNumber}</Text>}
+          <View style={multiLegStyles.legRoute}>
+            <View style={multiLegStyles.legAirport}>
+              <Text style={multiLegStyles.iataCode}>{viaIata}</Text>
+              <Text style={multiLegStyles.cityName} numberOfLines={1}>{shortName(viaName)}</Text>
+            </View>
+            <View style={multiLegStyles.legArrow}>
+              <View style={multiLegStyles.legLine} />
+              <Text style={multiLegStyles.arrowIcon}>{'✈'}</Text>
+            </View>
+            <View style={multiLegStyles.legAirport}>
+              <Text style={multiLegStyles.iataCode}>{arrIata}</Text>
+              <Text style={multiLegStyles.cityName} numberOfLines={1}>{shortName(arrName)}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const multiLegStyles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.primary + '08',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary + '25',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  title: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  route: {
+    gap: spacing.xs,
+  },
+  leg: {
+    gap: 4,
+  },
+  flightBadge: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.primary + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+  },
+  legRoute: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legAirport: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  iataCode: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  cityName: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  legArrow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  legLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.primary + '40',
+  },
+  arrowIcon: {
+    fontSize: 14,
+    color: colors.primary,
+    marginLeft: 2,
+  },
+  stopover: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: 2,
+  },
+  stopoverDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.warning || '#F0AD4E',
+  },
+  stopoverLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+});
+
 // --- Route Search Widget ---
 
 interface RouteSearchWidgetProps {
@@ -444,6 +619,7 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({ depIata, arrIata,
   const [routes, setRoutes] = useState<RouteFlightInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [dayHint, setDayHint] = useState<string | null>(null);
   const lastSearchRef = useRef('');
 
   // Reset when airports or date change
@@ -453,6 +629,7 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({ depIata, arrIata,
       setRoutes([]);
       setError(null);
       setSearched(false);
+      setDayHint(null);
     }
   }, [depIata, arrIata, departureDate]);
 
@@ -463,6 +640,7 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({ depIata, arrIata,
     setLoading(true);
     setError(null);
     setRoutes([]);
+    setDayHint(null);
     try {
       const result = await searchFlightsByRoute(depIata, arrIata);
       // Filter by operating day of week
@@ -473,7 +651,9 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({ depIata, arrIata,
       if (filtered.length > 0) {
         setRoutes(filtered);
       } else if (result.length > 0) {
-        setError(`Keine Flüge am ${DAY_NAMES[parseInt(dayNum)]} auf dieser Route`);
+        // No flights on this specific day — show ALL flights with a hint
+        setRoutes(result);
+        setDayHint(`Keine Direktflüge am ${DAY_NAMES[parseInt(dayNum)]} gefunden — alle Flüge auf dieser Route:`);
       } else {
         setError('Keine Flüge auf dieser Route gefunden');
       }
@@ -525,7 +705,8 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({ depIata, arrIata,
 
   return (
     <View style={routeStyles.container}>
-      <Text style={routeStyles.resultHeader}>{routes.length} Flüge gefunden</Text>
+      {dayHint && <Text style={routeStyles.dayHintText}>{dayHint}</Text>}
+      <Text style={routeStyles.resultHeader}>{routes.length} Direktflüge gefunden</Text>
       <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled>
         {routes.map((route) => {
           const depTime = route.dep_time?.substring(0, 5) || '?';
@@ -604,6 +785,7 @@ const routeStyles = StyleSheet.create({
   timeText: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginTop: 4 },
   durationText: { ...typography.caption, color: colors.textSecondary, marginTop: 4, marginLeft: spacing.sm },
   daysText: { ...typography.caption, color: colors.textLight, marginTop: 2 },
+  dayHintText: { ...typography.bodySmall, color: colors.warning || '#F0AD4E', fontStyle: 'italic', marginBottom: spacing.sm },
 });
 
 const flightStyles = StyleSheet.create({
