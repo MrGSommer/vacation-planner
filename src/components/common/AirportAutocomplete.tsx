@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
-import { searchAirports, Airport } from '../../data/airports';
+import { searchAirports, Airport, getCountryName } from '../../data/airports';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 
@@ -94,7 +94,7 @@ export const AirportAutocomplete: React.FC<Props> = ({ label, placeholder, value
                   {airport.city}
                 </div>
                 <div style={{ fontSize: 12, color: colors.textLight, marginTop: 1, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {airport.name}, {airport.country}
+                  {airport.name}, {getCountryName(airport.country)}
                 </div>
               </div>
             </div>
@@ -121,7 +121,7 @@ export const AirportAutocomplete: React.FC<Props> = ({ label, placeholder, value
                 <Text style={dropStyles.iataCode}>{airport.iata}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={dropStyles.mainText} numberOfLines={1}>{airport.city}</Text>
-                  <Text style={dropStyles.subText} numberOfLines={1}>{airport.name}, {airport.country}</Text>
+                  <Text style={dropStyles.subText} numberOfLines={1}>{airport.name}, {getCountryName(airport.country)}</Text>
                 </View>
               </View>
             </TouchableOpacity>

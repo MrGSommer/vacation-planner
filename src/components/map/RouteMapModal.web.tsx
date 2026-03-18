@@ -12,9 +12,48 @@ interface Props {
   stops: Activity[];
   travelInfo: Map<string, DirectionsResult>;
   isRoundTrip?: boolean;
+  transportActivities?: Activity[];
 }
 
-export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip }) => {
+function getStopDate(stop: Activity): string | undefined {
+  const cd = stop.category_data || {};
+  if (stop.category === 'hotel') return cd.check_in_date;
+  return cd.date;
+}
+
+function findTransportForSegment(
+  prevStop: Activity,
+  nextStop: Activity,
+  transportActivities: Activity[],
+): Activity | null {
+  const prevDate = getStopDate(prevStop) || '';
+  const nextDate = getStopDate(nextStop) || '9999-12-31';
+  for (const t of transportActivities) {
+    const tDate = t.category_data?.departure_date;
+    if (!tDate) continue;
+    if (tDate >= prevDate && tDate <= nextDate) return t;
+  }
+  return null;
+}
+
+function getTransportPolylineOptions(transportType: string): google.maps.PolylineOptions {
+  switch (transportType) {
+    case 'Flug':
+      return { strokeColor: '#4A90D9', strokeWeight: 3, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#4A90D9' }, offset: '0', repeat: '15px' }] };
+    case 'Zug':
+      return { strokeColor: '#27AE60', strokeWeight: 3, strokeOpacity: 0.8 };
+    case 'Bus':
+      return { strokeColor: '#E67E22', strokeWeight: 2, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.7, scale: 2, strokeColor: '#E67E22' }, offset: '0', repeat: '10px' }] };
+    case 'Fähre':
+      return { strokeColor: '#4ECDC4', strokeWeight: 3, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#4ECDC4' }, offset: '0', repeat: '15px' }] };
+    case 'Taxi':
+      return { strokeColor: '#F1C40F', strokeWeight: 2, strokeOpacity: 0.7 };
+    default: // Auto, etc.
+      return { strokeColor: '#636E72', strokeWeight: 2, strokeOpacity: 0.6 };
+  }
+}
+
+export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip, transportActivities }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -150,16 +189,46 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
               });
             }
           } catch {
-            // Fallback: simple polyline
-            const path = validStops.map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
-            if (isRoundTrip) path.push({ lat: validStops[0].location_lat!, lng: validStops[0].location_lng! });
-            new google.maps.Polyline({
-              map,
-              path,
-              strokeColor: colors.primary,
-              strokeWeight: 3,
-              strokeOpacity: 0.6,
-            });
+            // Fallback: simple polylines — transport-type-aware if available
+            if (transportActivities && transportActivities.length > 0) {
+              for (let i = 1; i < validStops.length; i++) {
+                const prev = validStops[i - 1];
+                const curr = validStops[i];
+                const transport = findTransportForSegment(prev, curr, transportActivities);
+                const transportType = transport?.category_data?.transport_type || '';
+                const opts = transportType ? getTransportPolylineOptions(transportType) : { strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6 };
+                new google.maps.Polyline({
+                  map,
+                  path: [
+                    { lat: prev.location_lat!, lng: prev.location_lng! },
+                    { lat: curr.location_lat!, lng: curr.location_lng! },
+                  ],
+                  ...opts,
+                });
+              }
+              if (isRoundTrip) {
+                new google.maps.Polyline({
+                  map,
+                  path: [
+                    { lat: validStops[validStops.length - 1].location_lat!, lng: validStops[validStops.length - 1].location_lng! },
+                    { lat: validStops[0].location_lat!, lng: validStops[0].location_lng! },
+                  ],
+                  strokeColor: colors.primary,
+                  strokeWeight: 3,
+                  strokeOpacity: 0.6,
+                });
+              }
+            } else {
+              const path = validStops.map(s => ({ lat: s.location_lat!, lng: s.location_lng! }));
+              if (isRoundTrip) path.push({ lat: validStops[0].location_lat!, lng: validStops[0].location_lng! });
+              new google.maps.Polyline({
+                map,
+                path,
+                strokeColor: colors.primary,
+                strokeWeight: 3,
+                strokeOpacity: 0.6,
+              });
+            }
           }
         }
       } catch (e) {
@@ -170,7 +239,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
     // Small delay to ensure DOM is ready
     const timer = setTimeout(initMap, 100);
     return () => clearTimeout(timer);
-  }, [visible, stops]);
+  }, [visible, stops, transportActivities]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

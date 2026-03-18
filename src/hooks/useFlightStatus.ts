@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { lookupFlight, FlightInfo, isValidFlightNumber } from '../utils/flightLookup';
+import { getFlightLegs } from '../utils/categoryFields';
 import { Activity } from '../types/database';
 
 /**
@@ -118,6 +119,37 @@ export function getFlightNumber(activity: Activity): string | null {
 }
 
 /**
+ * Extract ALL flight numbers from a multi-leg flight activity.
+ * Returns an array of valid, normalized flight numbers (one per leg).
+ * Falls back to reference_number / via_flight_number for old data without flight_legs.
+ */
+export function getFlightNumbers(activity: Activity): string[] {
+  if (activity.category !== 'transport') return [];
+  const catData = activity.category_data || {};
+  if (catData.transport_type !== 'Flug') return [];
+
+  const legs = getFlightLegs(catData);
+  if (legs.length > 0) {
+    return legs
+      .map(leg => leg.flight_number)
+      .filter((fn): fn is string => typeof fn === 'string' && isValidFlightNumber(fn))
+      .map(fn => fn.toUpperCase().replace(/\s/g, ''));
+  }
+
+  // Backward compat: no flight_legs, check flat fields
+  const numbers: string[] = [];
+  const ref = catData.flight_iata || catData.reference_number;
+  if (ref && typeof ref === 'string' && isValidFlightNumber(ref)) {
+    numbers.push(ref.toUpperCase().replace(/\s/g, ''));
+  }
+  const via = catData.via_flight_number;
+  if (via && typeof via === 'string' && isValidFlightNumber(via)) {
+    numbers.push(via.toUpperCase().replace(/\s/g, ''));
+  }
+  return numbers;
+}
+
+/**
  * Check if an activity is a verified flight (for UI display purposes)
  */
 export function isVerifiedFlight(activity: Activity): boolean {
@@ -155,19 +187,39 @@ export function useFlightStatus(
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initialFetchDone = useRef(false);
 
-  // Extract flight entries with stable key
+  // Extract flight entries with stable key — one entry per leg
   const flightEntries: FlightEntry[] = useMemo(() => {
     const entries: FlightEntry[] = [];
     for (const act of activities) {
-      const fn = getFlightNumber(act);
-      if (fn) {
-        const catData = act.category_data || {};
-        entries.push({
-          activityId: act.id,
-          flightIata: fn,
-          flightDate: catData.departure_date || undefined,
-          depTime: catData.departure_time || undefined,
-          arrTime: catData.arrival_time || undefined,
+      const flightNums = getFlightNumbers(act);
+      if (flightNums.length === 0) continue;
+
+      const catData = act.category_data || {};
+      const legs = getFlightLegs(catData);
+
+      if (legs.length > 0) {
+        // Multi-leg: each leg gets its own entry with leg-specific dates/times
+        legs.forEach((leg, i) => {
+          const fn = leg.flight_number;
+          if (!fn || !isValidFlightNumber(fn)) return;
+          entries.push({
+            activityId: `${act.id}_leg${i}`,
+            flightIata: fn.toUpperCase().replace(/\s/g, ''),
+            flightDate: leg.dep_date || catData.departure_date || undefined,
+            depTime: leg.dep_time || undefined,
+            arrTime: leg.arr_time || undefined,
+          });
+        });
+      } else {
+        // Backward compat: flat fields, one entry per flight number
+        flightNums.forEach((fn, i) => {
+          entries.push({
+            activityId: i === 0 ? act.id : `${act.id}_leg${i}`,
+            flightIata: fn,
+            flightDate: catData.departure_date || undefined,
+            depTime: i === 0 ? (catData.departure_time || undefined) : undefined,
+            arrTime: i === 0 ? (catData.arrival_time || undefined) : undefined,
+          });
         });
       }
     }

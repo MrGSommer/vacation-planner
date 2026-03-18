@@ -7,7 +7,7 @@ import { FlightInfo } from '../../utils/flightLookup';
 import { getFlightStatusLabel } from '../../hooks/useFlightStatus';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
-import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields } from '../../utils/categoryFields';
+import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields, getFlightLegs, FlightLeg } from '../../utils/categoryFields';
 import { DocumentPicker } from './DocumentPicker';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
@@ -223,6 +223,68 @@ export const ActivityViewModal: React.FC<Props> = ({
               );
             })()}
 
+            {/* Multi-leg flight route */}
+            {catData.flight_legs?.length >= 2 && (() => {
+              const legs: FlightLeg[] = getFlightLegs(catData);
+              if (legs.length < 2) return null;
+              return (
+                <View style={styles.flightSection}>
+                  <Text style={styles.sectionLabel}>Flugroute</Text>
+                  {legs.map((leg, i) => {
+                    // Compute layover duration between legs
+                    let layover: string | null = null;
+                    if (i > 0) {
+                      const prevLeg = legs[i - 1];
+                      if (prevLeg.arr_date && prevLeg.arr_time && leg.dep_date && leg.dep_time) {
+                        const arrDt = new Date(`${prevLeg.arr_date}T${prevLeg.arr_time}`);
+                        const depDt = new Date(`${leg.dep_date}T${leg.dep_time}`);
+                        const diffMin = Math.round((depDt.getTime() - arrDt.getTime()) / 60000);
+                        if (diffMin > 0) {
+                          const h = Math.floor(diffMin / 60);
+                          const m = diffMin % 60;
+                          layover = h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} Min.`;
+                        }
+                      }
+                    }
+                    return (
+                      <React.Fragment key={i}>
+                        {i > 0 && (
+                          <View style={styles.legLayover}>
+                            <View style={styles.legLayoverLine} />
+                            <Text style={styles.legLayoverText}>
+                              Umstieg{layover ? ` · ${layover}` : ''}
+                            </Text>
+                            <View style={styles.legLayoverLine} />
+                          </View>
+                        )}
+                        <View style={styles.legRow}>
+                          <View style={styles.legAirports}>
+                            <Text style={styles.flightCode}>{leg.dep_iata}</Text>
+                            <View style={styles.flightArrow}>
+                              <Icon name="airplane" size={iconSize.xs} color={colors.secondary} />
+                            </View>
+                            <Text style={styles.flightCode}>{leg.arr_iata}</Text>
+                          </View>
+                          <View style={styles.legDetails}>
+                            {leg.flight_number && (
+                              <View style={[styles.flightBadge, { backgroundColor: colors.primary + '15' }]}>
+                                <Text style={[styles.flightBadgeText, { color: colors.primary }]}>{leg.flight_number}</Text>
+                              </View>
+                            )}
+                            {(leg.dep_time || leg.arr_time) && (
+                              <Text style={styles.legTimes}>
+                                {leg.dep_time || '—'} → {leg.arr_time || '—'}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
             {/* Category details */}
             {catFields.length > 0 && (
               <View style={styles.detailsSection}>
@@ -382,5 +444,42 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     fontWeight: '600',
     color: colors.primary,
+  },
+  legRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+  legAirports: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  legDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  legTimes: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  legLayover: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  legLayoverLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  legLayoverText: {
+    ...typography.caption,
+    color: colors.textLight,
+    fontWeight: '600',
   },
 });

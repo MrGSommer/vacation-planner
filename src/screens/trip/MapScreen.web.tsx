@@ -36,6 +36,23 @@ interface PreviewPlace {
   isCustomPin: boolean;
 }
 
+function getTransportPolylineOptions(transportType: string): google.maps.PolylineOptions {
+  switch (transportType) {
+    case 'Flug':
+      return { strokeColor: '#4A90D9', strokeWeight: 3, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#4A90D9' }, offset: '0', repeat: '15px' }] };
+    case 'Zug':
+      return { strokeColor: '#27AE60', strokeWeight: 3, strokeOpacity: 0.8 };
+    case 'Bus':
+      return { strokeColor: '#E67E22', strokeWeight: 2, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.7, scale: 2, strokeColor: '#E67E22' }, offset: '0', repeat: '10px' }] };
+    case 'Fähre':
+      return { strokeColor: '#4ECDC4', strokeWeight: 3, strokeOpacity: 0, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: '#4ECDC4' }, offset: '0', repeat: '15px' }] };
+    case 'Taxi':
+      return { strokeColor: '#F1C40F', strokeWeight: 2, strokeOpacity: 0.7 };
+    default: // Auto, etc.
+      return { strokeColor: '#636E72', strokeWeight: 2, strokeOpacity: 0.6 };
+  }
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -371,6 +388,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       // Transport routes
       a.filter((act: Activity) => act.category === 'transport').forEach((act: Activity) => {
         const catData = act.category_data || {};
+        const transportType = catData.transport_type || 'Auto';
         const depLat = catData.departure_station_lat;
         const depLng = catData.departure_station_lng;
         const arrLat = catData.arrival_station_lat;
@@ -410,17 +428,14 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           const arrInfo = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
           arrMarker.addEventListener('gmp-click', () => openInfo(arrInfo, arrMarker));
 
+          // Build polyline path (dep → arr)
+          const path: { lat: number; lng: number }[] = [depPos, arrPos];
+
+          const polyOpts = getTransportPolylineOptions(transportType);
           new google.maps.Polyline({
-            path: [depPos, arrPos],
+            path,
             map,
-            strokeColor: CATEGORY_COLORS.transport,
-            strokeWeight: 3,
-            strokeOpacity: 0,
-            icons: [{
-              icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3, strokeColor: CATEGORY_COLORS.transport },
-              offset: '0',
-              repeat: '15px',
-            }],
+            ...polyOpts,
           });
         }
       });

@@ -12,6 +12,51 @@ interface Props {
   stops: Activity[];
   travelInfo: Map<string, DirectionsResult>;
   isRoundTrip?: boolean;
+  transportActivities?: Activity[];
+}
+
+const TRANSPORT_COLORS: Record<string, string> = {
+  Flug: '#4A90D9',
+  Zug: '#27AE60',
+  Bus: '#E67E22',
+  Auto: '#636E72',
+  'Fähre': '#4ECDC4',
+  Taxi: '#F1C40F',
+};
+
+const TRANSPORT_DASH: Record<string, number[] | undefined> = {
+  Flug: [10, 5],
+  'Fähre': [10, 5],
+};
+
+function getTransportColor(transportType: string): string {
+  return TRANSPORT_COLORS[transportType] || TRANSPORT_COLORS.Auto;
+}
+
+function getTransportDash(transportType: string): number[] | undefined {
+  return TRANSPORT_DASH[transportType];
+}
+
+/** Find the transport activity between two consecutive stops by date */
+function findTransportForSegment(
+  prevStop: Activity,
+  nextStop: Activity,
+  transportActivities: Activity[],
+): Activity | null {
+  const prevDate = getStopDate(prevStop) || '';
+  const nextDate = getStopDate(nextStop) || '9999-12-31';
+  for (const t of transportActivities) {
+    const tDate = t.category_data?.departure_date;
+    if (!tDate) continue;
+    if (tDate >= prevDate && tDate <= nextDate) return t;
+  }
+  return null;
+}
+
+function getStopDate(stop: Activity): string | undefined {
+  const cd = stop.category_data || {};
+  if (stop.category === 'hotel') return cd.check_in_date;
+  return cd.date;
 }
 
 const formatDE = (dateStr: string) => {
@@ -20,7 +65,7 @@ const formatDE = (dateStr: string) => {
   return `${d}.${m}.${y}`;
 };
 
-export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip }) => {
+export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travelInfo, isRoundTrip, transportActivities }) => {
   const mapRef = useRef<MapView>(null);
   const validStops = stops.filter(s => s.location_lat && s.location_lng);
 
@@ -91,7 +136,40 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
                 );
               })}
 
-              {validStops.length >= 2 && (
+              {validStops.length >= 2 && transportActivities && transportActivities.length > 0 ? (
+                <>
+                  {validStops.map((stop, i) => {
+                    if (i === 0) return null;
+                    const prev = validStops[i - 1];
+                    const transport = findTransportForSegment(prev, stop, transportActivities);
+                    const transportType = transport?.category_data?.transport_type || '';
+                    const color = transportType ? getTransportColor(transportType) : colors.primary;
+                    const dash = transportType ? getTransportDash(transportType) : undefined;
+                    return (
+                      <Polyline
+                        key={`seg-${i}`}
+                        coordinates={[
+                          { latitude: prev.location_lat!, longitude: prev.location_lng! },
+                          { latitude: stop.location_lat!, longitude: stop.location_lng! },
+                        ]}
+                        strokeColor={color}
+                        strokeWidth={3}
+                        lineDashPattern={dash}
+                      />
+                    );
+                  })}
+                  {isRoundTrip && (
+                    <Polyline
+                      coordinates={[
+                        { latitude: validStops[validStops.length - 1].location_lat!, longitude: validStops[validStops.length - 1].location_lng! },
+                        { latitude: validStops[0].location_lat!, longitude: validStops[0].location_lng! },
+                      ]}
+                      strokeColor={colors.primary}
+                      strokeWidth={3}
+                    />
+                  )}
+                </>
+              ) : validStops.length >= 2 ? (
                 <Polyline
                   coordinates={[
                     ...validStops.map(s => ({ latitude: s.location_lat!, longitude: s.location_lng! })),
@@ -100,7 +178,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
                   strokeColor={colors.primary}
                   strokeWidth={3}
                 />
-              )}
+              ) : null}
             </MapView>
           )}
         </View>

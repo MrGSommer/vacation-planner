@@ -8,6 +8,88 @@ export interface CategoryField {
   secondary?: boolean;
 }
 
+// --- Multi-Leg Flight Support ---
+
+export interface FlightLeg {
+  dep_iata: string;
+  dep_name: string;
+  arr_iata: string;
+  arr_name: string;
+  flight_number?: string;
+  carrier?: string;
+  dep_date?: string;
+  dep_time?: string;
+  arr_date?: string;
+  arr_time?: string;
+  flight_verified?: boolean;
+}
+
+/**
+ * Normalize any flight category_data into a FlightLeg[] array.
+ * Handles:
+ * - New format: flight_legs array already present
+ * - Old format with via_airport: synthesize 2 legs
+ * - Simple dep/arr only: synthesize 1 leg
+ */
+export function getFlightLegs(data: Record<string, any>): FlightLeg[] {
+  if (!data) return [];
+
+  // New format
+  if (Array.isArray(data.flight_legs) && data.flight_legs.length > 0) {
+    return data.flight_legs;
+  }
+
+  const depIata = data.departure_station;
+  const depName = data.departure_station_name || depIata || '';
+  const arrIata = data.arrival_station;
+  const arrName = data.arrival_station_name || arrIata || '';
+
+  if (!depIata && !arrIata) return [];
+
+  // Old format with via_airport → 2 legs
+  if (data.via_airport) {
+    const viaIata = data.via_airport;
+    const viaName = data.via_airport_name || viaIata;
+    return [
+      {
+        dep_iata: depIata || '',
+        dep_name: depName,
+        arr_iata: viaIata,
+        arr_name: viaName,
+        flight_number: data.reference_number || undefined,
+        carrier: data.carrier || undefined,
+        dep_date: data.departure_date || undefined,
+        dep_time: data.departure_time || undefined,
+        flight_verified: data.flight_verified || false,
+      },
+      {
+        dep_iata: viaIata,
+        dep_name: viaName,
+        arr_iata: arrIata || '',
+        arr_name: arrName,
+        flight_number: data.via_flight_number || undefined,
+        arr_date: data.arrival_date || undefined,
+        arr_time: data.arrival_time || undefined,
+      },
+    ];
+  }
+
+  // Simple single leg
+  return [{
+    dep_iata: depIata || '',
+    dep_name: depName,
+    arr_iata: arrIata || '',
+    arr_name: arrName,
+    flight_number: data.reference_number || undefined,
+    carrier: data.carrier || undefined,
+    dep_date: data.departure_date || undefined,
+    dep_time: data.departure_time || undefined,
+    arr_date: data.arrival_date || undefined,
+    arr_time: data.arrival_time || undefined,
+    flight_verified: data.flight_verified || false,
+  }];
+}
+
 // Transport: only transport_type selector initially — remaining fields come from getTransportFields()
 export const TRANSPORT_TYPE_FIELD: CategoryField = {
   key: 'transport_type', label: 'Transportmittel', type: 'select',
@@ -156,18 +238,31 @@ export function formatCategoryDetail(category: string, data: Record<string, any>
   switch (category) {
     case 'transport': {
       const parts: string[] = [];
-      if (data.reference_number) {
-        const flightNums = data.via_flight_number
-          ? `${data.reference_number} + ${data.via_flight_number}`
-          : data.reference_number;
-        parts.push(flightNums);
+      const legs = data.transport_type === 'Flug' ? getFlightLegs(data) : [];
+
+      if (legs.length >= 2) {
+        // Multi-leg: show all flight numbers joined
+        const flightNums = legs
+          .map(l => l.flight_number)
+          .filter(Boolean)
+          .join(' + ');
+        if (flightNums) parts.push(flightNums);
+
+        // Route: DEP → VIA1 → VIA2 → ARR
+        const routeParts = [legs[0].dep_name];
+        for (const leg of legs) routeParts.push(leg.arr_name);
+        const shortRoute = routeParts.map(n => n.replace(/\s*\([A-Z]{3}\)\s*$/, '')).join(' → ');
+        parts.push(shortRoute);
+      } else {
+        // Single leg or non-flight transport
+        if (data.reference_number) {
+          parts.push(data.reference_number);
+        }
+        if (data.departure_station_name && data.arrival_station_name) {
+          parts.push(`${data.departure_station_name} → ${data.arrival_station_name}`);
+        }
       }
-      if (data.departure_station_name && data.arrival_station_name) {
-        const route = data.via_airport_name
-          ? `${data.departure_station_name} → ${data.via_airport_name} → ${data.arrival_station_name}`
-          : `${data.departure_station_name} → ${data.arrival_station_name}`;
-        parts.push(route);
-      }
+
       if (data.departure_time && data.arrival_time) {
         parts.push(`${data.departure_time}–${data.arrival_time}`);
       } else if (data.departure_time) {

@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { Activity, ItineraryDay, TripStop, BudgetCategory, PackingItem, Trip } from '../types/database';
 import { CollaboratorWithProfile } from '../api/invitations';
 import { getDeviceLocale } from './dateHelpers';
-import { CATEGORY_COLORS } from './categoryFields';
+import { CATEGORY_COLORS, getFlightLegs } from './categoryFields';
 import { getDisplayName } from './profileHelpers';
 import { WeatherDay } from '../hooks/useWeather';
 
@@ -120,6 +120,34 @@ function getWeatherTextIcon(code: number): string {
 
 function renderTransportDetails(data: Record<string, any>): string {
   const type = data.transport_type || 'Transport';
+
+  // Multi-leg flight support
+  if (type === 'Flug') {
+    const legs = getFlightLegs(data);
+    if (legs.length >= 2) {
+      const legHtml = legs.map(leg => {
+        const legParts: string[] = [];
+        if (leg.flight_number) legParts.push(escapeHtml(leg.flight_number));
+        const route = `${escapeHtml(leg.dep_name)} (${escapeHtml(leg.dep_iata)}) \u2192 ${escapeHtml(leg.arr_name)} (${escapeHtml(leg.arr_iata)})`;
+        legParts.push(route);
+        if (leg.dep_time) {
+          const timeStr = leg.arr_time
+            ? `${formatTime(leg.dep_time)}\u2013${formatTime(leg.arr_time)}`
+            : formatTime(leg.dep_time);
+          legParts.push(timeStr);
+        }
+        return `<div class="leg">\u2708 ${legParts.join(' \u00B7 ')}</div>`;
+      }).join('\n    ');
+
+      return `<div class="transport-details">
+    <span class="detail-type">${escapeHtml(type)}</span>
+    <div class="multi-leg-route">
+    ${legHtml}
+    </div>
+  </div>`;
+    }
+  }
+
   const parts: string[] = [];
 
   if (data.departure_station_name && data.arrival_station_name) {

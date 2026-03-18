@@ -46,6 +46,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   usePresence(tripId, 'Stopps');
   const [showAiModal, setShowAiModal] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [transportActivities, setTransportActivities] = useState<Activity[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [addTransportDefaults, setAddTransportDefaults] = useState<Record<string, any> | null>(null);
 
   // Travel mode picker & route menu
   const [showTravelModePicker, setShowTravelModePicker] = useState<string | null>(null);
@@ -68,9 +70,46 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
     switch (category) {
       case 'hotel': return catData.check_in_date;
+      case 'transport': return catData.departure_date;
       case 'stop': return catData.date;
       default: return catData.date;
     }
+  };
+
+  // Extract time for intra-day sorting (HH:MM format or empty)
+  const getActivityTime = (activity: Activity): string => {
+    const cd = activity.category_data || {};
+    if (activity.category === 'hotel') return cd.check_in_time || '23:59'; // Hotels always last within a day
+    if (activity.category === 'transport') return cd.departure_time || '';
+    return activity.start_time || cd.time || '';
+  };
+
+  // Sort priority within the same day: stops/transport first, hotels last
+  const getCategorySortWeight = (category: string): number => {
+    return category === 'hotel' ? 1 : 0;
+  };
+
+  // Transport type → icon name mapping
+  const TRANSPORT_ICONS: Record<string, string> = {
+    Flug: 'airplane-outline',
+    Zug: 'train-outline',
+    Bus: 'bus-outline',
+    Auto: 'car-outline',
+    'Fähre': 'boat-outline',
+    Taxi: 'car-sport-outline',
+  };
+
+  /** Find a matching transport activity between two adjacent stops */
+  const findTransportBetween = (prevStop: Activity, nextStop: Activity): Activity | null => {
+    const prevDate = getActivityDate(prevStop.category, prevStop.category_data || {}) || '';
+    const nextDate = getActivityDate(nextStop.category, nextStop.category_data || {}) || '9999-12-31';
+    for (const t of transportActivities) {
+      const tDate = t.category_data?.departure_date;
+      if (!tDate) continue;
+      // Transport departure date falls between prev and next stop dates
+      if (tDate >= prevDate && tDate <= nextDate) return t;
+    }
+    return null;
   };
 
   const isActivityToday = (activity: Activity): boolean => {
@@ -99,14 +138,38 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       setTrip(t);
       setDays(fetchedDays);
 
+      // Separate stops (hotel/stop) and transport activities
+      // Sort: 1) by date, 2) hotels last within same day, 3) by time
       const filtered = acts
         .filter(a => a.category === 'hotel' || a.category === 'stop')
         .sort((a, b) => {
           const dateA = getActivityDate(a.category, a.category_data || {}) || '9999-12-31';
           const dateB = getActivityDate(b.category, b.category_data || {}) || '9999-12-31';
-          return dateA.localeCompare(dateB);
+          if (dateA !== dateB) return dateA.localeCompare(dateB);
+          // Same date: hotels go last
+          const weightA = getCategorySortWeight(a.category);
+          const weightB = getCategorySortWeight(b.category);
+          if (weightA !== weightB) return weightA - weightB;
+          // Same date + same category weight: sort by time
+          const timeA = getActivityTime(a);
+          const timeB = getActivityTime(b);
+          return timeA.localeCompare(timeB);
         });
       setActivities(filtered);
+
+      // Extract transport activities for connection badges
+      // Sort by date + time for correct matching order
+      const transports = acts
+        .filter(a => a.category === 'transport')
+        .sort((a, b) => {
+          const dateA = a.category_data?.departure_date || '9999-12-31';
+          const dateB = b.category_data?.departure_date || '9999-12-31';
+          if (dateA !== dateB) return dateA.localeCompare(dateB);
+          const timeA = a.category_data?.departure_time || '';
+          const timeB = b.category_data?.departure_time || '';
+          return timeA.localeCompare(timeB);
+        });
+      setTransportActivities(transports);
 
       // Load cached travel info from category_data
       const cached = new Map<string, DirectionsResult>();
@@ -410,106 +473,163 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
             onAction={readonlyMode ? undefined : openAddModal}
           />
         ) : (
-          activities.map((activity, i) => (
+          activities.map((activity, i) => {
+            // Check if a transport activity connects this stop to the previous one
+            const matchingTransport = i > 0 ? findTransportBetween(activities[i - 1], activity) : null;
+
+            return (
             <View key={activity.id}>
-              {i > 0 && activity.location_lat && activities[i - 1].location_lat && (
+              {i > 0 && (
                 <View style={styles.travelSection}>
-                  {calculating.has(activity.id) ? (
-                    <View style={styles.travelBadge}>
-                      <Icon name="hourglass-outline" size={14} color={colors.sky} />
-                      <Text style={styles.travelText}>Berechne...</Text>
-                    </View>
-                  ) : travelInfo.has(activity.id) ? (
-                    <View style={styles.travelBadgeRow}>
-                      <TouchableOpacity
-                        style={styles.travelBadge}
-                        onPress={() => {
-                          setShowRouteMenu(null);
-                          setShowTravelModePicker(
-                            showTravelModePicker === activity.id ? null : activity.id
-                          );
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Icon name={getTravelIconName(travelInfo.get(activity.id)!.mode) as any} size={14} color={colors.sky} />
-                        <Text style={styles.travelText}>
-                          {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
-                        </Text>
-                        <View style={{ marginLeft: spacing.xs }}><Icon name="chevron-down" size={12} color={colors.sky} /></View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.routeMenuBtn}
-                        onPress={() => {
-                          setShowTravelModePicker(null);
-                          setShowRouteMenu(showRouteMenu === activity.id ? null : activity.id);
-                        }}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Icon name="ellipsis-vertical" size={16} color={colors.sky} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-
-                  {showRouteMenu === activity.id && (() => {
-                    const dayRoute = getDayRoute(i);
-                    const mode = travelInfo.get(activity.id)?.mode || 'driving';
-                    const prev = activities[i - 1];
-                    return (
-                      <View style={styles.routeMenuDropdown}>
-                        <TouchableOpacity
-                          style={[styles.routeMenuItem, !dayRoute && { opacity: 0.4 }]}
-                          disabled={!dayRoute}
-                          onPress={() => {
-                            if (!dayRoute) return;
-                            setShowRouteMenu(null);
-                            openGoogleMapsDirections(
-                              { lat: dayRoute.origin.location_lat!, lng: dayRoute.origin.location_lng! },
-                              { lat: dayRoute.destination.location_lat!, lng: dayRoute.destination.location_lng! },
-                              dayRoute.waypoints.map(w => ({ lat: w.location_lat!, lng: w.location_lng! })),
-                              mode,
-                            );
-                          }}
-                        >
-                          <Icon name="map-outline" size={iconSize.sm} color={colors.accent} />
-                          <Text style={styles.routeMenuLabel}>Gesamte Tagesroute</Text>
-                        </TouchableOpacity>
-                        <View style={styles.routeMenuDivider} />
-                        <TouchableOpacity
-                          style={styles.routeMenuItem}
-                          onPress={() => {
-                            setShowRouteMenu(null);
-                            openGoogleMapsDirections(
-                              { lat: prev.location_lat!, lng: prev.location_lng! },
-                              { lat: activity.location_lat!, lng: activity.location_lng! },
-                              [],
-                              mode,
-                            );
-                          }}
-                        >
-                          <Icon name="navigate-outline" size={iconSize.sm} color={colors.secondary} />
-                          <Text style={styles.routeMenuLabel}>Abschnitt öffnen</Text>
-                        </TouchableOpacity>
+                  {matchingTransport ? (
+                    // --- Transport activity badge (replaces Google Directions) ---
+                    <TouchableOpacity
+                      style={styles.transportBadge}
+                      onPress={() => setViewActivity(matchingTransport)}
+                      activeOpacity={0.7}
+                    >
+                      <Icon
+                        name={(TRANSPORT_ICONS[matchingTransport.category_data?.transport_type] || 'swap-horizontal-outline') as any}
+                        size={16}
+                        color={CATEGORY_COLORS.transport}
+                      />
+                      <View style={styles.transportBadgeContent}>
+                        <Text style={styles.transportBadgeTitle} numberOfLines={1}>{matchingTransport.title}</Text>
+                        {(() => {
+                          const detail = formatCategoryDetail('transport', matchingTransport.category_data || {});
+                          return detail ? <Text style={styles.transportBadgeDetail} numberOfLines={1}>{detail}</Text> : null;
+                        })()}
                       </View>
-                    );
-                  })()}
-
-                  {showTravelModePicker === activity.id && (
-                    <View style={styles.travelModeRow}>
-                      {TRAVEL_MODES.map(tm => {
-                        const current = travelInfo.get(activity.id)?.mode || 'driving';
-                        return (
+                      <Icon name="chevron-forward" size={14} color={CATEGORY_COLORS.transport} />
+                    </TouchableOpacity>
+                  ) : activity.location_lat && activities[i - 1].location_lat ? (
+                    // --- Google Directions fallback (existing behavior) ---
+                    <>
+                      {calculating.has(activity.id) ? (
+                        <View style={styles.travelBadge}>
+                          <Icon name="hourglass-outline" size={14} color={colors.sky} />
+                          <Text style={styles.travelText}>Berechne...</Text>
+                        </View>
+                      ) : travelInfo.has(activity.id) ? (
+                        <View style={styles.travelBadgeRow}>
                           <TouchableOpacity
-                            key={tm.id}
-                            style={[styles.travelModeChip, current === tm.id && styles.travelModeChipActive]}
-                            onPress={() => handleChangeTravelMode(activity.id, tm.id)}
+                            style={styles.travelBadge}
+                            onPress={() => {
+                              setShowRouteMenu(null);
+                              setShowTravelModePicker(
+                                showTravelModePicker === activity.id ? null : activity.id
+                              );
+                            }}
+                            activeOpacity={0.7}
                           >
-                            <Icon name={tm.icon as any} size={14} color={current === tm.id ? colors.sky : colors.textSecondary} />
-                            <Text style={[styles.travelModeLabel, current === tm.id && styles.travelModeLabelActive]}>{tm.label}</Text>
+                            <Icon name={getTravelIconName(travelInfo.get(activity.id)!.mode) as any} size={14} color={colors.sky} />
+                            <Text style={styles.travelText}>
+                              {formatDuration(travelInfo.get(activity.id)!.duration)} · {formatDistance(travelInfo.get(activity.id)!.distance)}
+                            </Text>
+                            <View style={{ marginLeft: spacing.xs }}><Icon name="chevron-down" size={12} color={colors.sky} /></View>
                           </TouchableOpacity>
+                          {/* Quick-add transport button */}
+                          {!readonlyMode && (
+                            <TouchableOpacity
+                              style={styles.quickAddTransport}
+                              onPress={() => {
+                                const prev = activities[i - 1];
+                                const mode = travelInfo.get(activity.id)?.mode || 'driving';
+                                const transportType = mode === 'transit' ? 'Zug' : mode === 'walking' ? 'Zu Fuss' : mode === 'bicycling' ? 'Velo' : 'Auto';
+                                const prevDate = getActivityDate(prev.category, prev.category_data || {});
+                                setAddTransportDefaults({
+                                  transport_type: transportType === 'Zu Fuss' || transportType === 'Velo' ? 'Auto' : transportType,
+                                  departure_station_name: prev.location_name || prev.location_address || '',
+                                  departure_station_lat: prev.location_lat,
+                                  departure_station_lng: prev.location_lng,
+                                  arrival_station_name: activity.location_name || activity.location_address || '',
+                                  arrival_station_lat: activity.location_lat,
+                                  arrival_station_lng: activity.location_lng,
+                                  departure_date: prevDate || '',
+                                });
+                                setEditingActivity(null);
+                                setShowModal(true);
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Icon name="add-circle-outline" size={16} color={colors.sky} />
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            style={styles.routeMenuBtn}
+                            onPress={() => {
+                              setShowTravelModePicker(null);
+                              setShowRouteMenu(showRouteMenu === activity.id ? null : activity.id);
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Icon name="ellipsis-vertical" size={16} color={colors.sky} />
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+
+                      {showRouteMenu === activity.id && (() => {
+                        const dayRoute = getDayRoute(i);
+                        const mode = travelInfo.get(activity.id)?.mode || 'driving';
+                        const prev = activities[i - 1];
+                        return (
+                          <View style={styles.routeMenuDropdown}>
+                            <TouchableOpacity
+                              style={[styles.routeMenuItem, !dayRoute && { opacity: 0.4 }]}
+                              disabled={!dayRoute}
+                              onPress={() => {
+                                if (!dayRoute) return;
+                                setShowRouteMenu(null);
+                                openGoogleMapsDirections(
+                                  { lat: dayRoute.origin.location_lat!, lng: dayRoute.origin.location_lng! },
+                                  { lat: dayRoute.destination.location_lat!, lng: dayRoute.destination.location_lng! },
+                                  dayRoute.waypoints.map(w => ({ lat: w.location_lat!, lng: w.location_lng! })),
+                                  mode,
+                                );
+                              }}
+                            >
+                              <Icon name="map-outline" size={iconSize.sm} color={colors.accent} />
+                              <Text style={styles.routeMenuLabel}>Gesamte Tagesroute</Text>
+                            </TouchableOpacity>
+                            <View style={styles.routeMenuDivider} />
+                            <TouchableOpacity
+                              style={styles.routeMenuItem}
+                              onPress={() => {
+                                setShowRouteMenu(null);
+                                openGoogleMapsDirections(
+                                  { lat: prev.location_lat!, lng: prev.location_lng! },
+                                  { lat: activity.location_lat!, lng: activity.location_lng! },
+                                  [],
+                                  mode,
+                                );
+                              }}
+                            >
+                              <Icon name="navigate-outline" size={iconSize.sm} color={colors.secondary} />
+                              <Text style={styles.routeMenuLabel}>Abschnitt öffnen</Text>
+                            </TouchableOpacity>
+                          </View>
                         );
-                      })}
-                    </View>
-                  )}
+                      })()}
+
+                      {showTravelModePicker === activity.id && (
+                        <View style={styles.travelModeRow}>
+                          {TRAVEL_MODES.map(tm => {
+                            const current = travelInfo.get(activity.id)?.mode || 'driving';
+                            return (
+                              <TouchableOpacity
+                                key={tm.id}
+                                style={[styles.travelModeChip, current === tm.id && styles.travelModeChipActive]}
+                                onPress={() => handleChangeTravelMode(activity.id, tm.id)}
+                              >
+                                <Icon name={tm.icon as any} size={14} color={current === tm.id ? colors.sky : colors.textSecondary} />
+                                <Text style={[styles.travelModeLabel, current === tm.id && styles.travelModeLabelActive]}>{tm.label}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
+                  ) : null}
                 </View>
               )}
 
@@ -557,7 +677,8 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                 </Card>
               </TouchableOpacity>
             </View>
-          ))
+          );
+          })
         )}
       </ScrollView>
 
@@ -580,12 +701,13 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       <ActivityModal
         visible={showModal}
         activity={editingActivity}
-        onSave={handleModalSave}
-        onCancel={() => { setShowModal(false); setEditingActivity(null); }}
+        onSave={(data) => { setAddTransportDefaults(null); handleModalSave(data); }}
+        onCancel={() => { setShowModal(false); setEditingActivity(null); setAddTransportDefaults(null); }}
         tripStartDate={trip?.start_date}
         tripEndDate={trip?.end_date}
-        categoryFilter={['hotel', 'stop']}
-        defaultCategory="hotel"
+        categoryFilter={addTransportDefaults ? ['transport'] : ['hotel', 'stop']}
+        defaultCategory={addTransportDefaults ? 'transport' : 'hotel'}
+        defaultCategoryData={addTransportDefaults || undefined}
       />
 
       <RouteMapModal
@@ -594,6 +716,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         stops={activities}
         travelInfo={travelInfo}
         isRoundTrip={trip?.is_round_trip}
+        transportActivities={transportActivities}
       />
 
       {showAiModal && user && (
@@ -674,4 +797,20 @@ const styles = StyleSheet.create({
   deleteBtn: { padding: spacing.xs, marginLeft: spacing.xs },
   fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
+  // Transport connection badge
+  transportBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CATEGORY_COLORS.transport + '12',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: CATEGORY_COLORS.transport + '30',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  transportBadgeContent: { flex: 1 },
+  transportBadgeTitle: { ...typography.bodySmall, fontWeight: '600', color: CATEGORY_COLORS.transport },
+  transportBadgeDetail: { ...typography.caption, color: colors.textSecondary, marginTop: 1 },
+  quickAddTransport: { padding: 4 },
 });

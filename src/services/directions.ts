@@ -152,6 +152,97 @@ export const formatDistance = (meters: number): string => {
   return `${(meters / 1000).toFixed(1)} km`;
 };
 
+// --- Transit details (Google Routes API) ---
+
+export interface TransitDetail {
+  lineName: string;        // e.g. "ICE 374"
+  carrier: string;         // e.g. "Deutsche Bahn"
+  transitType: string;     // BUS, RAIL, FERRY, etc.
+  depTime: string;         // HH:MM
+  arrTime: string;         // HH:MM
+  depStop: string;         // e.g. "Zürich HB"
+  arrStop: string;         // e.g. "München Hf"
+  durationMin: number;
+}
+
+export async function getTransitDetails(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+): Promise<TransitDetail[]> {
+  try {
+    const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': API_KEY,
+        'X-Goog-FieldMask': 'routes.legs.steps.transitDetails,routes.legs.steps.travelMode,routes.duration,routes.legs.duration,routes.legs.steps.staticDuration',
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+        destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
+        travelMode: 'TRANSIT',
+        computeAlternativeRoutes: true,
+      }),
+    });
+    const data = await res.json();
+    if (!data.routes?.length) return [];
+
+    const results: TransitDetail[] = [];
+
+    for (const route of data.routes.slice(0, 5)) {
+      const leg = route.legs?.[0];
+      if (!leg?.steps) continue;
+
+      // Find the primary transit step (longest duration)
+      let primaryStep: any = null;
+      let maxDuration = 0;
+
+      for (const step of leg.steps) {
+        if (step.travelMode !== 'TRANSIT' || !step.transitDetails) continue;
+        const durSec = parseInt(step.staticDuration?.replace('s', '') || '0', 10);
+        if (durSec > maxDuration) {
+          maxDuration = durSec;
+          primaryStep = step;
+        }
+      }
+
+      if (!primaryStep) continue;
+
+      const td = primaryStep.transitDetails;
+      const depTimeRaw = td.stopDetails?.departureTime;
+      const arrTimeRaw = td.stopDetails?.arrivalTime;
+
+      const depTime = depTimeRaw ? new Date(depTimeRaw).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', hour12: false }) : '?';
+      const arrTime = arrTimeRaw ? new Date(arrTimeRaw).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', hour12: false }) : '?';
+
+      // Total route duration
+      const totalDurSec = parseInt(route.duration?.replace('s', '') || '0', 10);
+
+      results.push({
+        lineName: td.transitLine?.name || '',
+        carrier: td.transitLine?.agencies?.[0]?.name || '',
+        transitType: td.transitLine?.vehicle?.type || 'RAIL',
+        depTime,
+        arrTime,
+        depStop: td.stopDetails?.departureStop?.name || '',
+        arrStop: td.stopDetails?.arrivalStop?.name || '',
+        durationMin: Math.round(totalDurSec / 60),
+      });
+    }
+
+    // Deduplicate by lineName+depTime
+    const seen = new Set<string>();
+    return results.filter(r => {
+      const key = `${r.lineName}_${r.depTime}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
+
 // --- Directions caching (7-day TTL) ---
 
 const DIRECTIONS_CACHE_KEY = 'wf_directions_cache';
