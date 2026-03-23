@@ -155,11 +155,8 @@ export const AppNavigator: React.FC = () => {
     if (path.match(/^\/slideshow\/.+$/) || path.match(/^\/share\/.+$/) || path.match(/^\/invite\/.+$/)) {
       // Slideshow + share are public — don't require auth, let linking handle it
       return;
-    } else if (path.match(/^\/trip\//)) {
-      // Trip-specific paths: don't preserve across login (different user may not have access)
-      return;
     } else if (path && path !== '/' && path !== '/login' && path !== '/register') {
-      // Save any deep link path for redirect after login
+      // Save any deep link path for redirect after login (including /trip/... from email notifications)
       setPendingRedirectPath(path);
     } else {
       // Check for ?redirect= query param (e.g. /login?redirect=/share/token)
