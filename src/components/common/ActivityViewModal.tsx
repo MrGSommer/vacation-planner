@@ -11,6 +11,7 @@ import { CATEGORY_FIELDS, CATEGORY_COLORS, getTransportFields, getFlightLegs, Fl
 import { DocumentPicker } from './DocumentPicker';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
+import { formatDateShort } from '../../utils/dateHelpers';
 import { MapsAppPicker, tryOpenMapsDirectly } from '../map/MapsAppPicker';
 
 interface Props {
@@ -272,6 +273,9 @@ export const ActivityViewModal: React.FC<Props> = ({
                                 <Text style={[styles.flightBadgeText, { color: colors.primary }]}>{leg.flight_number}</Text>
                               </View>
                             )}
+                            {leg.dep_date && (
+                              <Text style={styles.legDate}>{formatDateShort(leg.dep_date)}</Text>
+                            )}
                             {(leg.dep_time || leg.arr_time) && (
                               <Text style={styles.legTimes}>
                                 {leg.dep_time || '—'} → {leg.arr_time || '—'}
@@ -461,6 +465,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  legDate: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '600',
   },
   legTimes: {
     ...typography.bodySmall,

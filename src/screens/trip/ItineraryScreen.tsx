@@ -13,7 +13,7 @@ import { getTrip } from '../../api/trips';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
 import { useRealtime } from '../../hooks/useRealtime';
-import { formatCategoryDetail, CATEGORY_COLORS } from '../../utils/categoryFields';
+import { formatCategoryDetail, CATEGORY_COLORS, getFlightLegs, FlightLeg } from '../../utils/categoryFields';
 import { openInGoogleMaps } from '../../utils/openInMaps';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
@@ -441,6 +441,28 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     ? allTripActivities.find(a => a.category === 'transport' && a.category_data?.is_departure)
     : null;
 
+  // Multi-leg flights: find legs that depart/arrive on this day (but aren't the arrival/departure transport shown above)
+  const transitFlights = useMemo(() => {
+    if (!selectedDate) return [];
+    const result: { activity: Activity; leg: FlightLeg; legIndex: number }[] = [];
+    for (const act of allTripActivities) {
+      if (act.category !== 'transport' || act.category_data?.transport_type !== 'Flug') continue;
+      const legs = act.category_data?.flight_legs;
+      if (!Array.isArray(legs) || legs.length < 2) continue;
+      // Skip if this is already shown as arrival/departure transport on first/last day
+      if (isFirstDay && act.category_data?.is_arrival) continue;
+      if (isLastDay && act.category_data?.is_departure) continue;
+      const parsedLegs = getFlightLegs(act.category_data);
+      for (let li = 0; li < parsedLegs.length; li++) {
+        const leg = parsedLegs[li];
+        if (leg.dep_date === selectedDate || leg.arr_date === selectedDate) {
+          result.push({ activity: act, leg, legIndex: li });
+        }
+      }
+    }
+    return result;
+  }, [allTripActivities, selectedDate, isFirstDay, isLastDay]);
+
   const getNightsCount = (hotel: Activity) => {
     const ci = hotel.category_data?.check_in_date || hotel.check_in_date;
     const co = hotel.category_data?.check_out_date || hotel.check_out_date;
@@ -655,10 +677,33 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
           {/* Anreise on first day */}
           {isFirstDay && renderTravelCard('arrival', arrivalTransport)}
 
+          {/* Multi-leg flights transiting on this day */}
+          {transitFlights.length > 0 && transitFlights.map(({ activity, leg, legIndex }) => (
+            <TouchableOpacity
+              key={`transit-${activity.id}-${legIndex}`}
+              style={styles.transitCard}
+              onPress={() => setViewActivity(activity)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.transitIcon}>
+                <Icon name="airplane" size={iconSize.sm} color={colors.secondary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.transitTitle}>{activity.title}</Text>
+                <Text style={styles.transitDetail}>
+                  {leg.dep_iata} → {leg.arr_iata}
+                  {leg.flight_number ? `  ·  ${leg.flight_number}` : ''}
+                  {leg.dep_time ? `  ·  ${leg.dep_time}` : ''}
+                  {leg.arr_time ? ` – ${leg.arr_time}` : ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+
           {/* Continuing accommodation at top */}
           {continuingStay && renderHotelCard(continuingStay, 'continuing', isCheckingOut)}
 
-          {filteredActivities.length === 0 && !continuingStay && !newCheckIn ? (
+          {filteredActivities.length === 0 && !continuingStay && !newCheckIn && transitFlights.length === 0 ? (
             <View style={styles.emptyDay}>
               <Icon name={isGeneratingThisTrip ? 'sparkles' : 'create-outline'} size={48} color={colors.secondary} />
               <Text style={styles.emptyText}>
@@ -928,5 +973,19 @@ const styles = StyleSheet.create({
   weatherBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
   weatherBannerIcon: { fontSize: 18 },
   weatherBannerTemp: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '500' as const },
+  transitCard: {
+    flexDirection: 'row' as const, alignItems: 'center' as const,
+    backgroundColor: colors.secondary + '10', borderRadius: borderRadius.lg,
+    padding: spacing.md, marginBottom: spacing.md,
+    borderLeftWidth: 3, borderLeftColor: colors.secondary,
+  },
+  transitIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.secondary + '20',
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+    marginRight: spacing.md,
+  },
+  transitTitle: { ...typography.body, fontWeight: '600' as const },
+  transitDetail: { ...typography.caption, color: colors.secondary, marginTop: 2, fontWeight: '500' as const },
   pollsSection: { marginBottom: spacing.md },
 });

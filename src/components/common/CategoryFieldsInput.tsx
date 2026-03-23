@@ -6,9 +6,8 @@ import { TimePickerInput } from './TimePickerInput';
 import { PlaceAutocomplete } from './PlaceAutocomplete';
 import { PlaceResult } from './PlaceAutocomplete';
 import { AirportAutocomplete } from './AirportAutocomplete';
-import { Airport, getAirportByIata } from '../../data/airports';
+import { Airport } from '../../data/airports';
 import { CATEGORY_FIELDS, CategoryField, getTransportFields, FlightLeg, getFlightLegs } from '../../utils/categoryFields';
-import { suggestHubs } from '../../data/hubs';
 import { lookupFlight, isValidFlightNumber, FlightInfo, searchFlightsByRoute, RouteFlightInfo } from '../../utils/flightLookup';
 import { getTransitDetails, TransitDetail } from '../../services/directions';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
@@ -198,22 +197,20 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
             if (route.arr_time) updates.arrival_time = route.arr_time.substring(0, 5);
             onChange(updates);
           }}
-          onNoResults={() => {
-            // Will be handled by hub suggestions inside RouteSearchWidget
-          }}
-          onSplitWithHub={(hubIata: string, hubName: string) => {
-            // Create 2-leg flight_legs from current dep/arr + hub
+          onNoResults={() => {}}
+          onEnterMultiLeg={() => {
+            // Create 2 empty legs with dep/arr pre-filled
             const legs: FlightLeg[] = [
               {
                 dep_iata: data.departure_station,
                 dep_name: data.departure_station_name || data.departure_station,
-                arr_iata: hubIata,
-                arr_name: hubName,
+                arr_iata: '',
+                arr_name: '',
                 dep_date: data.departure_date || undefined,
               },
               {
-                dep_iata: hubIata,
-                dep_name: hubName,
+                dep_iata: '',
+                dep_name: '',
                 arr_iata: data.arrival_station,
                 arr_name: data.arrival_station_name || data.arrival_station,
               },
@@ -411,7 +408,7 @@ export const CategoryFieldsInput: React.FC<Props> = ({ category, data, onChange,
           activeOpacity={0.7}
         >
           <Icon name="git-branch-outline" size={14} color={colors.primary} />
-          <Text style={legsStyles.addStopoverText}>+ Zwischenstopp hinzufügen</Text>
+          <Text style={legsStyles.addStopoverText}>Flugetappen erfassen</Text>
         </TouchableOpacity>
       )}
 
@@ -477,20 +474,15 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
     onChange(newLegs);
   };
 
-  const addLegAfter = (index: number) => {
-    const newLegs = [...legs];
-    const currentLeg = newLegs[index];
-    // Insert new empty leg: current leg's arr → empty → next leg's dep
+  const addLeg = () => {
+    const lastLeg = legs[legs.length - 1];
     const newLeg: FlightLeg = {
-      dep_iata: currentLeg.arr_iata,
-      dep_name: currentLeg.arr_name,
-      arr_iata: newLegs[index + 1]?.dep_iata || '',
-      arr_name: newLegs[index + 1]?.dep_name || '',
+      dep_iata: lastLeg.arr_iata,
+      dep_name: lastLeg.arr_name,
+      arr_iata: '',
+      arr_name: '',
     };
-    // Update current leg's arrival to empty (user needs to pick via airport)
-    newLegs[index] = { ...currentLeg, arr_iata: '', arr_name: '' };
-    newLegs.splice(index + 1, 0, newLeg);
-    onChange(newLegs);
+    onChange([...legs, newLeg]);
   };
 
   /** Compute layover between two consecutive legs */
@@ -513,7 +505,7 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
   return (
     <View style={legsStyles.container}>
       <View style={legsStyles.header}>
-        <Text style={legsStyles.title}>Mehrstreckenflug</Text>
+        <Text style={legsStyles.title}>Flugetappen</Text>
         <TouchableOpacity onPress={onExit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Icon name="close-circle-outline" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -521,9 +513,9 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
 
       {legs.map((leg, i) => (
         <React.Fragment key={i}>
-          <View style={legsStyles.legCard}>
+          <View style={[legsStyles.legCard, { zIndex: legs.length - i }]}>
             <View style={legsStyles.legHeader}>
-              <Text style={legsStyles.legLabel}>Leg {i + 1}</Text>
+              <Text style={legsStyles.legLabel}>Flug {i + 1}</Text>
               {legs.length > 1 && (
                 <TouchableOpacity onPress={() => removeLeg(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   <Icon name="close" size={16} color={colors.error} />
@@ -670,17 +662,17 @@ const FlightLegsEditor: React.FC<FlightLegsEditorProps> = ({ legs, onChange, onE
       {/* Add more legs */}
       <TouchableOpacity
         style={legsStyles.addLegBtn}
-        onPress={() => addLegAfter(legs.length - 2 >= 0 ? legs.length - 2 : 0)}
+        onPress={addLeg}
         activeOpacity={0.7}
       >
         <Icon name="add-circle-outline" size={16} color={colors.primary} />
-        <Text style={legsStyles.addLegText}>Weiteren Zwischenstopp</Text>
+        <Text style={legsStyles.addLegText}>Flug hinzufügen</Text>
       </TouchableOpacity>
     </View>
   );
 };
 
-// --- Per-Leg Route Search (compact version of RouteSearchWidget) ---
+// --- Per-Leg Route Search (compact) ---
 
 interface LegRouteSearchProps {
   depIata: string;
@@ -1075,7 +1067,7 @@ interface RouteSearchWidgetProps {
   departureDate?: string;
   onSelect: (route: RouteFlightInfo) => void;
   onNoResults?: () => void;
-  onSplitWithHub?: (hubIata: string, hubName: string) => void;
+  onEnterMultiLeg?: () => void;
 }
 
 const DAY_NAMES = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -1088,7 +1080,7 @@ function getAirLabsDay(dateStr: string): string {
 }
 
 const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({
-  depIata, arrIata, depCityName, arrCityName, departureDate, onSelect, onNoResults, onSplitWithHub,
+  depIata, arrIata, depCityName, arrCityName, departureDate, onSelect, onNoResults, onEnterMultiLeg,
 }) => {
   const [loading, setLoading] = useState(false);
   const [routes, setRoutes] = useState<RouteFlightInfo[]>([]);
@@ -1097,20 +1089,6 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({
   const [dayHint, setDayHint] = useState<string | null>(null);
   const [noDirectFlights, setNoDirectFlights] = useState(false);
   const lastSearchRef = useRef('');
-
-  // Compute hub suggestions for the dep/arr countries
-  const hubSuggestions = useMemo(() => {
-    const depAirport = getAirportByIata(depIata);
-    const arrAirport = getAirportByIata(arrIata);
-    if (!depAirport || !arrAirport) return [];
-    const hubs = suggestHubs(depAirport.country, arrAirport.country);
-    // Resolve to airport objects, filter out dep/arr themselves
-    return hubs
-      .filter(h => h !== depIata && h !== arrIata)
-      .map(iata => getAirportByIata(iata))
-      .filter((a): a is Airport => !!a)
-      .slice(0, 5);
-  }, [depIata, arrIata]);
 
   // Reset when airports or date change
   useEffect(() => {
@@ -1196,28 +1174,15 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({
     );
   }
 
-  // No direct flights → show hub suggestions
+  // No direct flights → offer multi-leg entry
   if (noDirectFlights) {
     return (
       <View style={routeStyles.container}>
-        <Text style={routeStyles.noDirectText}>Keine Direktflüge gefunden</Text>
-        {hubSuggestions.length > 0 && onSplitWithHub && (
-          <>
-            <Text style={routeStyles.hubHint}>Häufige Umstiegspunkte:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.xs }}>
-              {hubSuggestions.map(hub => (
-                <TouchableOpacity
-                  key={hub.iata}
-                  style={routeStyles.hubChip}
-                  onPress={() => onSplitWithHub(hub.iata, `${hub.city} (${hub.iata})`)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={routeStyles.hubCode}>{hub.iata}</Text>
-                  <Text style={routeStyles.hubCity}>{hub.city}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </>
+        <Text style={routeStyles.noDirectText}>Kein Direktflug gefunden</Text>
+        {onEnterMultiLeg && (
+          <TouchableOpacity style={routeStyles.searchBtn} onPress={onEnterMultiLeg} activeOpacity={0.7}>
+            <Text style={routeStyles.searchBtnText}>Flugetappen erfassen</Text>
+          </TouchableOpacity>
         )}
         <TouchableOpacity style={[routeStyles.retryBtn, { marginTop: spacing.sm }]} onPress={doSearch} activeOpacity={0.7}>
           <Text style={routeStyles.retryBtnText}>Erneut suchen</Text>
@@ -1292,6 +1257,7 @@ const legsStyles = StyleSheet.create({
     padding: spacing.sm + 2,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'visible' as const,
   },
   legHeader: {
     flexDirection: 'row',
@@ -1471,21 +1437,7 @@ const routeStyles = StyleSheet.create({
   durationText: { ...typography.caption, color: colors.textSecondary, marginTop: 4, marginLeft: spacing.sm },
   daysText: { ...typography.caption, color: colors.textLight, marginTop: 2 },
   dayHintText: { ...typography.bodySmall, color: colors.warning || '#F0AD4E', fontStyle: 'italic', marginBottom: spacing.sm },
-  // Hub suggestions
   noDirectText: { ...typography.bodySmall, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  hubHint: { ...typography.caption, color: colors.textSecondary },
-  hubChip: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.primary + '40',
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs + 2,
-    marginRight: spacing.sm,
-    alignItems: 'center',
-  },
-  hubCode: { ...typography.bodySmall, fontWeight: '700', color: colors.primary },
-  hubCity: { ...typography.caption, color: colors.textSecondary, marginTop: 1 },
 });
 
 const flightStyles = StyleSheet.create({
