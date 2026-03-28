@@ -25,6 +25,7 @@ export interface Profile {
   fable_name_visible: boolean;
   fable_memory_enabled: boolean;
   payment_error_message: string | null;
+  preferred_maps_app: 'google' | 'apple' | null;
   is_admin: boolean;
   notification_push_fable: boolean;
   notification_email_fable: boolean;
@@ -212,6 +213,8 @@ export interface Photo {
   creator_name: string | null;
   lat: number | null;
   lng: number | null;
+  source: 'upload' | 'unsplash';
+  unsplash_attribution: string | null;
   created_at: string;
 }
 
@@ -305,23 +308,8 @@ export interface PackingItem {
   created_at: string;
 }
 
-export interface TripStop {
-  id: string;
-  trip_id: string;
-  name: string;
-  place_id: string | null;
-  address: string | null;
-  lat: number;
-  lng: number;
-  type: 'overnight' | 'waypoint';
-  nights: number | null;
-  arrival_date: string | null;
-  departure_date: string | null;
-  sort_order: number;
-  travel_duration_from_prev: number | null;
-  travel_distance_from_prev: number | null;
-  created_at: string;
-}
+// TripStop removed — use StopLocation from src/api/stops.ts instead
+// (derived from activities with category='hotel'/'stop')
 
 export interface ActivityComment {
   id: string;

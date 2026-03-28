@@ -6,7 +6,7 @@ import { getTrip, updateTrip } from '../api/trips';
 import { Trip } from '../types/database';
 import { getCollaborators } from '../api/invitations';
 import { getActivitiesForTrip, getDays } from '../api/itineraries';
-import { getStops } from '../api/stops';
+import { getStopLocations } from '../api/stops';
 import { getBudgetCategories } from '../api/budgets';
 import { getPackingLists, getPackingItems } from '../api/packing';
 import { getProfile, updateProfile } from '../api/auth';
@@ -570,7 +570,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       const [activities, stops, budgetCategories, packingLists, days] = await Promise.all([
         getActivitiesForTrip(tripId),
-        getStops(tripId),
+        getStopLocations(tripId),
         fableSettingsRef.current.budgetVisible ? getBudgetCategories(tripId) : Promise.resolve([]),
         fableSettingsRef.current.packingVisible ? getPackingLists(tripId) : Promise.resolve([]),
         getDays(tripId),

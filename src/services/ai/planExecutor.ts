@@ -1,7 +1,6 @@
 import { createTrip, updateTrip } from '../../api/trips';
 import { createDay, createActivities, getActivitiesForTrip } from '../../api/itineraries';
 import { searchPhotos, triggerDownload } from '../../api/unsplash';
-import { createStop, getStops } from '../../api/stops';
 import { createBudgetCategory, getBudgetCategories } from '../../api/budgets';
 import { invalidateCache } from '../../utils/queryCache';
 import { logError } from '../errorLogger';
@@ -17,7 +16,8 @@ export interface AiTripPlan {
     currency: string;
     notes: string | null;
   };
-  stops: Array<{
+  /** @deprecated — stops are now created as activities (category='hotel'/'stop') within days */
+  stops?: Array<{
     name: string;
     lat: number;
     lng: number;
@@ -56,13 +56,12 @@ export interface AiTripPlan {
 
 const VALID_CATEGORIES = ['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'stop', 'other'];
 
-export type ProgressStep = 'structure' | 'trip' | 'days' | 'activities' | 'stops' | 'budget' | 'done';
+export type ProgressStep = 'structure' | 'trip' | 'days' | 'activities' | 'budget' | 'done';
 
 export interface ExecutionResult {
   tripId: string;
   daysCreated: number;
   activitiesCreated: number;
-  stopsCreated: number;
   budgetCategoriesCreated: number;
 }
 
@@ -76,7 +75,6 @@ export const executePlan = async (
   let finalTripId = tripId || '';
   let daysCreated = 0;
   let activitiesCreated = 0;
-  let stopsCreated = 0;
   let budgetCategoriesCreated = 0;
 
   // 1. Create trip if needed (create mode)
@@ -116,18 +114,15 @@ export const executePlan = async (
 
   // Load existing data for duplicate detection (enhance mode)
   let existingActivityTitles = new Set<string>();
-  let existingStopNames = new Set<string>();
   let existingBudgetNames = new Set<string>();
 
   if (tripId) {
     try {
-      const [existingActivities, existingStops, existingBudget] = await Promise.all([
+      const [existingActivities, existingBudget] = await Promise.all([
         getActivitiesForTrip(finalTripId),
-        getStops(finalTripId),
         getBudgetCategories(finalTripId),
       ]);
       existingActivityTitles = new Set(existingActivities.map(a => a.title.toLowerCase()));
-      existingStopNames = new Set(existingStops.map(s => s.name.toLowerCase()));
       existingBudgetNames = new Set(existingBudget.map(b => b.name.toLowerCase()));
     } catch {
       // If loading fails, proceed without duplicate check
@@ -176,33 +171,7 @@ export const executePlan = async (
     }
   }
 
-  // 3. Create stops (skip duplicates)
-  if (plan.stops?.length > 0) {
-    onProgress?.('stops');
-    const newStops = plan.stops.filter(
-      s => !existingStopNames.has(s.name.toLowerCase()),
-    );
-    for (const stop of newStops) {
-      await createStop({
-        trip_id: finalTripId,
-        name: stop.name,
-        place_id: null,
-        address: stop.address || null,
-        lat: stop.lat,
-        lng: stop.lng,
-        type: stop.type || 'waypoint',
-        nights: stop.nights || null,
-        arrival_date: stop.arrival_date || null,
-        departure_date: stop.departure_date || null,
-        sort_order: stop.sort_order,
-        travel_duration_from_prev: null,
-        travel_distance_from_prev: null,
-      });
-      stopsCreated++;
-    }
-  }
-
-  // 4. Create budget categories (skip duplicates)
+  // 3. Create budget categories (skip duplicates)
   if (plan.budget_categories?.length > 0) {
     onProgress?.('budget');
     const newBudgetCats = plan.budget_categories.filter(
@@ -241,7 +210,6 @@ export const executePlan = async (
     tripId: finalTripId,
     daysCreated,
     activitiesCreated,
-    stopsCreated,
     budgetCategoriesCreated,
   };
 };
@@ -296,7 +264,7 @@ export const parsePlanJson = (content: string): AiTripPlan => {
   }
 
   // Basic validation
-  if (!plan.days && !plan.stops && !plan.budget_categories) {
+  if (!plan.days && !plan.budget_categories) {
     throw new Error('Plan enthält keine verwertbaren Daten');
   }
 

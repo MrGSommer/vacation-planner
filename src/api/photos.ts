@@ -2,6 +2,14 @@ import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { Photo, ItineraryDay } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
+import { searchPhotos, triggerDownload } from './unsplash';
+import { createDay } from './itineraries';
+
+/** A place to fetch inspiration photos for (from stops or hotel activities) */
+export interface InspirationLocation {
+  name: string;
+  date: string; // YYYY-MM-DD
+}
 
 export const getPhotos = async (tripId: string): Promise<Photo[]> => {
   return cachedQuery(`photos:${tripId}`, async () => {
@@ -233,9 +241,11 @@ const thumbPathFromFull = (storagePath: string): string => {
 };
 
 export const deletePhoto = async (photo: Photo): Promise<void> => {
-  // Clean up storage files (non-blocking — DB delete is the important part)
-  const paths = [photo.storage_path, thumbPathFromFull(photo.storage_path)];
-  try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
+  // Clean up storage files (non-blocking — skip for Unsplash photos which have no storage)
+  if (!photo.storage_path.startsWith('unsplash:')) {
+    const paths = [photo.storage_path, thumbPathFromFull(photo.storage_path)];
+    try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
+  }
   const { error } = await supabase.from('photos').delete().eq('id', photo.id);
   if (error) throw error;
   invalidateCache(`photos:${photo.trip_id}`);
@@ -243,10 +253,57 @@ export const deletePhoto = async (photo: Photo): Promise<void> => {
 
 export const deletePhotos = async (photos: Photo[]): Promise<void> => {
   if (photos.length === 0) return;
-  const paths = photos.flatMap(p => [p.storage_path, thumbPathFromFull(p.storage_path)]);
+  const uploadPhotos = photos.filter(p => !p.storage_path.startsWith('unsplash:'));
+  if (uploadPhotos.length > 0) {
+    const paths = uploadPhotos.flatMap(p => [p.storage_path, thumbPathFromFull(p.storage_path)]);
+    try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
+  }
   const ids = photos.map(p => p.id);
-  try { await supabase.storage.from('trip-photos').remove(paths); } catch { /* ignore */ }
   const { error } = await supabase.from('photos').delete().in('id', ids);
   if (error) throw error;
   if (photos[0]) invalidateCache(`photos:${photos[0].trip_id}`);
 };
+
+/** Insert 2 Unsplash inspiration photos per location */
+export const insertInspirationPhotos = async (
+  tripId: string, userId: string, locations: InspirationLocation[],
+): Promise<Photo[]> => {
+  const inserted: Photo[] = [];
+
+  for (const loc of locations) {
+    await createDay(tripId, loc.date);
+
+    const results = await searchPhotos(loc.name, 4);
+    const picked = results.slice(0, 2);
+
+    for (const photo of picked) {
+      await triggerDownload(photo);
+      const takenAt = `${loc.date}T12:00:00Z`;
+      const dayId = await autoAssignDayId(tripId, takenAt);
+      const attribution = `${photo.user.name}|${photo.user.links.html}|${photo.links.html}`;
+
+      const { data, error } = await supabase.from('photos').insert({
+        trip_id: tripId, user_id: userId,
+        storage_path: `unsplash:${photo.id}`,
+        url: photo.urls.regular,
+        thumbnail_url: photo.urls.small,
+        taken_at: takenAt, day_id: dayId,
+        source: 'unsplash',
+        unsplash_attribution: attribution,
+        caption: `📍 ${loc.name}`,
+      }).select().single();
+
+      if (!error && data) inserted.push(data);
+    }
+  }
+
+  invalidateCache(`photos:${tripId}`);
+  return inserted;
+};
+
+/** Remove all Unsplash inspiration photos for a trip */
+export const removeInspirationPhotos = async (tripId: string): Promise<void> => {
+  await supabase.from('photos').delete().eq('trip_id', tripId).eq('source', 'unsplash');
+  invalidateCache(`photos:${tripId}`);
+};
+

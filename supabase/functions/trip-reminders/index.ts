@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
         // Gather stats
         const [activities, stops, photos] = await Promise.all([
           sq(`activities?trip_id=eq.${t.id}&select=id`),
-          sq(`trip_stops?trip_id=eq.${t.id}&select=id`),
+          sq(`activities?trip_id=eq.${t.id}&category=in.(hotel,stop)&select=id`),
           sq(`photos?trip_id=eq.${t.id}&select=id`),
         ]);
         const startD = new Date(t.start_date);

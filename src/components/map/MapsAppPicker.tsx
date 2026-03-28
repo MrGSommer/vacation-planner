@@ -1,27 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { openInMaps, type MapsProvider } from '../../utils/openInMaps';
-
-const PREF_KEY = 'preferred_maps_app';
-
-function getPreferredApp(): MapsProvider | null {
-  if (Platform.OS !== 'web') return null;
-  try {
-    return localStorage.getItem(PREF_KEY) as MapsProvider | null;
-  } catch {
-    return null;
-  }
-}
-
-function setPreferredApp(provider: MapsProvider | null): void {
-  if (Platform.OS !== 'web') return;
-  try {
-    if (provider) localStorage.setItem(PREF_KEY, provider);
-    else localStorage.removeItem(PREF_KEY);
-  } catch {}
-}
+import { useAuthContext } from '../../contexts/AuthContext';
+import { updateProfile } from '../../api/auth';
 
 interface Props {
   visible: boolean;
@@ -34,10 +17,13 @@ interface Props {
 
 export const MapsAppPicker: React.FC<Props> = ({ visible, lat, lng, label, locationContext, onClose }) => {
   const [alwaysUse, setAlwaysUse] = useState(false);
+  const { profile } = useAuthContext();
   const isAndroid = Platform.OS === 'android';
 
   const handleSelect = (provider: MapsProvider) => {
-    if (alwaysUse) setPreferredApp(provider);
+    if (alwaysUse && profile) {
+      updateProfile(profile.id, { preferred_maps_app: provider } as any).catch(() => {});
+    }
     openInMaps(lat, lng, label, locationContext, provider);
     onClose();
   };
@@ -46,7 +32,7 @@ export const MapsAppPicker: React.FC<Props> = ({ visible, lat, lng, label, locat
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
-          <Text style={styles.title}>Route planen</Text>
+          <Text style={styles.title}>Navigation</Text>
           <Text style={styles.subtitle}>Wohin möchtest du navigieren?</Text>
 
           {/* Google Maps option */}
@@ -99,18 +85,30 @@ export const MapsAppPicker: React.FC<Props> = ({ visible, lat, lng, label, locat
 };
 
 /**
- * Opens maps — either directly (if preference is saved) or via the picker.
+ * Opens maps — either directly (if preference is saved in profile) or via the picker.
  * Returns true if opened directly, false if picker should be shown.
  */
 export function tryOpenMapsDirectly(
-  lat: number, lng: number, label?: string, locationContext?: string
+  lat: number, lng: number, label?: string, locationContext?: string,
+  preferredApp?: 'google' | 'apple' | null,
 ): boolean {
-  const pref = getPreferredApp();
+  // Try profile preference first, then localStorage fallback
+  const pref = preferredApp || getLocalPreference();
   if (pref) {
     openInMaps(lat, lng, label, locationContext, pref);
     return true;
   }
   return false;
+}
+
+/** Fallback: read from localStorage for backward compat (web only) */
+function getLocalPreference(): MapsProvider | null {
+  if (Platform.OS !== 'web') return null;
+  try {
+    return localStorage.getItem('preferred_maps_app') as MapsProvider | null;
+  } catch {
+    return null;
+  }
 }
 
 const styles = StyleSheet.create({

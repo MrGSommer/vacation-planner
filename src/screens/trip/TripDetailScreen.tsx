@@ -5,11 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTrip } from '../../api/trips';
 import { getActivitiesForTrip } from '../../api/itineraries';
-import { getStops } from '../../api/stops';
+import { getStopLocations, StopLocation } from '../../api/stops';
 import { getTripExpenseTotal } from '../../api/budgets';
 import { getPhotos } from '../../api/photos';
 import { getCollaborators, CollaboratorWithProfile } from '../../api/invitations';
-import { Trip, Activity, TripStop } from '../../types/database';
+import { Trip, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { formatDateRange, getDayCount, formatDateShort } from '../../utils/dateHelpers';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
@@ -223,7 +223,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     const initMap = async () => {
       try {
         const [stops, fetchedDays] = await Promise.all([
-          getStops(tripId),
+          getStopLocations(tripId),
           getDays(tripId),
         ]);
         const activities = activitiesRef.current;
@@ -234,7 +234,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         const mapsLib = await importMapsLibrary('maps');
         const markerLib = await importMapsLibrary('marker');
-        await importMapsLibrary('routes');
         await importMapsLibrary('core');
 
         if (cancelled || !mapRef.current) return;
@@ -265,7 +264,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         const { AdvancedMarkerElement, PinElement } = markerLib;
 
-        stops.forEach((stop: TripStop, i: number) => {
+        stops.forEach((stop: StopLocation, i: number) => {
           const pos = { lat: stop.lat, lng: stop.lng };
           bounds.extend(pos);
           const pin = new PinElement({
@@ -302,40 +301,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           const iw = new google.maps.InfoWindow({ content: buildInfoContent(act, dayInfoMap[act.day_id]) });
           marker.addEventListener('gmp-click', () => openInfo(iw, marker));
         });
-
-        if (stops.length >= 2) {
-          try {
-            const routesLib = await importMapsLibrary('routes');
-            const RouteClass = routesLib.Route;
-            const isRound = trip?.is_round_trip;
-            const origin = { lat: stops[0].lat, lng: stops[0].lng };
-            const destination = isRound
-              ? origin
-              : { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng };
-            const intermediates = isRound
-              ? stops.slice(1).map((s: TripStop) => ({ lat: s.lat, lng: s.lng }))
-              : stops.slice(1, -1).map((s: TripStop) => ({ lat: s.lat, lng: s.lng }));
-
-            const { routes: computedRoutes } = await RouteClass.computeRoutes({
-              origin, destination, intermediates,
-              travelMode: 'DRIVING', fields: ['path'],
-            });
-            if (computedRoutes?.[0]) {
-              const polylines = computedRoutes[0].createPolylines();
-              polylines.forEach((pl: any) => {
-                pl.setOptions({ strokeColor: colors.primary, strokeWeight: 4, strokeOpacity: 0.7 });
-                pl.setMap(map);
-              });
-            }
-          } catch {
-            // Fallback: simple polyline
-            const path = stops.map((s: TripStop) => ({ lat: s.lat, lng: s.lng }));
-            if (trip?.is_round_trip) path.push({ lat: stops[0].lat, lng: stops[0].lng });
-            new google.maps.Polyline({
-              map, path, strokeColor: colors.primary, strokeWeight: 3, strokeOpacity: 0.6,
-            });
-          }
-        }
 
         const hasPoints = stops.length > 0 || activities.some((a: Activity) => a.location_lat);
         if (hasPoints) {
@@ -776,9 +741,9 @@ const styles = StyleSheet.create({
   tripNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs, flexWrap: 'wrap' },
   erlebtBadge: { backgroundColor: '#D4A017', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
   erlebtBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  tripName: { ...typography.h1, color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  tripName: { ...typography.h1, color: '#FFFFFF', ...(Platform.OS === 'web' ? { textShadow: '0px 1px 4px rgba(0,0,0,0.5)' } : { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }) },
+  destination: { ...typography.body, color: 'rgba(255,255,255,0.95)', marginBottom: spacing.xs, ...(Platform.OS === 'web' ? { textShadow: '0px 1px 3px rgba(0,0,0,0.5)' } : { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 }) },
+  dates: { ...typography.bodySmall, color: 'rgba(255,255,255,0.9)', ...(Platform.OS === 'web' ? { textShadow: '0px 1px 3px rgba(0,0,0,0.5)' } : { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 }) },
   attribution: { ...typography.caption, fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: spacing.xs },
   attributionLink: { textDecorationLine: 'underline' },
   content: { flex: 1, padding: spacing.md, marginTop: -spacing.lg },

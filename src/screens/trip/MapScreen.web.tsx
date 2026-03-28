@@ -3,10 +3,10 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal,
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Header, LoadingScreen, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult, importMapsLibrary } from '../../components/common/PlaceAutocomplete';
-import { getStops } from '../../api/stops';
+import { getStopLocations, StopLocation } from '../../api/stops';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
-import { Trip, TripStop, Activity, ItineraryDay } from '../../types/database';
+import { Trip, Activity, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
@@ -85,7 +85,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // Data for offline view
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [stops, setStops] = useState<TripStop[]>([]);
+  const [stops, setStops] = useState<StopLocation[]>([]);
 
   // FAB modal state
   const [showModal, setShowModal] = useState(false);
@@ -271,7 +271,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       const [t, s, a, fetchedDays] = await Promise.all([
         getTrip(tripId),
-        getStops(tripId),
+        getStopLocations(tripId),
         getActivitiesForTrip(tripId),
         getDays(tripId),
       ]);
@@ -354,7 +354,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       };
 
       // Stop markers
-      s.forEach((stop: TripStop, i: number) => {
+      s.forEach((stop: StopLocation, i: number) => {
         const pos = { lat: stop.lat, lng: stop.lng };
         bounds.extend(pos);
         const pin = new PinElement({
@@ -472,8 +472,8 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
             ? origin
             : { lat: s[s.length - 1].lat, lng: s[s.length - 1].lng };
           const intermediates = isRound
-            ? s.slice(1).map((st: TripStop) => ({ lat: st.lat, lng: st.lng }))
-            : s.slice(1, -1).map((st: TripStop) => ({ lat: st.lat, lng: st.lng }));
+            ? s.slice(1).map((st: StopLocation) => ({ lat: st.lat, lng: st.lng }))
+            : s.slice(1, -1).map((st: StopLocation) => ({ lat: st.lat, lng: st.lng }));
 
           const { routes: computedRoutes } = await RouteClass.computeRoutes({
             origin,
@@ -497,7 +497,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         } catch (routeErr) {
           console.warn('Routes API error, falling back to polyline:', routeErr);
-          const path = s.map((st: TripStop) => ({ lat: st.lat, lng: st.lng }));
+          const path = s.map((st: StopLocation) => ({ lat: st.lat, lng: st.lng }));
           if (t.is_round_trip) path.push({ lat: s[0].lat, lng: s[0].lng });
           const fallbackPl = new google.maps.Polyline({
             map,

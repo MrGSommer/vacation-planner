@@ -98,10 +98,11 @@ Deno.serve(async (req) => {
 
     if (shareConfig.stops) {
       const { data } = await supabase
-        .from('trip_stops')
-        .select('id, name, latitude, longitude, order_index, arrival_date, departure_date')
+        .from('activities')
+        .select('id, title, location_name, location_lat, location_lng, location_address, check_in_date, check_out_date, category, sort_order')
         .eq('trip_id', tripId)
-        .order('order_index');
+        .in('category', ['hotel', 'stop'])
+        .order('sort_order');
       stops = data || [];
     }
 

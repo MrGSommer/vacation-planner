@@ -4,7 +4,6 @@ import { getDays, getActivitiesForTrip } from '../api/itineraries';
 import { getBudgetCategories, getExpenses, getTripExpenseTotal } from '../api/budgets';
 import { getDocuments, getActivityIdsWithDocuments } from '../api/documents';
 import { getCollaborators } from '../api/invitations';
-import { getStops } from '../api/stops';
 import { getPackingLists, getPackingItems } from '../api/packing';
 import { cacheDocuments } from './documentCache';
 
@@ -43,7 +42,6 @@ async function prefetchTrip(tripId: string): Promise<void> {
       getActivitiesForTrip(tripId),
       getTripExpenseTotal(tripId).catch(() => 0),
       getCollaborators(tripId).catch(() => []),
-      getStops(tripId).catch(() => []),
       getBudgetCategories(tripId).catch(() => []),
       getExpenses(tripId).catch(() => []),
       getDays(tripId).catch(() => []),

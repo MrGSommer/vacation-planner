@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import { Activity, ItineraryDay, TripStop, BudgetCategory, PackingItem, Trip } from '../types/database';
+import { Activity, ItineraryDay, BudgetCategory, PackingItem, Trip } from '../types/database';
+import { StopLocation } from '../api/stops';
 import { CollaboratorWithProfile } from '../api/invitations';
 import { getDeviceLocale } from './dateHelpers';
 import { CATEGORY_COLORS, getFlightLegs } from './categoryFields';
@@ -11,7 +12,7 @@ const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 export interface PrintData {
   trip: Trip;
   days: (ItineraryDay & { activities: Activity[] })[];
-  stops: TripStop[];
+  stops: StopLocation[];
   budgetCategories: BudgetCategory[];
   packingItems: PackingItem[];
   weather?: Map<string, WeatherDay>;

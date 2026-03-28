@@ -14,7 +14,8 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
 import { getToday } from '../../utils/dateHelpers';
 import { CATEGORY_COLORS, formatCategoryDetail } from '../../utils/categoryFields';
-import { openInGoogleMaps, openGoogleMapsDirections } from '../../utils/openInMaps';
+import { openGoogleMapsDirections } from '../../utils/openInMaps';
+import { MapsAppPicker, tryOpenMapsDirectly } from '../../components/map/MapsAppPicker';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
@@ -42,7 +43,7 @@ interface CachedTravel {
 export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { isFeatureAllowed, isSneakPeek, isPremium } = useSubscription();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   usePresence(tripId, 'Stopps');
   const [showAiModal, setShowAiModal] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -66,6 +67,21 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showRouteMenu, setShowRouteMenu] = useState<string | null>(null);
   const { showToast } = useToast();
   const today = getToday();
+  const [showMapsPicker, setShowMapsPicker] = useState(false);
+  const [mapsTarget, setMapsTarget] = useState<{ lat: number; lng: number; label?: string; context?: string } | null>(null);
+
+  const openMapsForActivity = (activity: Activity) => {
+    if (!activity.location_lat || !activity.location_lng) return;
+    const opened = tryOpenMapsDirectly(
+      activity.location_lat, activity.location_lng,
+      activity.location_name || undefined, activity.location_address || undefined,
+      profile?.preferred_maps_app,
+    );
+    if (!opened) {
+      setMapsTarget({ lat: activity.location_lat, lng: activity.location_lng, label: activity.location_name || undefined, context: activity.location_address || undefined });
+      setShowMapsPicker(true);
+    }
+  };
 
   // Extract the primary date from category data for day mapping & sorting
   const getActivityDate = (category: string, catData: Record<string, any>): string | undefined => {
@@ -714,7 +730,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
                             {activity.location_name || activity.location_address}
                           </Text>
                           {activity.location_lat && activity.location_lng && (
-                            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openMapsForActivity(activity); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                               <Icon name="open-outline" size={14} color={colors.secondary} />
                             </TouchableOpacity>
                           )}
@@ -801,6 +817,17 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           mode="enhance"
           tripId={tripId}
           userId={user.id}
+        />
+      )}
+
+      {mapsTarget && (
+        <MapsAppPicker
+          visible={showMapsPicker}
+          lat={mapsTarget.lat}
+          lng={mapsTarget.lng}
+          label={mapsTarget.label}
+          locationContext={mapsTarget.context}
+          onClose={() => setShowMapsPicker(false)}
         />
       )}
 

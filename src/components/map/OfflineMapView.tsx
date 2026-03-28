@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Activity, TripStop } from '../../types/database';
+import { Activity } from '../../types/database';
+import { StopLocation } from '../../api/stops';
 import { CATEGORY_COLORS } from '../../utils/categoryFields';
 import { getActivityIcon } from '../../utils/constants';
 import { colors, spacing, typography } from '../../utils/theme';
@@ -10,7 +11,7 @@ const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 interface Props {
   tripId: string;
   activities: Activity[];
-  stops: TripStop[];
+  stops: StopLocation[];
   isRoundTrip?: boolean;
 }
 

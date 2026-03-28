@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getStops } from '../api/stops';
+import { getStopLocations } from '../api/stops';
 import { format, parseISO, addDays, differenceInDays } from 'date-fns';
 
 export interface WeatherDay {
@@ -79,7 +79,7 @@ export async function fetchWeatherData(
   destLat: number | null,
   destLng: number | null,
 ): Promise<Map<string, WeatherDay>> {
-  const stops = await getStops(tripId);
+  const stops = await getStopLocations(tripId);
   const locationMap = getLocationPerDay(startDate, endDate, stops, destLat, destLng);
 
   if (locationMap.size === 0) return new Map();

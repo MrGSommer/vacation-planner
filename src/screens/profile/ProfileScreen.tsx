@@ -12,7 +12,7 @@ import { useTrips } from '../../hooks/useTrips';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { createPortalSession } from '../../api/stripe';
-import { deleteAccount } from '../../api/auth';
+import { deleteAccount, updateProfile } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
 import { Icon, SETTINGS_ICONS, NAV_ICONS } from '../../utils/icons';
@@ -135,6 +135,22 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.settingsIconWrap}><Icon name={SETTINGS_ICONS.language} size={iconSize.sm} color={colors.accent} /></View>
           <Text style={styles.settingsText}>Sprache & Währung</Text>
           <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.settingsRow} onPress={() => {
+          const current = profile?.preferred_maps_app;
+          const next = current === 'google' ? 'apple' : current === 'apple' ? null : 'google';
+          if (profile) {
+            updateProfile(profile.id, { preferred_maps_app: next } as any)
+              .then(() => { refreshProfile?.(); showToast(next ? `Navigation: ${next === 'google' ? 'Google Maps' : 'Apple Maps'}` : 'Navigation: Immer fragen', 'success'); })
+              .catch(() => showToast('Fehler beim Speichern', 'error'));
+          }
+        }}>
+          <View style={styles.settingsIconWrap}><Icon name="navigate-outline" size={iconSize.sm} color={colors.secondary} /></View>
+          <Text style={styles.settingsText}>Navigation</Text>
+          <Text style={styles.settingsValue}>
+            {profile?.preferred_maps_app === 'google' ? 'Google Maps' : profile?.preferred_maps_app === 'apple' ? 'Apple Maps' : 'Immer fragen'}
+          </Text>
         </TouchableOpacity>
       </Card>
 
@@ -391,6 +407,7 @@ const styles = StyleSheet.create({
   settingsIconWrap: { width: 32, height: 32, borderRadius: 8, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   settingsText: { ...typography.body, flex: 1 },
   settingsDesc: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  settingsValue: { ...typography.bodySmall, color: colors.textSecondary },
   arrow: { color: colors.textLight },
   divider: { height: 1, backgroundColor: colors.border },
   aiSettingsCard: { marginBottom: spacing.xl },

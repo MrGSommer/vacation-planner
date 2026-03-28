@@ -404,9 +404,6 @@ export const AiTripModal: React.FC<Props> = ({
                 {executionResult.activitiesCreated > 0 && (
                   <Text style={styles.completedStat}>{executionResult.activitiesCreated} Aktivitäten</Text>
                 )}
-                {executionResult.stopsCreated > 0 && (
-                  <Text style={styles.completedStat}>{executionResult.stopsCreated} Stops</Text>
-                )}
                 {executionResult.budgetCategoriesCreated > 0 && (
                   <Text style={styles.completedStat}>{executionResult.budgetCategoriesCreated} Budget-Kategorien</Text>
                 )}

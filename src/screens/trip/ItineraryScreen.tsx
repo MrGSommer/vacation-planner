@@ -14,7 +14,7 @@ import { ACTIVITY_CATEGORIES } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
 import { useRealtime } from '../../hooks/useRealtime';
 import { formatCategoryDetail, CATEGORY_COLORS, getFlightLegs, FlightLeg } from '../../utils/categoryFields';
-import { openInGoogleMaps } from '../../utils/openInMaps';
+import { MapsAppPicker, tryOpenMapsDirectly } from '../../components/map/MapsAppPicker';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { useToast } from '../../contexts/ToastContext';
@@ -50,7 +50,7 @@ const filterActivitiesByDay = (all: Activity[], dayId: string): Activity[] =>
 export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { showToast } = useToast();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const { isFeatureAllowed, isTripEditable } = useSubscription();
   const { trips: allTrips } = useTripContext();
   const editable = isTripEditable(tripId, allTrips);
@@ -80,6 +80,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showPollModal, setShowPollModal] = useState(false);
   const [reactionsMap, setReactionsMap] = useState<Record<string, ActivityReaction[]>>({});
   const [docActivityIds, setDocActivityIds] = useState<Set<string>>(new Set());
+  const [showMapsPicker, setShowMapsPicker] = useState(false);
+  const [mapsTarget, setMapsTarget] = useState<{ lat: number; lng: number; label?: string; context?: string } | null>(null);
   const tabScrollRef = useRef<ScrollView>(null);
   const tabWidths = useRef<number[]>([]);
 
@@ -380,6 +382,19 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const openMapsForActivity = (activity: Activity) => {
+    if (!activity.location_lat || !activity.location_lng) return;
+    const opened = tryOpenMapsDirectly(
+      activity.location_lat, activity.location_lng,
+      activity.location_name || undefined, activity.location_address || undefined,
+      profile?.preferred_maps_app,
+    );
+    if (!opened) {
+      setMapsTarget({ lat: activity.location_lat, lng: activity.location_lng, label: activity.location_name || undefined, context: activity.location_address || undefined });
+      setShowMapsPicker(true);
+    }
+  };
+
   const getContextMenuItems = (activity: Activity): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [
       { label: 'Bearbeiten', icon: 'create-outline', onPress: () => openEdit(activity) },
@@ -389,7 +404,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       items.push({
         label: 'In Maps öffnen',
         icon: 'map-outline',
-        onPress: () => openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined),
+        onPress: () => openMapsForActivity(activity),
       });
     }
     items.push({ label: 'Löschen', icon: 'trash-outline', onPress: () => handleDelete(activity.id), destructive: true });
@@ -761,7 +776,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
                         <Text style={styles.activityLocation}>{activity.location_name}</Text>
                       </View>
                       {activity.location_lat && activity.location_lng && (
-                        <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openInGoogleMaps(activity.location_lat!, activity.location_lng!, activity.location_name || undefined, activity.location_address || undefined); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <TouchableOpacity onPress={(e: any) => { e.stopPropagation(); openMapsForActivity(activity); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Icon name="open-outline" size={14} color={colors.secondary} />
                         </TouchableOpacity>
                       )}
@@ -882,6 +897,17 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setShowPollModal(false)}
         onCreated={() => getPolls(tripId).then(setPolls).catch(() => {})}
       />
+
+      {mapsTarget && (
+        <MapsAppPicker
+          visible={showMapsPicker}
+          lat={mapsTarget.lat}
+          lng={mapsTarget.lng}
+          label={mapsTarget.label}
+          locationContext={mapsTarget.context}
+          onClose={() => setShowMapsPicker(false)}
+        />
+      )}
 
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>

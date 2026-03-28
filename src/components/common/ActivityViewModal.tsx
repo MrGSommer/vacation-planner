@@ -112,14 +112,6 @@ export const ActivityViewModal: React.FC<Props> = ({
               <Text style={styles.addressText}>{activity.location_address}</Text>
             )}
 
-            {/* Route planen button */}
-            {hasCoords && (
-              <TouchableOpacity style={styles.routePlanBtn} onPress={handleRoutePlanner}>
-                <Icon name="navigate-outline" size={iconSize.sm} color={colors.primary} />
-                <Text style={styles.routePlanText}>Route planen</Text>
-              </TouchableOpacity>
-            )}
-
             {/* External links */}
             {catData.google_maps_url && (
               <TouchableOpacity onPress={() => openExternalUrl(catData.google_maps_url)} style={styles.linkRow}>
@@ -433,23 +425,6 @@ const styles = StyleSheet.create({
   closeBtn: { backgroundColor: colors.background },
   closeText: { ...typography.bodySmall, fontWeight: '600', color: colors.textSecondary },
   mapsLinkIcon: { fontSize: 16, color: colors.textLight, marginLeft: spacing.xs },
-  routePlanBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginLeft: 24 + spacing.sm,
-    marginBottom: spacing.sm,
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.sm + 4,
-    backgroundColor: colors.primary + '10',
-    borderRadius: borderRadius.md,
-    alignSelf: 'flex-start',
-  },
-  routePlanText: {
-    ...typography.bodySmall,
-    fontWeight: '600',
-    color: colors.primary,
-  },
   legRow: {
     flexDirection: 'row',
     alignItems: 'center',

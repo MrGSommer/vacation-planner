@@ -5,9 +5,9 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Header, Card, Button, Input, TimePickerInput, PlaceAutocomplete, CategoryFieldsInput } from '../../components/common';
 import { PlaceResult } from '../../components/common/PlaceAutocomplete';
 import { getActivitiesForTrip, getDays, createActivity } from '../../api/itineraries';
-import { getStops } from '../../api/stops';
+import { getStopLocations, StopLocation } from '../../api/stops';
 import { getTrip } from '../../api/trips';
-import { Activity, TripStop, ItineraryDay } from '../../types/database';
+import { Activity, ItineraryDay } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { ACTIVITY_CATEGORIES, getActivityIcon } from '../../utils/constants';
 import { Icon, getActivityIconName } from '../../utils/icons';
@@ -27,10 +27,10 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
   const editable = isTripEditable(tripId, trips);
   const mapRef = useRef<MapView>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [stops, setStops] = useState<TripStop[]>([]);
+  const [stops, setStops] = useState<StopLocation[]>([]);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [selected, setSelected] = useState<Activity | null>(null);
-  const [selectedStop, setSelectedStop] = useState<TripStop | null>(null);
+  const [selectedStop, setSelectedStop] = useState<StopLocation | null>(null);
   const [region, setRegion] = useState({
     latitude: 47.3769,
     longitude: 8.5417,
@@ -55,7 +55,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       const [trip, fetchedStops, acts, fetchedDays] = await Promise.all([
         getTrip(tripId),
-        getStops(tripId),
+        getStopLocations(tripId),
         getActivitiesForTrip(tripId),
         getDays(tripId),
       ]);

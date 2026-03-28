@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Animated,
   Dimensions, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, ScrollView,
-  PanResponder, RefreshControl,
+  PanResponder, RefreshControl, Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,12 +13,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { unlockWebAudio, lockWebAudio, createWebAudioPlayer } from '../../utils/webAudioUnlock';
 import { PhotoMapView } from '../../components/common/PhotoMapView';
 import { Header, EmptyState } from '../../components/common';
-import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos } from '../../api/photos';
+import { getPhotos, uploadPhoto, deletePhoto, deletePhotos, updatePhotoCaption, parseExifDate, autoTagPhotos, insertInspirationPhotos, removeInspirationPhotos, InspirationLocation } from '../../api/photos';
 import { requireOnline } from '../../utils/offlineGate';
 import { extractExifDateFromUri, extractExifDateFromBuffer, extractExifDataFromBuffer } from '../../utils/exifReader';
-import { getDays } from '../../api/itineraries';
+import { getDays, getActivitiesForTrip } from '../../api/itineraries';
 import { getTrip } from '../../api/trips';
-import { Photo, ItineraryDay, Trip } from '../../types/database';
+import { Photo, ItineraryDay, Trip, Activity } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -58,11 +58,19 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
-  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => {
+    if (Platform.OS === 'web') {
+      try { return (localStorage.getItem('photos_sort_order') as SortOrder) || 'newest'; } catch { return 'newest'; }
+    }
+    return 'newest';
+  });
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [dayFilter, setDayFilter] = useState<string | null>(null); // null = all, day_id = filter
   const [trip, setTrip] = useState<Trip | null>(null);
   const [tripName, setTripName] = useState<string>('');
+  const [inspirationLocations, setInspirationLocations] = useState<InspirationLocation[]>([]);
+  const [inspirationLoading, setInspirationLoading] = useState(false);
+  const [showInspirationModal, setShowInspirationModal] = useState(false);
 
   // Bulk selection
   const [selectMode, setSelectMode] = useState(false);
@@ -119,9 +127,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, fetchedDays, trip] = await Promise.all([getPhotos(tripId), getDays(tripId), getTrip(tripId)]);
+      const [data, fetchedDays, trip, activities] = await Promise.all([getPhotos(tripId), getDays(tripId), getTrip(tripId), getActivitiesForTrip(tripId)]);
       setDays(fetchedDays.sort((a, b) => a.date.localeCompare(b.date)));
       setPhotos(data);
+      // Build inspiration locations from hotel activities (with check-in dates)
+      const hotelLocs: InspirationLocation[] = activities
+        .filter(a => a.category === 'hotel' && a.title && a.check_in_date)
+        .map(a => ({ name: a.title, date: a.check_in_date! }));
+      setInspirationLocations(hotelLocs);
       if (trip) { setTrip(trip); setTripName(trip.name); }
       // Auto-tag photos without day_id
       const untagged = data.filter(p => !p.day_id && p.taken_at);
@@ -655,6 +668,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             )}
           </View>
         )}
+        {!selectMode && item.source === 'unsplash' && (
+          <View style={styles.unsplashBadge}>
+            <Text style={styles.unsplashBadgeText}>Unsplash</Text>
+          </View>
+        )}
         {selectMode && (
           <View style={[styles.selectOverlay, isSelected && styles.selectOverlayActive]}>
             <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
@@ -664,6 +682,24 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
       </TouchableOpacity>
     );
+  };
+
+  // Inspiration photos
+  const inspirationPhotosExist = useMemo(() => photos.some(p => p.source === 'unsplash'), [photos]);
+
+  const handleInsertInspirationPhotos = async () => {
+    if (!user || inspirationLocations.length === 0) return;
+    if (inspirationPhotosExist) {
+      await removeInspirationPhotos(tripId);
+    }
+    setInspirationLoading(true);
+    try {
+      await insertInspirationPhotos(tripId, user.id, inspirationLocations);
+      await loadPhotos();
+      showToast('Inspirationsfotos hinzugefügt');
+    } catch {
+      showToast('Fehler beim Laden der Fotos', 'error');
+    } finally { setInspirationLoading(false); }
   };
 
   // Free user on shared trip → can see but not edit
@@ -708,7 +744,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         <Header
           title="Fotos"
           onBack={() => navigation.navigate('TripDetail', { tripId })}
-          rightAction={photos.length > 0 ? <Text style={styles.count}>{photos.length}</Text> : undefined}
+          rightAction={
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              {!readonlyMode && inspirationLocations.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowInspirationModal(true)}
+                  disabled={inspirationLoading}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={inspirationLoading ? { opacity: 0.5 } : undefined}
+                >
+                  <Icon name="image-outline" size={22} color={colors.secondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          }
         />
       )}
 
@@ -719,7 +768,11 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.toolbar}>
           <TouchableOpacity
             style={styles.sortButton}
-            onPress={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
+            onPress={() => setSortOrder(prev => {
+              const next = prev === 'newest' ? 'oldest' : 'newest';
+              if (Platform.OS === 'web') { try { localStorage.setItem('photos_sort_order', next); } catch {} }
+              return next;
+            })}
             activeOpacity={0.7}
           >
             <Text style={styles.sortIcon}>{sortOrder === 'newest' ? '↓' : '↑'}</Text>
@@ -994,6 +1047,21 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
                     </Text>
                   </TouchableOpacity>
                 )}
+                {selectedPhoto.source === 'unsplash' && selectedPhoto.unsplash_attribution && (() => {
+                  const [name, profileUrl, photoUrl] = selectedPhoto.unsplash_attribution!.split('|');
+                  return (
+                    <Text style={styles.unsplashCredit}>
+                      Foto von{' '}
+                      <Text style={styles.unsplashCreditLink} onPress={() => Linking.openURL(`${profileUrl}?utm_source=wayfable&utm_medium=referral`)}>
+                        {name}
+                      </Text>
+                      {' '}auf{' '}
+                      <Text style={styles.unsplashCreditLink} onPress={() => Linking.openURL(`${photoUrl}?utm_source=wayfable&utm_medium=referral`)}>
+                        Unsplash
+                      </Text>
+                    </Text>
+                  );
+                })()}
               </View>
               <TouchableOpacity style={styles.viewerDeleteBtn} onPress={() => handleDelete(selectedPhoto)} disabled={deleting}>
                 {deleting
@@ -1026,6 +1094,36 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         initialInterval={slideshowIntervalMs}
         onApply={handleSlideshowSettingsApply}
       />
+
+      {/* Inspiration photos confirmation modal */}
+      <Modal visible={showInspirationModal} transparent animationType="fade" onRequestClose={() => setShowInspirationModal(false)}>
+        <TouchableOpacity style={styles.inspirationOverlay} activeOpacity={1} onPress={() => setShowInspirationModal(false)}>
+          <TouchableOpacity style={styles.inspirationSheet} activeOpacity={1} onPress={() => {}}>
+            <Icon name="image-outline" size={32} color={colors.secondary} style={{ alignSelf: 'center', marginBottom: spacing.sm }} />
+            <Text style={styles.inspirationTitle}>
+              {inspirationPhotosExist ? 'Inspirationsfotos erneuern?' : 'Inspirationsfotos hinzufügen?'}
+            </Text>
+            <Text style={styles.inspirationDesc}>
+              {inspirationPhotosExist
+                ? 'Die bestehenden Inspirationsfotos werden durch neue ersetzt. Es werden pro Reiseziel 2 passende Fotos von Unsplash geladen.'
+                : `Es werden pro Reiseziel 2 passende Fotos von Unsplash geladen — basierend auf deinen ${inspirationLocations.length} Unterkünften. So bekommst du einen visuellen Vorgeschmack auf deine Reise.`}
+            </Text>
+            <View style={styles.inspirationActions}>
+              <TouchableOpacity style={styles.inspirationCancelBtn} onPress={() => setShowInspirationModal(false)}>
+                <Text style={styles.inspirationCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.inspirationConfirmBtn}
+                onPress={() => { setShowInspirationModal(false); handleInsertInspirationPhotos(); }}
+              >
+                <Text style={styles.inspirationConfirmText}>
+                  {inspirationPhotosExist ? 'Erneuern' : 'Hinzufügen'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -1034,7 +1132,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   // Header
-  count: { ...typography.bodySmall, color: colors.textSecondary },
 
   // Toolbar
   toolbar: {
@@ -1129,6 +1226,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   dateOverlayText: { color: '#fff', fontSize: 9, fontWeight: '600', letterSpacing: 0.2 },
+  unsplashBadge: {
+    position: 'absolute' as const, top: 4, left: 4,
+    backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 4, paddingVertical: 1,
+    borderRadius: 4,
+  },
+  unsplashBadgeText: { color: '#fff', fontSize: 8, fontWeight: '500' as const },
 
   // Selection overlay
   selectOverlay: {
@@ -1215,6 +1318,9 @@ const styles = StyleSheet.create({
   },
   captionSaveText: { ...typography.bodySmall, color: '#fff', fontWeight: '600' },
 
+  unsplashCredit: { ...typography.caption, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
+  unsplashCreditLink: { color: 'rgba(255,255,255,0.7)', textDecorationLine: 'underline' as const },
+
   viewerDeleteBtn: {
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
     borderRadius: borderRadius.full, backgroundColor: 'rgba(225,112,85,0.2)',
@@ -1242,5 +1348,32 @@ const styles = StyleSheet.create({
   introLogo: {
     ...typography.caption, color: 'rgba(255,255,255,0.3)', fontWeight: '700' as const,
     letterSpacing: 1, marginTop: spacing.xl,
+  },
+  inspirationOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl,
+  },
+  inspirationSheet: {
+    backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.xl, width: '100%', maxWidth: 380,
+  },
+  inspirationTitle: {
+    ...typography.h3, textAlign: 'center', marginBottom: spacing.sm,
+  },
+  inspirationDesc: {
+    ...typography.bodySmall, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg,
+  },
+  inspirationActions: {
+    flexDirection: 'row', gap: spacing.md,
+  },
+  inspirationCancelBtn: {
+    flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.background, alignItems: 'center',
+  },
+  inspirationCancelText: {
+    ...typography.body, fontWeight: '600', color: colors.textSecondary,
+  },
+  inspirationConfirmBtn: {
+    flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.secondary, alignItems: 'center',
+  },
+  inspirationConfirmText: {
+    ...typography.body, fontWeight: '600', color: '#FFFFFF',
   },
 });

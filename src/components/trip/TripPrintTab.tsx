@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { getTrip } from '../../api/trips';
 import { getDays, getActivities } from '../../api/itineraries';
-import { getStops } from '../../api/stops';
+import { getStopLocations } from '../../api/stops';
 import { getBudgetCategories } from '../../api/budgets';
 import { getPackingLists, getPackingItems } from '../../api/packing';
 import { getCollaborators } from '../../api/invitations';
@@ -32,7 +32,7 @@ async function loadPrintData(tripId: string, options: PrintOptions): Promise<Pri
 
   const [daysData, stopsData, budgetData, packingLists, collaboratorsData] = await Promise.all([
     options.itinerary ? getDays(tripId) : Promise.resolve([]),
-    (options.stops || options.map) ? getStops(tripId) : Promise.resolve([]),
+    (options.stops || options.map) ? getStopLocations(tripId) : Promise.resolve([]),
     options.budget ? getBudgetCategories(tripId) : Promise.resolve([]),
     options.packing ? getPackingLists(tripId) : Promise.resolve([]),
     options.participants ? getCollaborators(tripId) : Promise.resolve([]),

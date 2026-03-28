@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Trip } from '../../types/database';
 import { getPhotos } from '../../api/photos';
-import { getStops } from '../../api/stops';
+import { getStopLocations } from '../../api/stops';
 import { updateTrip } from '../../api/trips';
 import { sendAiMessage, AiMessage } from '../../api/aiChat';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
@@ -25,7 +25,7 @@ export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent
   useEffect(() => {
     Promise.all([
       getPhotos(trip.id).then(p => setPhotoCount(p.length)).catch(() => {}),
-      getStops(trip.id).then(s => setStopCount(s.length)).catch(() => {}),
+      getStopLocations(trip.id).then(s => setStopCount(s.length)).catch(() => {}),
     ]);
   }, [trip.id]);
 
