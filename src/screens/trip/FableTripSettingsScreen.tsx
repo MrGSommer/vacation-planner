@@ -121,7 +121,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
         {/* Group Settings */}
         <Text style={styles.sectionTitle}>Gruppeneinstellungen</Text>
         {!canEdit && (
-          <Text style={styles.readOnlyHint}>Nur Admins und Editoren koennen diese Einstellungen aendern.</Text>
+          <Text style={styles.readOnlyHint}>Nur Admins und Editoren können diese Einstellungen ändern.</Text>
         )}
 
         <Card style={styles.card}>
@@ -192,7 +192,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Trip-Erinnerungen</Text>
-              <Text style={styles.toggleDesc}>Fable darf sich Gespraechsinhalte dieser Reise merken</Text>
+              <Text style={styles.toggleDesc}>Fable darf sich Gesprächsinhalte dieser Reise merken</Text>
             </View>
             <Switch
               value={tripMemoryEnabled}
@@ -257,7 +257,7 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Fable darf sich Vorlieben merken</Text>
-              <Text style={styles.toggleDesc}>Betrifft nur deine persoenlichen Vorlieben, nicht Trip-Erinnerungen</Text>
+              <Text style={styles.toggleDesc}>Betrifft nur deine persönlichen Vorlieben, nicht Trip-Erinnerungen</Text>
             </View>
             <Switch
               value={personalMemoryEnabled}

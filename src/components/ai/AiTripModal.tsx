@@ -371,6 +371,7 @@ export const AiTripModal: React.FC<Props> = ({
           currency={plan.trip?.currency || initialContext?.currency || 'CHF'}
           onConfirm={(filteredPlan) => confirmPlan(false, filteredPlan)}
           onReject={hidePreview}
+          loading={sending}
         />
       );
     }
@@ -488,7 +489,7 @@ export const AiTripModal: React.FC<Props> = ({
         {/* Fable disabled banner */}
         {fableDisabled && (
           <View style={styles.fableDisabledBanner}>
-            <Text style={styles.fableDisabledText}>Fable ist fuer diese Reise deaktiviert.</Text>
+            <Text style={styles.fableDisabledText}>Fable ist für diese Reise deaktiviert.</Text>
             {tripId && (
               <TouchableOpacity onPress={() => { onClose(); navigation.navigate('FableTripSettings', { tripId }); }}>
                 <Text style={styles.fableDisabledAction}>Zu den Einstellungen</Text>
@@ -501,7 +502,7 @@ export const AiTripModal: React.FC<Props> = ({
         {mode === 'enhance' && !profile?.ai_trip_context_enabled && (
           <View style={styles.contextWarningBanner}>
             <Text style={styles.contextWarningText}>
-              Hinweis: Daten-Lesen ist deaktiviert. Fable kann bestehende Aktivitaeten nicht sehen und koennte Duplikate vorschlagen. Aktiviere es in den Profil-Einstellungen.
+              Hinweis: Daten-Lesen ist deaktiviert. Fable kann bestehende Aktivitäten nicht sehen und könnte Duplikate vorschlagen. Aktiviere es in den Profil-Einstellungen.
             </Text>
           </View>
         )}
@@ -526,20 +527,20 @@ export const AiTripModal: React.FC<Props> = ({
         {/* Conflict dialog */}
         {conflicts.length > 0 && (
           <View style={styles.conflictBanner}>
-            <Text style={styles.conflictTitle}>Folgende Aktivitaeten existieren bereits:</Text>
+            <Text style={styles.conflictTitle}>Folgende Aktivitäten existieren bereits:</Text>
             {conflicts.slice(0, 5).map((c, i) => (
               <Text key={i} style={styles.conflictItem}>- {c}</Text>
             ))}
             {conflicts.length > 5 && (
               <Text style={styles.conflictItem}>... und {conflicts.length - 5} weitere</Text>
             )}
-            <Text style={styles.conflictHint}>Duplikate werden automatisch uebersprungen.</Text>
+            <Text style={styles.conflictHint}>Duplikate werden automatisch übersprungen.</Text>
             <View style={styles.conflictActions}>
               <TouchableOpacity style={styles.conflictBtn} onPress={dismissConflicts}>
                 <Text style={styles.conflictBtnText}>Abbrechen</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.conflictBtn, styles.conflictBtnPrimary]} onPress={confirmWithConflicts}>
-                <Text style={[styles.conflictBtnText, { color: '#FFFFFF' }]}>Trotzdem uebernehmen</Text>
+                <Text style={[styles.conflictBtnText, { color: '#FFFFFF' }]}>Trotzdem übernehmen</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -667,7 +668,7 @@ export const AiTripModal: React.FC<Props> = ({
                 <Icon name="list-outline" size={14} color={colors.primary} />
                 <Text style={styles.planReviewBtnText}>Details</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.planReviewBtnPrimary} onPress={() => confirmPlan()} activeOpacity={0.7}>
+              <TouchableOpacity style={[styles.planReviewBtnPrimary, sending && { opacity: 0.5 }]} onPress={() => confirmPlan()} disabled={sending} activeOpacity={0.7}>
                 <LinearGradient
                   colors={[...gradients.ocean]}
                   start={{ x: 0, y: 0 }}

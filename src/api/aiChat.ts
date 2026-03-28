@@ -65,6 +65,14 @@ export interface AiContext {
     memoryEnabled: boolean;
     tripInstruction: string | null;
   };
+  structureStops?: Array<{
+    name: string; type?: string;
+    arrival_date?: string | null; departure_date?: string | null;
+  }>;
+  conversationSummary?: string;
+  previousBatchActivities?: Array<{
+    title: string; category: string; date: string;
+  }>;
 }
 
 export interface AiResponse {

@@ -50,9 +50,11 @@ function mergePlan(
   structure: AiTripPlan,
   activities: { days: Array<{ date: string; activities: AiTripPlan['days'][0]['activities'] }> },
 ): AiTripPlan {
+  // K15: MERGE activities for same dates instead of replacing (prevents batch overlap loss)
   const activitiesByDate = new Map<string, AiTripPlan['days'][0]['activities']>();
   for (const day of activities.days || []) {
-    activitiesByDate.set(day.date, day.activities || []);
+    const existing = activitiesByDate.get(day.date) || [];
+    activitiesByDate.set(day.date, [...existing, ...(day.activities || [])]);
   }
   return {
     trip: structure.trip,
@@ -210,6 +212,11 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   const startTracking = useCallback((jobId: string, destination?: string) => {
+    // Clear any pending completed-dismiss timer from a prior run
+    if (completedTimerRef.current) {
+      clearTimeout(completedTimerRef.current);
+      completedTimerRef.current = null;
+    }
     setCompleted(false);
     setState(prev => ({
       ...prev,
@@ -229,6 +236,11 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     const totalDays = dayDates.length;
 
     clientAbortRef.current = false;
+    // Clear any pending completed-dismiss timer from a prior run
+    if (completedTimerRef.current) {
+      clearTimeout(completedTimerRef.current);
+      completedTimerRef.current = null;
+    }
     setCompleted(false);
     setState(prev => ({
       ...prev,
@@ -269,9 +281,39 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
             role: 'user',
             content: `Erstelle Aktivitäten für die Tage ${batchDates.join(', ')} als JSON.`,
           };
-          const batchResponse = await sendAiMessage('plan_activities', [batchMsg], { ...context, dayDates: batchDates });
+          // K16: Pass updated context with previously generated activities
+          const batchContext = { ...context, dayDates: batchDates };
+          if (allActivities.days.length > 0) {
+            // Merge previously generated activities so AI avoids duplicates (works in both create and enhance mode)
+            const prevActivities = allActivities.days.flatMap(d =>
+              (d.activities || []).map((a: any) => ({
+                title: a.title, category: a.category, date: d.date,
+                start_time: a.start_time || null, end_time: a.end_time || null,
+                cost: a.cost || null, description: a.description || null,
+                location_name: a.location_name || null,
+              }))
+            );
+            // Pass as previousBatchActivities (always used regardless of mode)
+            batchContext.previousBatchActivities = prevActivities;
+            // Also merge into existingData for enhance mode prompt
+            batchContext.existingData = {
+              ...batchContext.existingData,
+              activities: [...(batchContext.existingData?.activities || []), ...prevActivities],
+            };
+          }
+          const batchResponse = await sendAiMessage('plan_activities', [batchMsg], batchContext);
+          if (clientAbortRef.current) break;
           const batch = parsePlanJson(batchResponse.content);
-          allActivities.days.push(...(batch.days || []));
+
+          // K17: Filter out days with dates not in the trip structure
+          const allValidDates = new Set(dayDates);
+          const validBatchDays = (batch.days || []).filter(day => {
+            if (allValidDates.has(day.date)) return true;
+            console.warn(`[PlanGeneration] Skipping activities for ${day.date} — not in trip structure (expected within: ${batchDates.join(', ')})`);
+            return false;
+          });
+
+          allActivities.days.push(...validBatchDays);
 
           // Update progress after batch completes
           setState(prev => ({
@@ -281,6 +323,17 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
           }));
         }
 
+        if (clientAbortRef.current) {
+          setState(prev => ({
+            ...prev,
+            isGenerating: false,
+            clientGenerating: false,
+            clientProgress: null,
+          }));
+          return;
+        }
+
+        // Final abort check before DB write (race: user cancels between last batch and executePlan)
         if (clientAbortRef.current) {
           setState(prev => ({
             ...prev,

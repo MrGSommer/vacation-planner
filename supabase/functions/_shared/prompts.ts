@@ -1,5 +1,20 @@
 // Shared prompt builders for ai-chat and generate-plan Edge Functions
 
+// M2: Sanitize user-provided instructions to reduce prompt injection risk
+function sanitizeUserInstruction(text: string | undefined | null): string {
+  if (!text) return '';
+  // Truncate to max length
+  let sanitized = text.slice(0, 1000);
+  // Strip XML-like tags that could interfere with prompt structure
+  sanitized = sanitized.replace(/<\/?[a-zA-Z_][^>]*>/g, '');
+  // Strip common injection patterns
+  sanitized = sanitized.replace(/\b(system|SYSTEM|System)\s*:/g, '');
+  sanitized = sanitized.replace(/ignoriere?\s+(alle|die|vorherige|bisherige)/gi, '');
+  // Collapse multiple blank lines to prevent section-level injection
+  sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
+  return sanitized.trim();
+}
+
 export function buildConversationSystemPrompt(context: any): string {
   const { destination, startDate, endDate, currency, existingData, todayDate, travelersCount, groupType, tripType, transportMode, mode: ctxMode } = context;
 
@@ -50,15 +65,15 @@ Diese Reise ist bereits vorbei (Enddatum: ${endDate}). Wechsle in den Rückblick
   }
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.tripMemory) {
-    prompt += `\n\nWas du über diese Reise weisst (aus bisherigen Gesprächen):\n${context.tripMemory}\nNutze diese Infos für konsistente Vorschläge. Frage nicht erneut nach bereits geklärten Punkten.`;
+    prompt += `\n\nWas du über diese Reise weisst (aus bisherigen Gesprächen):\n${sanitizeUserInstruction(context.tripMemory)}\nNutze diese Infos für konsistente Vorschläge. Frage nicht erneut nach bereits geklärten Punkten.`;
   }
 
   if (context.webSearchResults) {
@@ -235,7 +250,7 @@ Wenn agent_action gesetzt ist, MUSS ready_to_plan false sein.
 - Frage NICHT nach weiteren Details wenn die Grunddaten (Ziel, Daten) vorhanden sind — handle proaktiv.
 - Bei spezifischer Aufgabe: Setze agent_action im SELBEN Turn wie die Bestätigung, nicht erst nach einer Rückfrage.
 Sonst null.
-form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswahl anbietest (z.B. Transportmittel, Unterkunftstyp, Budget-Level). Format: [{"label": "Auto", "value": "driving"}, {"label": "Zug/öV", "value": "transit"}, ...]. Sonst null. Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat.`;
+form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswahl anbietest (z.B. Transportmittel, Unterkunftstyp, Budget-Level). Format: [{"label": "Auto"}, {"label": "Zug/öV"}, ...]. Sonst null. Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat. Der User antwortet mit dem label-Text — interpretiere diesen in deiner nächsten Antwort.`;
 
   return prompt;
 }
@@ -264,15 +279,15 @@ USER-VORLIEBEN:
 ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.tripMemory) {
-    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${sanitizeUserInstruction(context.tripMemory)}`;
   }
 
   if (context.weatherData?.length > 0) {
@@ -348,15 +363,32 @@ USER-VORLIEBEN:
 ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.tripMemory) {
-    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${sanitizeUserInstruction(context.tripMemory)}`;
+  }
+
+  // K12: Inject stops into activities prompt for geographic grouping
+  if (context.structureStops?.length > 0) {
+    prompt += `\n\nROUTE & STOPS (Aktivitäten müssen geografisch zu den Stops passen):`;
+    for (const stop of context.structureStops) {
+      const dates = stop.arrival_date && stop.departure_date
+        ? ` (${stop.arrival_date} bis ${stop.departure_date})`
+        : stop.arrival_date ? ` (ab ${stop.arrival_date})` : '';
+      prompt += `\n- ${stop.name}${dates}${stop.type === 'overnight' ? ' — Übernachtung' : ''}`;
+    }
+    prompt += `\nPlane Aktivitäten passend zum Stop des jeweiligen Tages. Berücksichtige Reisetage zwischen Stops.`;
+  }
+
+  // Include conversation summary if available
+  if (context.conversationSummary) {
+    prompt += `\n\nKONVERSATIONS-KONTEXT (User-Wünsche aus dem Chat):\n${sanitizeUserInstruction(context.conversationSummary)}`;
   }
 
   prompt += `\n\nGENERIERE AKTIVITÄTEN FÜR EXAKT DIESE TAGE (ein "days"-Eintrag pro Datum):
@@ -378,6 +410,11 @@ Verwende KEINE anderen Daten. Die Anzahl der Einträge in "days" MUSS ${(dayDate
     if (existingData.activities?.length > 0) {
       prompt += `\n\nBESTEHENDE AKTIVITÄTEN (NICHT duplizieren!):\n${JSON.stringify(existingData.activities.map((a: any) => ({ title: a.title, category: a.category, location_name: a.location_name, cost: a.cost })))}`;
     }
+  }
+
+  // K16: Show previously generated activities from earlier batches (works in all modes)
+  if (context.previousBatchActivities?.length > 0) {
+    prompt += `\n\nBEREITS GENERIERTE AKTIVITÄTEN (aus vorherigen Batches — NICHT duplizieren!):\n${JSON.stringify(context.previousBatchActivities.map((a: any) => ({ title: a.title, category: a.category, date: a.date })))}`;
   }
 
   prompt += `
@@ -485,15 +522,15 @@ USER-VORLIEBEN:
 ${JSON.stringify(preferences, null, 2)}`;
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.tripMemory) {
-    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${sanitizeUserInstruction(context.tripMemory)}`;
   }
 
   if (context.weatherData?.length > 0) {
@@ -635,7 +672,7 @@ REISE-DETAILS:
 - Reisegruppe: ${groupType || 'nicht festgelegt'}`;
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.collaborators?.length > 1) {
@@ -647,7 +684,7 @@ REISE-DETAILS:
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.weatherData?.length > 0) {
@@ -700,11 +737,11 @@ REISE-DETAILS:
   }
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (existingData?.budgetCategories?.length > 0) {
@@ -747,15 +784,15 @@ REISE-DETAILS:
 - Transportmittel: ${transportMode || 'nicht festgelegt'}`;
 
   if (context.customInstruction) {
-    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${context.customInstruction}`;
+    prompt += `\n\nBENUTZER-ANWEISUNG (vom Reisenden festgelegt, respektiere diese):\n${sanitizeUserInstruction(context.customInstruction)}`;
   }
 
   if (context.fableSettings?.tripInstruction) {
-    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${context.fableSettings.tripInstruction}`;
+    prompt += `\n\nTRIP-ANWEISUNG (von der Reisegruppe festgelegt):\n${sanitizeUserInstruction(context.fableSettings.tripInstruction)}`;
   }
 
   if (context.tripMemory) {
-    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${context.tripMemory}`;
+    prompt += `\n\nBEKANNTES ÜBER DIESE REISE (aus Chat):\n${sanitizeUserInstruction(context.tripMemory)}`;
   }
 
   if (context.weatherData?.length > 0) {
@@ -852,22 +889,22 @@ Regeln:
 
 export function buildReceiptScanPrompt(context: any): string {
   const currency = context.currency || 'CHF';
-  return `Du bist ein OCR-Spezialist fuer Kassenbelege und Quittungen. Analysiere das Bild und extrahiere alle Positionen.
+  return `Du bist ein OCR-Spezialist für Kassenbelege und Quittungen. Analysiere das Bild und extrahiere alle Positionen.
 
 REGELN:
 - Extrahiere JEDEN einzelnen Artikel/Position vom Beleg
 - MwSt/Steuer-Zeilen NICHT als Item, sondern ins "tax"-Feld
 - Rabatte als Items mit negativem total_price UND is_discount: true
-  * Wenn der Rabatt fuer ALLE Positionen gilt (z.B. "10% Rabatt"): discount_target = "all"
-  * Wenn der Rabatt fuer eine BESTIMMTE Position gilt (z.B. "Happy Hour Bier -2.00"): discount_target = Name der Zielposition
+  * Wenn der Rabatt für ALLE Positionen gilt (z.B. "10% Rabatt"): discount_target = "all"
+  * Wenn der Rabatt für eine BESTIMMTE Position gilt (z.B. "Happy Hour Bier -2.00"): discount_target = Name der Zielposition
 - Trinkgeld (Tip/Service) ins "tip"-Feld, NICHT als Item
-- Wenn ein Preis pro Stueck nicht erkennbar ist, setze unit_price auf null
+- Wenn ein Preis pro Stück nicht erkennbar ist, setze unit_price auf null
 - quantity ist immer mindestens 1
-- Erkenne die Waehrung auf dem Beleg (Standard: ${currency})
+- Erkenne die Währung auf dem Beleg (Standard: ${currency})
 - Datumsformat: YYYY-MM-DD
 - Restaurantname: aus Kopfzeile/Logo des Belegs
 
-AUSGABE — NUR valides JSON, kein Markdown, keine Erklaerung:
+AUSGABE — NUR valides JSON, kein Markdown, keine Erklärung:
 {
   "restaurant_name": "string oder null",
   "date": "YYYY-MM-DD oder null",
@@ -889,8 +926,8 @@ AUSGABE — NUR valides JSON, kein Markdown, keine Erklaerung:
 }
 
 WICHTIG:
-- Wenn Zahlen nicht lesbar: bestmoeglich schaetzen und "name" mit "(unleserlich)" markieren
-- Summe der Items sollte ungefaehr dem subtotal entsprechen
+- Wenn Zahlen nicht lesbar: bestmöglich schätzen und "name" mit "(unleserlich)" markieren
+- Summe der Items sollte ungefähr dem subtotal entsprechen
 - Falls kein subtotal auf dem Beleg: berechne aus den Items
 - Falls total nicht lesbar: summiere subtotal + tax + tip`;
 }

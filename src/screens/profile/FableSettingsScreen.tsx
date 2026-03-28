@@ -89,9 +89,9 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Custom Instruction */}
         <Card style={styles.card}>
-          <Text style={styles.cardTitle}>Persoenliche Anweisung</Text>
+          <Text style={styles.cardTitle}>Persönliche Anweisung</Text>
           <Text style={styles.cardDesc}>
-            Hier stehen deine persoenlichen Vorlieben fuer Fable. Du kannst sie manuell bearbeiten — Fable ergaenzt sie auch automatisch aus Gespraechen.
+            Hier stehen deine persönlichen Vorlieben für Fable. Du kannst sie manuell bearbeiten — Fable ergänzt sie auch automatisch aus Gesprächen.
           </Text>
           <TextInput
             style={styles.textArea}
@@ -122,7 +122,7 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Reisedaten als Kontext</Text>
-              <Text style={styles.toggleDesc}>Erlaubt Fable, bestehende Trip-Daten fuer bessere Vorschlaege zu nutzen</Text>
+              <Text style={styles.toggleDesc}>Erlaubt Fable, bestehende Trip-Daten für bessere Vorschläge zu nutzen</Text>
             </View>
             <Switch
               value={aiContextEnabled}
@@ -137,7 +137,7 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
         <Card style={styles.card}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
-              <Text style={styles.toggleLabel}>Name sichtbar fuer Fable</Text>
+              <Text style={styles.toggleLabel}>Name sichtbar für Fable</Text>
               <Text style={styles.toggleDesc}>Wenn deaktiviert, sieht Fable dich als "Reisender" statt deinem Namen</Text>
             </View>
             <Switch
@@ -154,7 +154,7 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <Text style={styles.toggleLabel}>Fable darf sich Vorlieben merken</Text>
-              <Text style={styles.toggleDesc}>Fable ergaenzt deine persoenliche Anweisung automatisch mit neuen Erkenntnissen aus Gespraechen</Text>
+              <Text style={styles.toggleDesc}>Fable ergänzt deine persönliche Anweisung automatisch mit neuen Erkenntnissen aus Gesprächen</Text>
             </View>
             <Switch
               value={personalMemoryEnabled}

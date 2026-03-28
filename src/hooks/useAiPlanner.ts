@@ -54,7 +54,7 @@ export interface AiMetadata {
   transport_mode?: 'driving' | 'transit' | 'walking' | 'bicycling' | null;
   group_type?: 'solo' | 'couple' | 'family' | 'friends' | 'group' | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
-  form_options?: Array<{ label: string; value: string }> | null;
+  form_options?: Array<{ label: string; value?: string }> | null;
   plan_start_date?: string | null;
   plan_end_date?: string | null;
 }
@@ -232,10 +232,15 @@ function isDuplicate(existing: string, newEntry: string): boolean {
   if (!newEntry || !existing) return false;
   const normalizedExisting = existing.toLowerCase();
   const normalizedNew = newEntry.toLowerCase();
-  // Check if the new entry (or a significant portion) is already present
-  // Use first 30 chars or the full string, whichever is shorter
-  const needle = normalizedNew.substring(0, Math.min(30, normalizedNew.length));
-  return needle.length >= 5 && normalizedExisting.includes(needle);
+  // Check exact containment first
+  if (normalizedExisting.includes(normalizedNew)) return true;
+  // Extract meaningful words (3+ chars) and check overlap
+  const extractWords = (s: string) => s.split(/\s+/).filter(w => w.length >= 3);
+  const existingWords = new Set(extractWords(normalizedExisting));
+  const newWords = extractWords(normalizedNew);
+  if (newWords.length === 0) return false;
+  const matchCount = newWords.filter(w => existingWords.has(w)).length;
+  return matchCount / newWords.length >= 0.6;
 }
 
 function formatSearchResults(results: WebSearchResult[]): string {
@@ -261,27 +266,43 @@ function trimMessages(messages: AiChatMessage[]): AiChatMessage[] {
 }
 
 function extractPreferences(messages: AiChatMessage[], context: AiContext): Record<string, any> {
-  const userMessages = messages
-    .filter(m => m.role === 'user')
-    .map(m => m.content)
-    .join('\n');
-
-  return {
+  // Build structured preferences from metadata + context instead of raw message dump
+  const prefs: Record<string, any> = {
     destination: context.destination,
     startDate: context.startDate,
     endDate: context.endDate,
     currency: context.currency,
-    userInput: userMessages,
+    tripType: context.tripType || null,
+    transportMode: context.transportMode || null,
+    groupType: context.groupType || null,
+    travelersCount: context.travelersCount || null,
   };
+  if (context.lastPreferencesGathered?.length) {
+    prefs.preferencesGathered = context.lastPreferencesGathered;
+  }
+  // Include only user messages as a compact summary (skip greetings/system)
+  const userMessages = messages
+    .filter(m => m.role === 'user' && !m.content.startsWith('[System]'))
+    .map(m => m.content);
+  if (userMessages.length > 0) {
+    // Keep only the last 6 user messages to avoid noise
+    prefs.userInput = userMessages.slice(-6).join('\n');
+  }
+  if (context.tripMemory) {
+    prefs.tripMemory = context.tripMemory;
+  }
+  return prefs;
 }
 
 function mergePlan(
   structure: AiTripPlan,
   activities: { days: Array<{ date: string; activities: AiTripPlan['days'][0]['activities'] }> },
 ): AiTripPlan {
+  // K15: MERGE activities for same dates instead of replacing (prevents batch overlap loss)
   const activitiesByDate = new Map<string, AiTripPlan['days'][0]['activities']>();
   for (const day of activities.days || []) {
-    activitiesByDate.set(day.date, day.activities || []);
+    const existing = activitiesByDate.get(day.date) || [];
+    activitiesByDate.set(day.date, [...existing, ...(day.activities || [])]);
   }
 
   return {
@@ -615,7 +636,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setPhase('conversing');
       const disabledMsg: AiChatMessage = {
         id: nextId(), role: 'assistant',
-        content: 'Fable ist fuer diese Reise deaktiviert. Ein Reise-Admin kann Fable in den Einstellungen aktivieren.',
+        content: 'Fable ist für diese Reise deaktiviert. Ein Reise-Admin kann Fable in den Einstellungen aktivieren.',
         timestamp: Date.now(), senderName: 'Fable',
       };
       setMessages([disabledMsg]);
@@ -626,6 +647,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setError(null);
     setSending(true);
 
+    let lockAcquired = false;
     try {
       const profile = await getProfile(userId);
       personalMemoryEnabledRef.current = profile.fable_memory_enabled;
@@ -679,6 +701,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           if (savedMeta) setMetadata(savedMeta);
           if (savedPlan) setPlan(savedPlan);
           setPhase(savedConversation.phase as AiPhase);
+        }
+
+        // M9: Detect unanswered last user message (app crashed between user msg and AI response)
+        // Remove it from UI to avoid confusing "hanging" messages
+        // Note: DB message persists but is harmless — it will be naturally part of history
+        if (restoredMessages.length > 0 && restoredMessages[restoredMessages.length - 1].role === 'user') {
+          const cleaned = restoredMessages.slice(0, -1);
+          setMessages(cleaned);
         }
         // Check for active plan generation job — delegate to global context
         const activeJob = await getActiveJob(userId).catch(() => null);
@@ -738,6 +768,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           setSending(false);
           return;
         }
+        lockAcquired = true;
       }
 
       // Greeting uses 'greeting' task — AI call happens but no credits are deducted
@@ -811,6 +842,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const updates: Partial<Trip> = { group_type: meta.group_type };
           if (meta.group_type === 'solo') updates.travelers_count = 1;
           else if (meta.group_type === 'couple') updates.travelers_count = 2;
+          else if (meta.group_type === 'family') updates.travelers_count = 4;
+          else if (meta.group_type === 'friends' || meta.group_type === 'group') updates.travelers_count = 4;
           updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
         }
       }
@@ -832,8 +865,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       lastFailedActionRef.current = { type: 'greeting' };
     } finally {
       setSending(false);
-      // Release processing lock
-      if (tripId) {
+      // Release processing lock only if we actually acquired it
+      if (tripId && lockAcquired) {
         releaseProcessingLock(tripId).catch(() => {});
       }
     }
@@ -858,6 +891,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     // Persist user message immediately
     persistMessage('user', text.trim(), shortName);
 
+    let lockAcquired = false;
     try {
       // Acquire processing lock
       if (tripId) {
@@ -867,6 +901,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           setSending(false);
           return;
         }
+        lockAcquired = true;
       }
 
       // Prepare messages for API (trimmed, with sender prefix for user messages)
@@ -879,11 +914,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       }));
 
       // Anti-loop: inject system hint after 8+ messages without ready_to_plan
+      // Only if destination AND dates are known (otherwise Fable still needs info)
       const turnCount = updatedMessages.filter(m => m.role === 'user').length;
-      if (turnCount >= 4 && !metadata?.ready_to_plan) {
+      const hasDestination = !!contextRef.current.destination;
+      const hasDates = !!contextRef.current.startDate && !!contextRef.current.endDate;
+      if (turnCount >= 4 && !metadata?.ready_to_plan && hasDestination && hasDates) {
         apiMessages.push({
           role: 'user',
-          content: '[System]: Du hast bereits ' + (turnCount * 2) + '+ Nachrichten ausgetauscht. Setze jetzt ready_to_plan=true in der metadata und fasse kurz zusammen was du planst. Der User wartet auf den Plan-Button.',
+          content: '[System]: Du hast bereits ' + (turnCount * 2) + '+ Nachrichten ausgetauscht. Destination und Daten sind bekannt. Setze jetzt ready_to_plan=true in der metadata und fasse kurz zusammen was du planst. Der User wartet auf den Plan-Button.',
         });
       }
 
@@ -914,6 +952,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
 
+      // Track intermediate message IDs (searching bubbles) to exclude from final merge
+      const intermediateIds = new Set<string>();
+
       // Check for flight lookup request
       const { cleanText: textWithoutFlight, flightIata } = parseFlightLookupRequest(cleanText);
       if (flightIata) {
@@ -921,7 +962,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           id: nextId(), role: 'assistant', content: textWithoutFlight || 'Ich suche die Flugdaten...', timestamp: Date.now(),
           senderName: 'Fable',
         };
-        setMessages([...updatedMessages, searchingMsg]);
+        intermediateIds.add(searchingMsg.id);
+        setMessages(prev => {
+          const existingIds = new Set(updatedMessages.map(m => m.id));
+          const realtimeOnly = prev.filter(m => !existingIds.has(m.id));
+          return [...updatedMessages, ...realtimeOnly, searchingMsg];
+        });
 
         try {
           const flightResult = await lookupFlight(flightIata);
@@ -933,7 +979,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
             { role: 'user', content: `[System]: Flugdaten für "${flightIata}":\n${formattedFlight}` },
           ];
 
-          const followUpResponse = await sendAiMessage('conversation', followUpMessages, contextRef.current);
+          // Use 'greeting' (0 credits) for follow-up — user already paid for the initial conversation call
+          const followUpResponse = await sendAiMessage('greeting', followUpMessages, contextRef.current);
 
           const fuTripParsed = parseTripMemory(followUpResponse.content);
           const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
@@ -971,7 +1018,12 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           id: nextId(), role: 'assistant', content: textWithoutSearch || 'Ich suche im Web...', timestamp: Date.now(),
           senderName: 'Fable',
         };
-        setMessages([...updatedMessages, searchingMsg]);
+        intermediateIds.add(searchingMsg.id);
+        setMessages(prev => {
+          const existingIds = new Set(updatedMessages.map(m => m.id));
+          const realtimeOnly = prev.filter(m => !existingIds.has(m.id));
+          return [...updatedMessages, ...realtimeOnly, searchingMsg];
+        });
         setWebSearching(true);
 
         try {
@@ -992,7 +1044,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
             { role: 'user', content: `[System]: Web-Suchergebnisse für "${searchQuery}":\n${formattedResults}` },
           ];
 
-          const followUpResponse = await sendAiMessage('conversation', followUpMessages, followUpContext);
+          // Use 'greeting' (0 credits) for follow-up — user already paid for the initial conversation call
+          const followUpResponse = await sendAiMessage('greeting', followUpMessages, followUpContext);
 
           // Parse the follow-up response
           const fuTripParsed = parseTripMemory(followUpResponse.content);
@@ -1031,8 +1084,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       // Persist AI message
       persistMessage('assistant', cleanText, 'Fable', creditsCost, prevCreditsRef.current ?? undefined);
 
-      const allMessages = [...updatedMessages, aiMsg];
-      setMessages(allMessages);
+      // Use functional updater to avoid overwriting realtime-injected messages
+      setMessages(prev => {
+        // Keep any messages that arrived via realtime during the AI call
+        // Exclude intermediate "searching..." bubbles (they're replaced by the final AI response)
+        const excludeIds = new Set([...updatedMessages.map(m => m.id), ...intermediateIds]);
+        const realtimeMessages = prev.filter(m => !excludeIds.has(m.id));
+        return [...updatedMessages, ...realtimeMessages, aiMsg];
+      });
       if (meta) {
         setMetadata(meta);
         if (meta.trip_type) contextRef.current.tripType = meta.trip_type;
@@ -1045,8 +1104,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const updates: Partial<Trip> = { group_type: meta.group_type };
           if (meta.group_type === 'solo') updates.travelers_count = 1;
           else if (meta.group_type === 'couple') updates.travelers_count = 2;
+          else if (meta.group_type === 'family') updates.travelers_count = 4;
+          else if (meta.group_type === 'friends' || meta.group_type === 'group') updates.travelers_count = 4;
           updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
         }
+      } else {
+        // K10: Reset stale agent_action when Fable doesn't include <metadata> tags
+        // Keep ready_to_plan — user may still want to trigger plan generation
+        setMetadata(prev => prev ? { ...prev, agent_action: null } : prev);
       }
 
       debouncedSave('conversing', meta, null);
@@ -1057,8 +1122,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
       setWebSearching(false);
-      // Release processing lock
-      if (tripId) {
+      // Release processing lock only if we actually acquired it
+      if (tripId && lockAcquired) {
         releaseProcessingLock(tripId).catch(() => {});
       }
     }
@@ -1160,18 +1225,39 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       if (planStartDate) planContext.planStartDate = planStartDate;
       if (planEndDate) planContext.planEndDate = planEndDate;
 
+      // H8: Refresh weather data (dates may have changed since startConversation)
+      if (tripId && contextRef.current.startDate && contextRef.current.endDate) {
+        try {
+          const weatherMap = await fetchWeatherData(tripId, contextRef.current.startDate, contextRef.current.endDate, contextRef.current.destinationLat ?? null, contextRef.current.destinationLng ?? null);
+          if (weatherMap && weatherMap.size > 0) {
+            planContext.weatherData = Array.from(weatherMap.entries())
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, w]) => ({ date, tempMax: w.tempMax, tempMin: w.tempMin, icon: w.icon }));
+            contextRef.current.weatherData = planContext.weatherData;
+          }
+        } catch { /* weather is best-effort */ }
+      }
+
       setProgressStep('structure');
       const dateRangeHint = planStartDate && planEndDate
         ? ` NUR für den Zeitraum ${planStartDate} bis ${planEndDate}`
         : planStartDate
         ? ` ab ${planStartDate}`
         : '';
-      const structureMessage: AiMessage = {
+
+      // K2: Include conversation history so AI knows what was discussed
+      const conversationHistory: AiMessage[] = trimMessages(messages).map(m => ({
+        role: m.role,
+        content: m.role === 'user' && m.senderName
+          ? `[${m.senderName}]: ${m.content}`
+          : m.content,
+      }));
+      conversationHistory.push({
         role: 'user',
         content: `Erstelle die Grundstruktur des Reiseplans als JSON (Trip, Stops, Budget, Tage — ohne Aktivitäten).${dateRangeHint}`,
-      };
+      });
 
-      const structureResponse = await sendAiMessage('plan_generation', [structureMessage], planContext);
+      const structureResponse = await sendAiMessage('plan_generation', conversationHistory, planContext);
 
       if (structureResponse.credits_remaining !== undefined) {
         prevCreditsRef.current = structureResponse.credits_remaining;
@@ -1204,6 +1290,52 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setProgressStep(null);
     }
   }, [messages, metadata, estimateTime, buildStructureSummary]);
+
+  // Start the actual generation (called after conflict resolution or directly)
+  // Accepts optional structureOverride for skip-resolution where state hasn't committed yet
+  const startGeneration = useCallback((structureOverride?: AiTripPlan) => {
+    const activeStructure = structureOverride || structure;
+    if (!activeStructure || !tripId) return;
+    setPhase('generating_plan');
+    setError(null);
+    setProgressStep('activities');
+
+    const preferences = extractPreferences(messages, contextRef.current);
+    const planContext: AiContext = { ...contextRef.current, preferences };
+
+    // K7: Inject generated stops into context so activities know the route
+    if (activeStructure.stops?.length) {
+      planContext.structureStops = activeStructure.stops;
+    }
+    // Include conversation summary for batch context
+    const conversationSummary = messages
+      .filter(m => m.role === 'user' && !m.content.startsWith('[System]'))
+      .slice(-6)
+      .map(m => m.content)
+      .join('\n');
+    if (conversationSummary) {
+      planContext.conversationSummary = conversationSummary;
+    }
+
+    // Delegate to PlanGenerationContext (runs tag-by-tag, survives modal close)
+    planGeneration.startClientGeneration({
+      structure: activeStructure,
+      context: planContext,
+      tripId,
+      userId,
+      destination: contextRef.current.destination || '',
+    });
+
+    // Show info message so user can close modal
+    const infoMsg: AiChatMessage = {
+      id: nextId(),
+      role: 'assistant',
+      content: 'Fable erstellt deinen Plan Tag für Tag. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt.',
+      timestamp: Date.now(),
+      senderName: 'Fable',
+    };
+    setMessages(prev => [...prev, infoMsg]);
+  }, [structure, messages, planGeneration, tripId, userId]);
 
   // Check for existing activities before generating — shows conflict_review if needed
   const checkConflictsAndGenerate = useCallback(async () => {
@@ -1238,41 +1370,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
     // No conflicts — start generation directly
     startGeneration();
-  }, [structure, tripId, mode]);
-
-  // Start the actual generation (called after conflict resolution or directly)
-  const startGeneration = useCallback(() => {
-    if (!structure || !tripId) return;
-    setPhase('generating_plan');
-    setError(null);
-    setProgressStep('activities');
-
-    const preferences = extractPreferences(messages, contextRef.current);
-    const planContext: AiContext = { ...contextRef.current, preferences };
-
-    // Delegate to PlanGenerationContext (runs tag-by-tag, survives modal close)
-    planGeneration.startClientGeneration({
-      structure,
-      context: planContext,
-      tripId,
-      userId,
-      destination: contextRef.current.destination || '',
-    });
-
-    // Show info message so user can close modal
-    const infoMsg: AiChatMessage = {
-      id: nextId(),
-      role: 'assistant',
-      content: 'Fable erstellt deinen Plan Tag für Tag. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt.',
-      timestamp: Date.now(),
-      senderName: 'Fable',
-    };
-    setMessages(prev => [...prev, infoMsg]);
-  }, [structure, messages, planGeneration, tripId, userId]);
+  }, [structure, tripId, mode, startGeneration]);
 
   // Resolve conflicts and proceed with generation
-  const resolveConflicts = useCallback((resolution: ConflictResolution, keepAccommodations: boolean) => {
+  const resolveConflicts = useCallback(async (resolution: ConflictResolution, keepAccommodations: boolean) => {
     setConflictInfo(null);
+    let generationStructure = structure; // track the structure to generate with
+
     if (resolution === 'skip') {
       // Skip conflicting days — filter structure to only non-conflicting days
       if (structure && conflictInfo) {
@@ -1287,12 +1391,39 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           return;
         }
         setStructure(filteredStructure);
+        generationStructure = filteredStructure; // use filtered version directly
+      }
+    } else if (resolution === 'overwrite' && tripId && structure && conflictInfo) {
+      // K4+K8: Actually delete existing activities on conflicting days before generating
+      try {
+        const { getActivitiesForTrip, getDays: getDaysForTrip, deleteActivity } = await import('../api/itineraries');
+        const [allActivities, allDays] = await Promise.all([getActivitiesForTrip(tripId), getDaysForTrip(tripId)]);
+        const dayDateMap = new Map(allDays.map(d => [d.id, d.date]));
+        const conflictDates = new Set(conflictInfo.daysWithActivities.map(d => d.date));
+        for (const act of allActivities) {
+          const actDate = dayDateMap.get(act.day_id);
+          if (actDate && conflictDates.has(actDate)) {
+            // K8: keepAccommodations — skip hotel activities if user wants to keep them
+            if (keepAccommodations && act.category === 'hotel') continue;
+            await deleteActivity(act.id);
+          }
+        }
+        // Refresh existing data in context
+        const remainingActivities = contextRef.current.existingData?.activities?.filter(a =>
+          !a.date || !conflictDates.has(a.date) || (keepAccommodations && a.category === 'hotel')
+        );
+        contextRef.current.existingData = {
+          ...contextRef.current.existingData,
+          activities: remainingActivities || [],
+        };
+      } catch (e) {
+        console.error('Failed to delete existing activities for overwrite:', e);
       }
     }
-    // For 'overwrite' and 'merge', executePlan's dedup handles it
-    // (overwrite: existing activities get replaced; merge: dedup keeps both)
-    startGeneration();
-  }, [structure, conflictInfo, startGeneration]);
+    // 'merge' uses executePlan's dedup (keeps both, skips duplicates)
+    // Pass generationStructure directly to avoid stale closure on structure state
+    startGeneration(generationStructure || undefined);
+  }, [structure, conflictInfo, startGeneration, tripId]);
 
   // Legacy generatePlan — generates structure + activities in one go (for backward compat)
   const generatePlan = useCallback(async () => {
@@ -1380,12 +1511,30 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     try {
       const preferences = extractPreferences(messages, contextRef.current);
       const planContext: AiContext = { ...contextRef.current, preferences };
-      const adjustMessage: AiMessage = {
+
+      // K1+K14: Include conversation history + current plan so AI has full context
+      const conversationHistory: AiMessage[] = trimMessages(messages).map(m => ({
+        role: m.role,
+        content: m.role === 'user' && m.senderName
+          ? `[${m.senderName}]: ${m.content}`
+          : m.content,
+      }));
+
+      // Add the current plan as context
+      const currentPlanJson = plan ? JSON.stringify(plan, null, 2) : '';
+      if (currentPlanJson) {
+        conversationHistory.push({
+          role: 'assistant',
+          content: `[Aktueller Plan als JSON]:\n${currentPlanJson}`,
+        });
+      }
+
+      conversationHistory.push({
         role: 'user',
         content: `Passe den Reiseplan an basierend auf folgendem Feedback: "${feedback}". Antworte NUR mit dem vollständigen, angepassten JSON-Plan.`,
-      };
+      });
       // Use legacy full plan prompt for adjustments
-      const response = await sendAiMessage('plan_generation_full', [adjustMessage], planContext);
+      const response = await sendAiMessage('plan_generation_full', conversationHistory, planContext);
 
       // Update credits balance
       if (response.credits_remaining !== undefined) {
@@ -1403,11 +1552,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         timestamp: Date.now(),
         senderName: 'Fable',
       };
-      setMessages(prev => {
-        const updated = [...prev, summaryMsg];
-        debouncedSave('plan_review', metadata, parsed);
-        return updated;
-      });
+      setMessages(prev => [...prev, summaryMsg]);
+      debouncedSave('plan_review', metadata, parsed);
       setPhase('plan_review');
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'adjustPlan', status: e?.status, detail: e?.message } });
@@ -1415,7 +1561,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setError('Anpassung fehlgeschlagen – bitte versuche es erneut');
       setPhase('plan_review');
     }
-  }, [messages, sending, userId, metadata, debouncedSave]);
+  }, [messages, sending, userId, metadata, plan, debouncedSave]);
 
   const rejectPlan = useCallback(() => {
     setPlan(null);
@@ -1448,7 +1594,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     tripMemoryRef.current = undefined;
     if (pollingRef.current) clearInterval(pollingRef.current);
 
-    // Release processing lock, then delete saved conversation + trip messages + trip memory
+    // H4: Release processing lock and delete saved conversation — but keep trip memory
+    // Trip memory contains valuable info from past conversations, don't destroy it on reset
     if (tripId) {
       releaseProcessingLock(tripId).catch(() => {});
       deleteAiConversation(tripId).catch(() => {});
@@ -1481,7 +1628,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     try {
       const agentMsg: AiMessage = {
         role: 'user',
-        content: 'Erstelle eine Packliste fuer diese Reise als JSON.',
+        content: 'Erstelle eine Packliste für diese Reise als JSON.',
       };
       const response = await sendAiMessage('agent_packing', [agentMsg], contextRef.current);
 
@@ -1507,16 +1654,30 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         assigned_to: item.assigned_to && validCollabIds.has(item.assigned_to) ? item.assigned_to : null,
       }));
 
-      // Add items to existing packing list (or create one if none exists)
-      const { getPackingLists, createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
+      // H1: Add items to existing packing list with dedup
+      const { getPackingLists, getPackingItems: getExistingItems, createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
       const existingLists = await getPackingLists(tripId);
       const list = existingLists.length > 0 ? existingLists[0] : await createList(tripId, 'Packliste');
-      await createItems(list.id, validItems);
+
+      // Filter out items that already exist (by name, case-insensitive)
+      const existingItems = existingLists.length > 0 ? await getExistingItems(list.id) : [];
+      const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
+      const newItems = validItems.filter(item => !existingNames.has(item.name.toLowerCase()));
+      if (newItems.length > 0) {
+        await createItems(list.id, newItems);
+      }
+
+      // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
+      const clearedMeta = metadata ? { ...metadata, agent_action: null } : null;
+      setMetadata(clearedMeta);
+      debouncedSave('conversing', clearedMeta, null);
 
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: `Packliste erstellt mit **${parsed.items.length} Items** in ${[...new Set(parsed.items.map(i => i.category))].length} Kategorien. Schau im Packlisten-Tab nach!`,
+        content: newItems.length > 0
+          ? `Packliste erstellt mit **${newItems.length} Items** in ${[...new Set(newItems.map(i => i.category))].length} Kategorien.${validItems.length > newItems.length ? ` (${validItems.length - newItems.length} Duplikate übersprungen)` : ''} Schau im Packlisten-Tab nach!`
+          : 'Alle vorgeschlagenen Items sind bereits in der Packliste vorhanden.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
@@ -1528,7 +1689,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, onCreditsUpdate]);
+  }, [tripId, sending, onCreditsUpdate, metadata, debouncedSave]);
 
   // Agent: Generate day plan
   const generateDayPlan = useCallback(async () => {
@@ -1563,11 +1724,13 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       if (!parsed.activities?.length) throw new Error('Keine Aktivitäten erhalten');
 
+      const targetDate = parsed.activities[0].date;
+      if (!targetDate) throw new Error('Kein Datum in AI-Antwort');
+
       // Find or create the day for the target date
       const { getDays, createDay } = await import('../api/itineraries');
       const { createActivities } = await import('../api/itineraries');
       const days = await getDays(tripId);
-      const targetDate = parsed.activities[0].date;
 
       let dayId: string | undefined;
       const existingDay = days.find(d => d.date === targetDate);
@@ -1578,33 +1741,57 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         dayId = newDay.id;
       }
 
+      // H3: Dedup — filter out activities that already exist for this day
+      const existingTitlesForDay = new Set<string>();
+      if (dayId && existingDay) {
+        const { getActivitiesForTrip: getTripsActivities } = await import('../api/itineraries');
+        const existingActivities = await getTripsActivities(tripId);
+        for (const a of existingActivities) {
+          if (a.day_id === dayId) {
+            existingTitlesForDay.add(a.title.toLowerCase());
+          }
+        }
+      }
+
+      const newActivities = parsed.activities.filter(a => !existingTitlesForDay.has(a.title.toLowerCase()));
+
       // Create activities
-      const activitiesToCreate = parsed.activities.map((a, i) => ({
-        day_id: dayId!,
-        trip_id: tripId,
-        title: a.title,
-        description: a.description,
-        category: a.category,
-        start_time: a.start_time,
-        end_time: a.end_time,
-        location_name: a.location_name,
-        location_lat: a.location_lat,
-        location_lng: a.location_lng,
-        location_address: a.location_address,
-        cost: a.cost,
-        currency: contextRef.current.currency || 'CHF',
-        sort_order: a.sort_order ?? i,
-        check_in_date: a.check_in_date,
-        check_out_date: a.check_out_date,
-        category_data: a.category_data || {},
-      }));
+      if (newActivities.length > 0) {
+        const activitiesToCreate = newActivities.map((a, i) => ({
+          day_id: dayId!,
+          trip_id: tripId,
+          title: a.title,
+          description: a.description,
+          category: a.category,
+          start_time: a.start_time,
+          end_time: a.end_time,
+          location_name: a.location_name,
+          location_lat: a.location_lat,
+          location_lng: a.location_lng,
+          location_address: a.location_address,
+          cost: a.cost,
+          currency: contextRef.current.currency || 'CHF',
+          sort_order: a.sort_order ?? i,
+          check_in_date: a.check_in_date,
+          check_out_date: a.check_out_date,
+          category_data: a.category_data || {},
+        }));
 
-      await createActivities(activitiesToCreate);
+        await createActivities(activitiesToCreate);
+      }
 
+      // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
+      const clearedDayMeta = metadata ? { ...metadata, agent_action: null } : null;
+      setMetadata(clearedDayMeta);
+      debouncedSave('conversing', clearedDayMeta, null);
+
+      const skipped = parsed.activities.length - newActivities.length;
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: `Tagesplan für **${targetDate}** erstellt mit **${parsed.activities.length} Aktivitäten**. Schau im Tagesplan nach!`,
+        content: newActivities.length > 0
+          ? `Tagesplan für **${targetDate}** erstellt mit **${newActivities.length} Aktivitäten**.${skipped > 0 ? ` (${skipped} Duplikate übersprungen)` : ''} Schau im Tagesplan nach!`
+          : 'Alle vorgeschlagenen Aktivitäten existieren bereits für diesen Tag.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
@@ -1616,7 +1803,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, messages, onCreditsUpdate]);
+  }, [tripId, sending, messages, onCreditsUpdate, metadata, debouncedSave]);
 
   // Agent: Generate budget categories
   const generateBudgetCategories = useCallback(async () => {
@@ -1627,7 +1814,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     try {
       const agentMsg: AiMessage = {
         role: 'user',
-        content: 'Erstelle Budget-Kategorien fuer diese Reise als JSON.',
+        content: 'Erstelle Budget-Kategorien für diese Reise als JSON.',
       };
       const response = await sendAiMessage('agent_budget', [agentMsg], contextRef.current);
 
@@ -1644,18 +1831,30 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       if (!parsed.categories?.length) throw new Error('Keine Kategorien erhalten');
 
-      // Create budget categories
-      const { createBudgetCategory } = await import('../api/budgets');
-      for (const cat of parsed.categories) {
+      // H2: Dedup — filter out budget categories that already exist
+      const { getBudgetCategories: getExistingCats, createBudgetCategory } = await import('../api/budgets');
+      const existingCats = await getExistingCats(tripId);
+      const existingCatNames = new Set(existingCats.map(c => c.name.toLowerCase()));
+      const newCategories = parsed.categories.filter(cat => !existingCatNames.has(cat.name.toLowerCase()));
+
+      for (const cat of newCategories) {
         await createBudgetCategory(tripId, cat.name, cat.color, cat.budget_limit);
       }
 
-      const totalBudget = parsed.categories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);
+      // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
+      const clearedBudgetMeta = metadata ? { ...metadata, agent_action: null } : null;
+      setMetadata(clearedBudgetMeta);
+      debouncedSave('conversing', clearedBudgetMeta, null);
+
+      const totalBudget = newCategories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);
       const currency = contextRef.current.currency || 'CHF';
+      const skipped = parsed.categories.length - newCategories.length;
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: `**${parsed.categories.length} Budget-Kategorien** erstellt (Total: ${totalBudget} ${currency}). Schau im Budget-Tab nach!`,
+        content: newCategories.length > 0
+          ? `**${newCategories.length} Budget-Kategorien** erstellt (Total: ${totalBudget} ${currency}).${skipped > 0 ? ` (${skipped} Duplikate übersprungen)` : ''} Schau im Budget-Tab nach!`
+          : 'Alle vorgeschlagenen Budget-Kategorien existieren bereits.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
@@ -1667,7 +1866,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     } finally {
       setSending(false);
     }
-  }, [tripId, sending, onCreditsUpdate]);
+  }, [tripId, sending, onCreditsUpdate, metadata, debouncedSave]);
 
   // Retry the last failed action
   const retryLastAction = useCallback(() => {
