@@ -173,7 +173,7 @@ PLAN-BEREITSCHAFT:
   2. Reisedaten bekannt (Start/End im Trip)
   3. User hat mind. 1 Präferenz/Wunsch genannt
   4. User bestätigt explizit einen REISEPLAN (nicht eine einzelne Aufgabe wie Packliste/Budget)
-- ODER: Nach 6 Nachrichten automatisch wenn Ziel+Daten vorhanden UND keine spezifische Aufgabe aktiv
+- ODER: Nach 4 Nachrichten automatisch wenn Ziel+Daten vorhanden UND keine spezifische Aufgabe aktiv. Warte NICHT auf weitere Infos — der User kann den Plan jederzeit anpassen.
 - Wenn der User gerade eine spezifische Aufgabe besprochen hat (Packliste, Budget, Tagesplan): setze ready_to_plan NICHT — "ja"/"mach" bezieht sich auf DIESE Aufgabe.
 - NIEMALS "Soll ich einen Plan erstellen?" als Text fragen — setze stattdessen ready_to_plan=true in metadata UND schreibe "Ich bin bereit, deinen Plan zu erstellen! Klicke auf den Button unten."
 
@@ -932,6 +932,33 @@ WICHTIG:
 - Falls total nicht lesbar: summiere subtotal + tax + tip`;
 }
 
+export function buildPackingImportPrompt(context: any): string {
+  const categories = context.categories?.length
+    ? context.categories.join(', ')
+    : 'Kleidung, Toilettenartikel, Elektronik, Dokumente, Medikamente, Sonstiges';
+
+  return `Du bist ein Packlisten-Parser. Der User gibt dir eine Liste von Gegenständen als Freitext.
+
+Deine Aufgabe:
+1. Erkenne jeden einzelnen Gegenstand aus dem Text
+2. Bestimme eine passende Kategorie aus: ${categories}
+3. Wenn keine Kategorie passt, verwende "Sonstiges"
+4. Erkenne Mengenangaben (z.B. "3x T-Shirt", "T-Shirts (5)", "zwei Hosen")
+5. Wenn keine Menge angegeben ist, setze quantity auf 1
+
+Antworte NUR mit einem JSON-Array. Kein anderer Text.
+
+Format:
+[{"name": "T-Shirt", "quantity": 3, "category": "Kleidung"}, ...]
+
+Regeln:
+- Jeder Gegenstand als eigenes Objekt
+- Name im Singular wenn möglich
+- Bereinige den Namen (keine Aufzählungszeichen, Nummern oder Sonderzeichen am Anfang)
+- Gruppiere NICHT — jede Zeile/jeder Gegenstand einzeln
+- Antworte NUR mit dem JSON-Array, kein Markdown, kein Text drumherum`;
+}
+
 export function buildSystemPrompt(task: string, context: any): string {
   switch (task) {
     case 'plan_generation':
@@ -950,6 +977,8 @@ export function buildSystemPrompt(task: string, context: any): string {
       return buildRecapSystemPrompt(context);
     case 'receipt_scan':
       return buildReceiptScanPrompt(context);
+    case 'packing_import':
+      return buildPackingImportPrompt(context);
     default:
       return buildConversationSystemPrompt(context);
   }

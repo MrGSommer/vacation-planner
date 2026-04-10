@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, RefreshControl, TextInput } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button, EmptyState, TripBottomNav } from '../../components/common';
@@ -25,6 +25,9 @@ import { AiTripModal } from '../../components/ai/AiTripModal';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { usePresence } from '../../hooks/usePresence';
+import { sendAiMessage, AiMessage } from '../../api/aiChat';
+import { ActivityIndicator } from 'react-native';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Packing'>;
 
@@ -92,8 +95,29 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignItemId, setAssignItemId] = useState<string | null>(null);
 
+  // Import
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importParsing, setImportParsing] = useState(false);
+  const [importPreview, setImportPreview] = useState<{ name: string; quantity: number; category: string }[] | null>(null);
+
+  // Custom category input
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showEditNewCategoryInput, setShowEditNewCategoryInput] = useState(false);
+  const [editNewCategoryName, setEditNewCategoryName] = useState('');
+
   // Collapsed categories
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+
+  // Derive all categories: defaults + custom from existing items
+  const allCategories = useMemo(() => {
+    const defaults = [...PACKING_CATEGORIES] as string[];
+    const custom = items
+      .map(i => i.category)
+      .filter(c => !defaults.includes(c));
+    return [...defaults, ...Array.from(new Set(custom))];
+  }, [items]);
 
   const loadData = useCallback(async () => {
     try {
@@ -383,6 +407,49 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
     persistTemplates(updatedTemplates);
   };
 
+  const handleImportParse = async () => {
+    if (!importText.trim()) return;
+    setImportParsing(true);
+    try {
+      const messages: AiMessage[] = [{ role: 'user', content: importText.trim() }];
+      const response = await sendAiMessage('packing_import', messages, { categories: allCategories });
+      // Parse JSON from response
+      const jsonMatch = response.content.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error('Kein gültiges JSON in Antwort');
+      const parsed = JSON.parse(jsonMatch[0]) as { name: string; quantity: number; category: string }[];
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('Keine Gegenstände erkannt');
+      setImportPreview(parsed);
+    } catch (e: any) {
+      logError(e, { component: 'PackingScreen', context: { action: 'importParse' } });
+      showToast('Liste konnte nicht verarbeitet werden', 'error');
+    } finally {
+      setImportParsing(false);
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importPreview || !listId) return;
+    try {
+      const created = await createPackingItems(listId, importPreview.map(item => ({
+        name: item.name,
+        category: item.category || 'Sonstiges',
+        quantity: item.quantity || 1,
+      })));
+      setItems(prev => [...prev, ...created]);
+      showToast(`${created.length} Gegenstände importiert`, 'success');
+      setShowImportModal(false);
+      setImportText('');
+      setImportPreview(null);
+    } catch (e: any) {
+      logError(e, { component: 'PackingScreen', context: { action: 'importConfirm' } });
+      showToast('Import fehlgeschlagen', 'error');
+    }
+  };
+
+  const handleImportRemoveItem = (index: number) => {
+    setImportPreview(prev => prev ? prev.filter((_, i) => i !== index) : null);
+  };
+
   const handleAssign = async (userId: string | null) => {
     if (!assignItemId) return;
     try {
@@ -420,22 +487,11 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const totalItems = items.length;
   const progress = totalItems > 0 ? (packed / totalItems) * 100 : 0;
 
-  const grouped = PACKING_CATEGORIES.reduce((acc, cat) => {
+  const grouped = allCategories.reduce((acc, cat) => {
     const catItems = items.filter(i => i.category === cat);
     if (catItems.length > 0) acc[cat] = catItems;
     return acc;
   }, {} as Record<string, PackingItem[]>);
-
-  const knownCats = new Set<string>(PACKING_CATEGORIES);
-  const otherItems = items.filter(i => !knownCats.has(i.category));
-  if (otherItems.length > 0) {
-    const otherGrouped = otherItems.reduce((acc, item) => {
-      if (!acc[item.category]) acc[item.category] = [];
-      acc[item.category].push(item);
-      return acc;
-    }, {} as Record<string, PackingItem[]>);
-    Object.assign(grouped, otherGrouped);
-  }
 
   return (
     <View style={styles.container}>
@@ -608,22 +664,53 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
       {/* Add Item Modal */}
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setShowModal(false); setNewQuantity(1); }} />
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setShowModal(false); setNewQuantity(1); setShowNewCategoryInput(false); setNewCategoryName(''); }} />
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Gegenstand hinzufügen</Text>
             <Input label="Name" placeholder="z.B. Sonnencreme" value={newName} onChangeText={setNewName} />
             <Text style={styles.fieldLabel}>Kategorie</Text>
             <View style={styles.catRow}>
-              {PACKING_CATEGORIES.map(cat => (
+              {allCategories.map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.catChip, newCategory === cat && styles.catChipActive]}
                   onPress={() => setNewCategory(cat)}
                 >
-                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'pricetag-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={[styles.catText, newCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
+              {showNewCategoryInput ? (
+                <View style={styles.newCatInputRow}>
+                  <TextInput
+                    style={styles.newCatInput}
+                    value={newCategoryName}
+                    onChangeText={setNewCategoryName}
+                    placeholder="Kategorie-Name..."
+                    placeholderTextColor={colors.textLight}
+                    autoFocus
+                    onSubmitEditing={() => {
+                      const name = newCategoryName.trim();
+                      if (name && !allCategories.includes(name)) {
+                        setNewCategory(name);
+                      } else if (name) {
+                        setNewCategory(name);
+                      }
+                      setNewCategoryName('');
+                      setShowNewCategoryInput(false);
+                    }}
+                    onBlur={() => { setShowNewCategoryInput(false); setNewCategoryName(''); }}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.catChip, styles.catChipNew]}
+                  onPress={() => setShowNewCategoryInput(true)}
+                >
+                  <Icon name="add-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.catText, { color: colors.primary }]}>Neue Kategorie</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <Text style={styles.fieldLabel}>Menge</Text>
             <View style={styles.quantityRow}>
@@ -806,16 +893,43 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
             <Input label="Name" placeholder="z.B. Sonnencreme" value={editItemName} onChangeText={setEditItemName} />
             <Text style={styles.fieldLabel}>Kategorie</Text>
             <View style={styles.catRow}>
-              {PACKING_CATEGORIES.map(cat => (
+              {allCategories.map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.catChip, editItemCategory === cat && styles.catChipActive]}
                   onPress={() => setEditItemCategory(cat)}
                 >
-                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'pricetag-outline' as IconName }).icon} size={14} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={[styles.catText, editItemCategory === cat && styles.catTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
+              {showEditNewCategoryInput ? (
+                <View style={styles.newCatInputRow}>
+                  <TextInput
+                    style={styles.newCatInput}
+                    value={editNewCategoryName}
+                    onChangeText={setEditNewCategoryName}
+                    placeholder="Kategorie-Name..."
+                    placeholderTextColor={colors.textLight}
+                    autoFocus
+                    onSubmitEditing={() => {
+                      const name = editNewCategoryName.trim();
+                      if (name) setEditItemCategory(name);
+                      setEditNewCategoryName('');
+                      setShowEditNewCategoryInput(false);
+                    }}
+                    onBlur={() => { setShowEditNewCategoryInput(false); setEditNewCategoryName(''); }}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.catChip, styles.catChipNew]}
+                  onPress={() => setShowEditNewCategoryInput(true)}
+                >
+                  <Icon name="add-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.catText, { color: colors.primary }]}>Neue Kategorie</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <Text style={styles.fieldLabel}>Menge</Text>
             <View style={styles.quantityRow}>
@@ -857,7 +971,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         >
           <View style={styles.assignModal}>
             <Text style={styles.assignTitle}>Verschieben nach</Text>
-            {PACKING_CATEGORIES.map(cat => {
+            {allCategories.map(cat => {
               const currentCat = draggingItemId ? items.find(i => i.id === draggingItemId)?.category : null;
               return (
                 <TouchableOpacity
@@ -865,7 +979,7 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   style={styles.assignOption}
                   onPress={() => handleMoveToCategory(cat)}
                 >
-                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'cube-outline' as IconName }).icon} size={iconSize.sm} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
+                  <Icon name={(PACKING_CATEGORY_ICONS[cat] || { icon: 'pricetag-outline' as IconName }).icon} size={iconSize.sm} color={(PACKING_CATEGORY_ICONS[cat] || { color: '#95A5A6' }).color} />
                   <Text style={styles.assignOptionName}>{cat}</Text>
                   {currentCat === cat && <Icon name="checkmark" size={14} color={colors.secondary} />}
                 </TouchableOpacity>
@@ -919,12 +1033,90 @@ export const PackingScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
       </Modal>
 
+      {/* Import FAB */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: BOTTOM_NAV_HEIGHT + spacing.md + 64 }]}
+        onPress={() => setShowImportModal(true)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.fabSecondary}>
+          <Icon name="clipboard-outline" size={22} color={colors.primary} />
+        </View>
+      </TouchableOpacity>
+
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)} activeOpacity={0.8}>
         <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Icon name="add" size={28} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
+
+      {/* Import Modal */}
+      <Modal visible={showImportModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setShowImportModal(false); setImportText(''); setImportPreview(null); }} />
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Liste importieren</Text>
+            {!importPreview ? (
+              <>
+                <Text style={[styles.fieldLabel, { marginBottom: spacing.xs }]}>Füge deine Liste ein (ein Gegenstand pro Zeile)</Text>
+                <TextInput
+                  style={styles.importTextInput}
+                  value={importText}
+                  onChangeText={setImportText}
+                  placeholder={"3x T-Shirt\nSonnencreme\nReisepass\nLadekabel\n2 Hosen\n..."}
+                  placeholderTextColor={colors.textLight}
+                  multiline
+                  numberOfLines={8}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+                <View style={styles.modalButtons}>
+                  <Button title="Abbrechen" onPress={() => { setShowImportModal(false); setImportText(''); }} variant="ghost" style={styles.modalBtn} />
+                  <Button
+                    title={importParsing ? 'Verarbeiten...' : 'Importieren'}
+                    onPress={handleImportParse}
+                    disabled={!importText.trim() || importParsing}
+                    style={styles.modalBtn}
+                  />
+                </View>
+                {importParsing && (
+                  <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.fieldLabel, { marginTop: spacing.xs }]}>Liste wird verarbeitet...</Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={[styles.fieldLabel, { marginBottom: spacing.xs }]}>{importPreview.length} Gegenstände erkannt</Text>
+                <ScrollView style={{ maxHeight: 300 }}>
+                  {importPreview.map((item, idx) => (
+                    <View key={idx} style={styles.importPreviewItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.importPreviewName}>{item.quantity > 1 ? `${item.quantity}x ` : ''}{item.name}</Text>
+                        <Text style={styles.importPreviewCategory}>{item.category}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleImportRemoveItem(idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Icon name="close-circle-outline" size={20} color={colors.textLight} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+                <View style={styles.modalButtons}>
+                  <Button title="Zurück" onPress={() => setImportPreview(null)} variant="ghost" style={styles.modalBtn} />
+                  <Button
+                    title={`${importPreview.length} Gegenstände hinzufügen`}
+                    onPress={handleImportConfirm}
+                    disabled={importPreview.length === 0}
+                    style={styles.modalBtn}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {showAiModal && user && (
         <AiTripModal
@@ -1089,8 +1281,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   catChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  catChipNew: { borderStyle: 'dashed' as any, borderColor: colors.primary },
   catText: { ...typography.caption, fontWeight: '600' },
   catTextActive: { color: '#fff' },
+  newCatInputRow: { flexDirection: 'row', alignItems: 'center' },
+  newCatInput: {
+    ...typography.caption,
+    fontWeight: '600',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    minWidth: 120,
+    color: colors.text,
+  },
   quantityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
   quantityBtn: {
     width: 36,
@@ -1215,4 +1420,35 @@ const styles = StyleSheet.create({
   // FAB
   fab: { position: 'absolute', right: spacing.xl, bottom: BOTTOM_NAV_HEIGHT + spacing.md, width: 56, height: 56 },
   fabGradient: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...shadows.lg },
+  fabSecondary: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5, borderColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadows.md,
+    alignSelf: 'center',
+  },
+
+  // Import
+  importTextInput: {
+    ...typography.body,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    minHeight: 160,
+    color: colors.text,
+    backgroundColor: colors.background,
+    marginBottom: spacing.md,
+  },
+  importPreviewItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  importPreviewName: { ...typography.body, fontWeight: '600' },
+  importPreviewCategory: { ...typography.caption, color: colors.textSecondary },
 });

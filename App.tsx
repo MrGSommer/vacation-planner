@@ -13,8 +13,6 @@ import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
-import { LoadingScreen } from './src/components/common';
-
 import { logCritical } from './src/services/errorLogger';
 import { setOfflineGateToast } from './src/utils/offlineGate';
 
@@ -49,15 +47,10 @@ export default function App() {
     'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
   });
 
-  // Remove HTML bootstrap loader once fonts are ready (prevents double spinner)
-  useEffect(() => {
-    if (Platform.OS === 'web' && fontsLoaded && typeof document !== 'undefined') {
-      document.getElementById('app-loader')?.remove();
-    }
-  }, [fontsLoaded]);
-
+  // While fonts load, return null — HTML bootstrap loader stays visible
+  // The HTML loader is removed by AppNavigator once auth is also ready
   if (!fontsLoaded) {
-    return <LoadingScreen />;
+    return null;
   }
 
   return (

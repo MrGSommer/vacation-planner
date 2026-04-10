@@ -918,10 +918,10 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const turnCount = updatedMessages.filter(m => m.role === 'user').length;
       const hasDestination = !!contextRef.current.destination;
       const hasDates = !!contextRef.current.startDate && !!contextRef.current.endDate;
-      if (turnCount >= 4 && !metadata?.ready_to_plan && hasDestination && hasDates) {
+      if (turnCount >= 3 && !metadata?.ready_to_plan && hasDestination && hasDates) {
         apiMessages.push({
           role: 'user',
-          content: '[System]: Du hast bereits ' + (turnCount * 2) + '+ Nachrichten ausgetauscht. Destination und Daten sind bekannt. Setze jetzt ready_to_plan=true in der metadata und fasse kurz zusammen was du planst. Der User wartet auf den Plan-Button.',
+          content: '[System]: Du hast bereits ' + (turnCount * 2) + '+ Nachrichten ausgetauscht. Destination und Daten sind bekannt. Setze JETZT ready_to_plan=true in der metadata und fasse kurz zusammen was du planst. Der User wartet auf den Plan-Button. Frage NICHT mehr weiter.',
         });
       }
 
@@ -1209,6 +1209,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
   // Phase 1: Generate structure only → show overview
   const generateStructure = useCallback(async () => {
+    // Guard against double-clicks or calling while already generating
+    if (phase === 'generating_structure' || phase === 'generating_plan') return;
+
     setPhase('generating_structure');
     setError(null);
 
@@ -1284,12 +1287,14 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setProgressStep(null);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure', status: e?.status, detail: e?.message } });
-      setError('Struktur konnte nicht erstellt werden – bitte versuche es erneut');
+      const errorMsg = e?.message?.includes('Inspirationen') ? e.message : 'Struktur konnte nicht erstellt werden – bitte versuche es erneut';
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
       lastFailedActionRef.current = { type: 'structure' };
       setPhase('conversing');
       setProgressStep(null);
     }
-  }, [messages, metadata, estimateTime, buildStructureSummary]);
+  }, [phase, messages, metadata, estimateTime, buildStructureSummary]);
 
   // Start the actual generation (called after conflict resolution or directly)
   // Accepts optional structureOverride for skip-resolution where state hasn't committed yet

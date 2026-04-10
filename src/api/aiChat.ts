@@ -70,6 +70,7 @@ export interface AiContext {
     arrival_date?: string | null; departure_date?: string | null;
   }>;
   conversationSummary?: string;
+  categories?: string[];
   previousBatchActivities?: Array<{
     title: string; category: string; date: string;
   }>;
@@ -84,7 +85,7 @@ export interface AiResponse {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export type AiTask = 'greeting' | 'conversation' | 'plan_generation' | 'plan_activities'
-  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search' | 'recap' | 'receipt_scan'
+  | 'plan_generation_full' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search' | 'recap' | 'receipt_scan' | 'packing_import'
 ;
 
 export const sendReceiptScan = async (

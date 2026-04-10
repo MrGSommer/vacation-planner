@@ -13,6 +13,7 @@ export const MODELS: Record<string, string> = {
   agent_budget: Deno.env.get('MODEL_CONVERSATION') || 'claude-haiku-4-5',
   agent_day_plan: Deno.env.get('MODEL_PLANNING') || 'claude-sonnet-4-6',
   receipt_scan: Deno.env.get('MODEL_PLANNING') || 'claude-sonnet-4-6',
+  packing_import: Deno.env.get('MODEL_CONVERSATION') || 'claude-haiku-4-5',
 };
 
 // --- Task validation & credit costs (single source of truth) ---
@@ -20,7 +21,7 @@ export const MODELS: Record<string, string> = {
 export const VALID_TASKS = [
   'greeting', 'conversation', 'plan_generation', 'plan_activities',
   'plan_generation_full', 'agent_packing', 'agent_budget', 'agent_day_plan',
-  'web_search', 'recap', 'receipt_scan',
+  'web_search', 'recap', 'receipt_scan', 'packing_import',
 ] as const;
 
 export const CREDIT_COSTS: Record<string, number> = {
@@ -35,12 +36,13 @@ export const CREDIT_COSTS: Record<string, number> = {
   agent_day_plan: 1,
   web_search: 1,
   receipt_scan: 1,
+  packing_import: 0,
 };
 
 // Tasks that produce structured JSON output → lower temperature for consistency
 const STRUCTURED_TASKS = new Set([
   'plan_generation', 'plan_activities', 'plan_generation_full',
-  'agent_packing', 'agent_budget', 'agent_day_plan', 'receipt_scan',
+  'agent_packing', 'agent_budget', 'agent_day_plan', 'receipt_scan', 'packing_import',
 ]);
 
 export function getTemperature(task: string): number {
@@ -195,6 +197,8 @@ export function getMaxTokens(task: string): number {
       return 4096;
     case 'receipt_scan':
       return 2048;
+    case 'packing_import':
+      return 4096;
     default:
       return 1024; // Conversation
   }

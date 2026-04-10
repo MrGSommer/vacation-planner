@@ -174,5 +174,6 @@ export const updatePackingItemAssignment = async (
     .select()
     .single();
   if (error) throw error;
+  invalidateCache('packingItems:');
   return data;
 };

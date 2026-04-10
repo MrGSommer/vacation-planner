@@ -3,7 +3,6 @@ import { Platform, View } from 'react-native';
 import { NavigationContainer, NavigationContainerRef, getStateFromPath as defaultGetStateFromPath } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthContext } from '../contexts/AuthContext';
-import { LoadingScreen } from '../components/common';
 import { FloatingFeedbackButton } from '../components/common/FloatingFeedbackButton';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
@@ -250,7 +249,21 @@ export const AppNavigator: React.FC = () => {
     }
   }, [session, profile, pendingInviteToken, pendingRedirectPath, passwordRecovery]);
 
-  if (loading) return <LoadingScreen />;
+  // Remove HTML bootstrap loader once auth is resolved
+  // This ensures a single smooth transition: HTML loader → real content
+  useEffect(() => {
+    if (!loading && Platform.OS === 'web' && typeof document !== 'undefined') {
+      const loader = document.getElementById('app-loader');
+      if (loader) {
+        loader.style.transition = 'opacity 0.15s ease-out';
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 150);
+      }
+    }
+  }, [loading]);
+
+  // While auth initializes, return null — HTML bootstrap loader stays visible
+  if (loading) return null;
 
   const showFab = session && currentRoute !== 'Feedback' && currentRoute !== 'FeedbackModal' && currentRoute !== 'SupportChat';
 
