@@ -1,8 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
   useWindowDimensions, Animated, Easing, NativeScrollEvent, NativeSyntheticEvent,
-  Linking,
+  Linking, TextInput, ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/common';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
+import { LandingPlanPreview } from '../../components/landing/LandingPlanPreview';
+import { AiTripPlan } from '../../services/ai/planExecutor';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -28,6 +30,7 @@ const CountText = React.memo(({ value, suffix, style }: { value: Animated.Value;
 
 const MAX_WIDTH = 1200;
 const UTM = '?utm_source=wayfable&utm_medium=referral';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const UNSPLASH_URL = `https://unsplash.com/${UTM}`;
 
 const NAV_ITEMS = [
@@ -155,6 +158,62 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const isMobile = width <= 700;
   const isTablet = width > 700 && width <= 1024;
   const isDesktop = width > 1024;
+
+  // Plan preview state
+  const [previewQuery, setPreviewQuery] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState<AiTripPlan | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewRef = useRef<View>(null);
+  const previewSectionY = useRef(0);
+
+  const generatePreview = useCallback(async () => {
+    const query = previewQuery.trim();
+    if (!query || query.length < 3) return;
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/plan-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPreviewError(data.error || 'Reiseplan konnte nicht erstellt werden.');
+        return;
+      }
+
+      setPreviewPlan(data.plan);
+
+      // Smooth scroll to preview after a short delay
+      setTimeout(() => {
+        if (previewSectionY.current > 0) {
+          scrollRef.current?.scrollTo({ y: previewSectionY.current - 20, animated: true });
+        }
+      }, 300);
+    } catch (e) {
+      setPreviewError('Verbindungsfehler. Bitte versuche es erneut.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewQuery]);
+
+  const handlePreviewAction = useCallback(() => {
+    // Save plan to sessionStorage for post-signup recovery
+    if (Platform.OS === 'web' && previewPlan) {
+      try {
+        sessionStorage.setItem('pendingPlanPreview', JSON.stringify(previewPlan));
+        sessionStorage.setItem('pendingPlanPreview_ts', String(Date.now()));
+        sessionStorage.setItem('pendingPlanQuery', previewQuery);
+      } catch {}
+    }
+    navigation.navigate('SignUp');
+  }, [previewPlan, previewQuery, navigation]);
 
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const faqHeights = useRef(FAQS.map(() => new Animated.Value(0))).current;
@@ -373,21 +432,45 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                 Organisiere Trips mit Freunden — Tagespläne, Budget, Routen und mehr.{'\n'}Mit Fable, deinem persönlichen Reisebegleiter.
               </Animated.Text>
 
-              {/* CTA */}
-              <Animated.View style={[s.heroCtas, { opacity: heroCtaOpacity, transform: [{ translateY: heroCtaTranslateY }] }]}>
-                <TouchableOpacity onPress={() => navigation.navigate('SignUp')} activeOpacity={0.8}>
+              {/* Plan Preview Input */}
+              <Animated.View style={[s.heroCtas, { opacity: heroCtaOpacity, transform: [{ translateY: heroCtaTranslateY }], width: '100%', maxWidth: 520 }]}>
+                <View style={s.heroInputWrap}>
+                  <TextInput
+                    style={[s.heroInput, isMobile && { fontSize: 14 }]}
+                    placeholder="z.B. 3 Wochen Japan, Roadtrip Norwegen..."
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={previewQuery}
+                    onChangeText={setPreviewQuery}
+                    onSubmitEditing={generatePreview}
+                    editable={!previewLoading}
+                    returnKeyType="go"
+                  />
+                </View>
+                <TouchableOpacity
+                  onPress={generatePreview}
+                  activeOpacity={0.8}
+                  disabled={previewLoading || previewQuery.trim().length < 3}
+                  style={{ opacity: previewLoading || previewQuery.trim().length < 3 ? 0.6 : 1 }}
+                >
                   <LinearGradient
                     colors={[colors.secondary, colors.sky]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={s.heroBtn}
                   >
-                    <Text style={s.heroBtnText}>Kostenlos starten</Text>
+                    {previewLoading ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={s.heroBtnText}>Fable plant deine Reise...</Text>
+                      </View>
+                    ) : (
+                      <Text style={s.heroBtnText}>Reise planen</Text>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
               </Animated.View>
 
               <Animated.Text style={[s.heroTrust, { opacity: heroCtaOpacity }]}>
-                Keine Kreditkarte nötig · <Text style={{ textDecorationLine: 'underline' }} onPress={() => scrollTo('features')}>Mehr erfahren</Text>
+                Kostenlos und ohne Anmeldung · <Text style={{ textDecorationLine: 'underline' }} onPress={() => scrollTo('features')}>Mehr erfahren</Text>
               </Animated.Text>
             </View>
           </View>
@@ -395,6 +478,33 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
             <PhotoCredit name={HERO_ATTR.name} profile={HERO_ATTR.profile} />
           </View>
         </View>
+
+        {/* ===== PLAN PREVIEW ===== */}
+        {(previewPlan || previewError) && (
+          <View
+            ref={previewRef}
+            onLayout={(e) => { previewSectionY.current = e.nativeEvent.layout.y; }}
+            style={[s.previewSection, { paddingHorizontal: contentPadding }]}
+          >
+            {previewError ? (
+              <View style={s.previewError}>
+                <Icon name="alert-circle-outline" size={24} color={colors.error} />
+                <Text style={s.previewErrorText}>{previewError}</Text>
+                <TouchableOpacity onPress={generatePreview} style={s.previewRetryBtn} activeOpacity={0.7}>
+                  <Text style={s.previewRetryText}>Nochmal versuchen</Text>
+                </TouchableOpacity>
+              </View>
+            ) : previewPlan ? (
+              <LandingPlanPreview
+                plan={previewPlan}
+                onAction={handlePreviewAction}
+                onRegenerate={generatePreview}
+                regenerating={previewLoading}
+                isMobile={isMobile}
+              />
+            ) : null}
+          </View>
+        )}
 
         {/* ===== SOCIAL PROOF ===== */}
         <Animated.View
@@ -775,6 +885,53 @@ const s = StyleSheet.create({
     ...typography.caption,
     color: 'rgba(255,255,255,0.5)',
     marginTop: spacing.md,
+  },
+
+  // Hero Input
+  heroInputWrap: {
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  heroInput: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    width: '100%',
+  },
+
+  // Plan Preview
+  previewSection: {
+    paddingVertical: spacing.xxl,
+    backgroundColor: colors.background,
+  },
+  previewError: {
+    alignItems: 'center',
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  previewErrorText: {
+    ...typography.body,
+    color: colors.error,
+    textAlign: 'center',
+  },
+  previewRetryBtn: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  previewRetryText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
   },
 
   // Social Proof

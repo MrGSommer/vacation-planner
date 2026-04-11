@@ -6,6 +6,7 @@ import { Profile } from '../types/database';
 import { getProfile } from '../api/auth';
 import { useToast } from './ToastContext';
 import { refreshPushSubscription } from '../utils/pushManager';
+import { AiTripPlan } from '../services/ai/planExecutor';
 
 interface AuthContextType {
   session: Session | null;
@@ -22,6 +23,8 @@ interface AuthContextType {
   clearPasswordRecovery: () => void;
   pendingSetPassword: boolean;
   clearPendingSetPassword: () => void;
+  pendingPlanPreview: AiTripPlan | null;
+  setPendingPlanPreview: (plan: AiTripPlan | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -39,6 +42,8 @@ const AuthContext = createContext<AuthContextType>({
   clearPasswordRecovery: () => {},
   pendingSetPassword: false,
   clearPendingSetPassword: () => {},
+  pendingPlanPreview: null,
+  setPendingPlanPreview: () => {},
 });
 
 export const useAuthContext = () => useContext(AuthContext);
@@ -123,6 +128,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           sessionStorage.removeItem('pendingRedirectPath');
           sessionStorage.removeItem('pendingRedirectPath_ts');
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Pending plan preview: persist in sessionStorage (1 hour TTL)
+  const [pendingPlanPreview, setPendingPlanPreviewState] = useState<AiTripPlan | null>(() => {
+    if (Platform.OS === 'web') {
+      try {
+        const planStr = sessionStorage.getItem('pendingPlanPreview');
+        const ts = sessionStorage.getItem('pendingPlanPreview_ts');
+        if (planStr && ts && Date.now() - parseInt(ts, 10) < 60 * 60 * 1000) {
+          return JSON.parse(planStr);
+        }
+        sessionStorage.removeItem('pendingPlanPreview');
+        sessionStorage.removeItem('pendingPlanPreview_ts');
+        sessionStorage.removeItem('pendingPlanQuery');
+        return null;
+      } catch { return null; }
+    }
+    return null;
+  });
+
+  const setPendingPlanPreview = useCallback((plan: AiTripPlan | null) => {
+    setPendingPlanPreviewState(plan);
+    if (Platform.OS === 'web') {
+      try {
+        if (plan) {
+          sessionStorage.setItem('pendingPlanPreview', JSON.stringify(plan));
+          sessionStorage.setItem('pendingPlanPreview_ts', String(Date.now()));
+        } else {
+          sessionStorage.removeItem('pendingPlanPreview');
+          sessionStorage.removeItem('pendingPlanPreview_ts');
+          sessionStorage.removeItem('pendingPlanQuery');
         }
       } catch {}
     }
@@ -293,7 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, updateCreditsBalance, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword, pendingPlanPreview, setPendingPlanPreview }}>
       {children}
     </AuthContext.Provider>
   );

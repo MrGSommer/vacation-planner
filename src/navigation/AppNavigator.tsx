@@ -118,7 +118,7 @@ function buildLinking(isAuthenticated: boolean) {
 }
 
 export const AppNavigator: React.FC = () => {
-  const { session, loading, profile, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword } = useAuthContext();
+  const { session, loading, profile, pendingInviteToken, setPendingInviteToken, pendingRedirectPath, setPendingRedirectPath, passwordRecovery, clearPasswordRecovery, pendingSetPassword, clearPendingSetPassword, pendingPlanPreview, setPendingPlanPreview } = useAuthContext();
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const prevSessionRef = useRef(session);
   // Capture the initial URL before React Navigation overwrites it on route resolution
@@ -210,6 +210,41 @@ export const AppNavigator: React.FC = () => {
     }
     prevSessionRef.current = session;
   }, [session, pendingRedirectPath, setPendingRedirectPath]);
+
+  // Pending plan preview: execute after signup and navigate to trip
+  const planExecutedRef = useRef(false);
+  useEffect(() => {
+    if (!session || !pendingPlanPreview || planExecutedRef.current) return;
+    if (pendingInviteToken || pendingRedirectPath || passwordRecovery) return; // Other redirects take priority
+
+    planExecutedRef.current = true;
+    const executePendingPlan = async () => {
+      try {
+        const { executePlan } = await import('../services/ai/planExecutor');
+        const userId = session.user.id;
+        const result = await executePlan(pendingPlanPreview, undefined, userId, 'CHF');
+        setPendingPlanPreview(null);
+
+        // Navigate to the created trip
+        const attemptNav = (retries = 0) => {
+          if (retries > 20) return;
+          if (!navigationRef.current?.getRootState()?.routes) {
+            setTimeout(() => attemptNav(retries + 1), 100);
+            return;
+          }
+          navigationRef.current?.navigate('TripDetail', { tripId: result.tripId });
+        };
+        setTimeout(() => attemptNav(), 300);
+      } catch (e) {
+        console.error('Failed to execute pending plan:', e);
+        setPendingPlanPreview(null);
+        planExecutedRef.current = false;
+      }
+    };
+
+    // Wait for navigation to be ready
+    setTimeout(executePendingPlan, 500);
+  }, [session, pendingPlanPreview, pendingInviteToken, pendingRedirectPath, passwordRecovery, setPendingPlanPreview]);
 
   // PASSWORD_RECOVERY event → navigate to ResetPassword screen
   useEffect(() => {
