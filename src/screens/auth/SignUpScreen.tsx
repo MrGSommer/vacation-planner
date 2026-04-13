@@ -10,6 +10,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { supabase } from '../../api/supabase';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { trackLandingEvent } from '../../api/landingEvents';
 
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
@@ -42,6 +43,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLocalError(null);
       await signUp(email.trim(), password, firstName.trim(), lastName.trim());
+      trackLandingEvent('registered');
       navigation.replace('SignUpSuccess', { email: email.trim() });
     } catch {}
   };
@@ -69,6 +71,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         }
       } else {
         setWaitlistSuccess(true);
+        trackLandingEvent('waitlisted');
       }
     } catch {
       setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');

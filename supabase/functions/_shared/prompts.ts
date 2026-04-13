@@ -959,6 +959,61 @@ Regeln:
 - Antworte NUR mit dem JSON-Array, kein Markdown, kein Text drumherum`;
 }
 
+export function buildPreviewPromptLight(query: string): string {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const startDateStr = tomorrow.toISOString().split('T')[0];
+
+  return `Generiere einen Reiseplan als JSON.
+
+ANFRAGE: "${query}"
+STARTDATUM: ${startDateStr} (heute: ${todayStr})
+WÄHRUNG: CHF
+SPRACHE: Schweizer Hochdeutsch (kein ß, immer ss)
+
+WICHTIGSTE REGELN:
+1. MAXIMAL 5 Kalendertage. Falls die Anfrage länger ist, zeige nur die ersten 5 Tage.
+2. GENAU EIN Eintrag pro Kalendertag im "days"-Array. NIEMALS zwei Einträge mit dem selben Datum!
+3. Jeder Tag hat 4-5 Aktivitäten INKLUSIVE Hotel (als erste Aktivität des Tages).
+4. end_date im trip = letztes Datum im days-Array.
+
+AKTIVITÄTEN PRO TAG (Reihenfolge):
+1. Hotel (category "hotel", start_time: null, end_time: null, check_in_date + check_out_date setzen)
+2. Vormittags-Aktivität (sightseeing/activity, z.B. "09:00"-"12:00")
+3. Mittagessen (food, z.B. "12:30"-"13:30")
+4. Nachmittags-Aktivität (sightseeing/activity, z.B. "14:00"-"17:00")
+5. Abendessen (food, z.B. "19:00"-"20:30")
+
+AUSNAHMEN:
+- Tag 1: erste Aktivität = transport mit category_data: {"is_arrival": true, "transport_type": "Flugzeug"}
+- Letzter Tag: letzte Aktivität = transport mit category_data: {"is_departure": true, "transport_type": "Flugzeug"}
+- Bei Ortswechsel: transport-Aktivität mit category_data: {"transport_type": "..."}
+
+FELDER:
+- description: immer null
+- location_address: immer null
+- category_data: nur bei transport (is_arrival/is_departure/transport_type), sonst null
+- sort_order: 0, 1, 2, 3... pro Tag
+- Verwende echte Koordinaten und realistische Kosten in CHF
+
+BEISPIEL für einen Tag:
+{"date": "${startDateStr}", "activities": [
+  {"title": "Hotel Beispiel", "description": null, "category": "hotel", "start_time": null, "end_time": null, "location_name": "Hotel Beispiel", "location_lat": 0, "location_lng": 0, "location_address": null, "cost": 150, "sort_order": 0, "check_in_date": "${startDateStr}", "check_out_date": "${startDateStr}", "category_data": null},
+  {"title": "Sehenswürdigkeit", "description": null, "category": "sightseeing", "start_time": "09:00", "end_time": "12:00", "location_name": "Ort", "location_lat": 0, "location_lng": 0, "location_address": null, "cost": 15, "sort_order": 1, "check_in_date": null, "check_out_date": null, "category_data": null},
+  {"title": "Mittagessen", "description": null, "category": "food", "start_time": "12:30", "end_time": "13:30", "location_name": "Restaurant", "location_lat": 0, "location_lng": 0, "location_address": null, "cost": 25, "sort_order": 2, "check_in_date": null, "check_out_date": null, "category_data": null}
+]}
+
+Antworte NUR mit validem JSON:
+{
+  "trip": {"name": "string", "destination": "string", "destination_lat": number, "destination_lng": number, "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "currency": "CHF", "notes": null},
+  "stops": [{"name": "string", "lat": number, "lng": number, "address": null, "type": "overnight", "nights": number, "arrival_date": "YYYY-MM-DD", "departure_date": "YYYY-MM-DD", "sort_order": number}],
+  "days": [{"date": "YYYY-MM-DD", "activities": [...]}],
+  "budget_categories": [{"name": "Transport", "color": "#FF6B6B", "budget_limit": number}, {"name": "Unterkunft", "color": "#4ECDC4", "budget_limit": number}, {"name": "Essen", "color": "#FFD93D", "budget_limit": number}, {"name": "Aktivitäten", "color": "#6C5CE7", "budget_limit": number}, {"name": "Einkaufen", "color": "#74B9FF", "budget_limit": number}, {"name": "Sonstiges", "color": "#636E72", "budget_limit": number}]
+}`;
+}
+
 export function buildPreviewPrompt(query: string): string {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];

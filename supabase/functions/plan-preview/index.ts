@@ -1,6 +1,6 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { callClaude, extractTextContent, MODELS } from '../_shared/claude.ts';
-import { buildPreviewPrompt } from '../_shared/prompts.ts';
+import { callClaude, extractTextContent } from '../_shared/claude.ts';
+import { buildPreviewPromptLight } from '../_shared/prompts.ts';
 
 // IP-based rate limiting: 3 requests per IP per hour
 const IP_RATE_LIMIT_MAX = 3;
@@ -66,10 +66,10 @@ Deno.serve(async (req) => {
       }, origin, 429);
     }
 
-    // Build prompt and call Claude (Sonnet for quality — first impression matters)
-    const systemPrompt = buildPreviewPrompt(sanitizedQuery);
-    const model = MODELS.plan_generation_full;
-    const maxTokens = 12288;
+    // Haiku + light prompt for fast landing page previews (5-15s instead of 60s)
+    const systemPrompt = buildPreviewPromptLight(sanitizedQuery);
+    const model = 'claude-haiku-4-5';
+    const maxTokens = 6144;
     const temperature = 0.4; // Structured JSON output
 
     const startTime = Date.now();
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     const durationMs = Date.now() - startTime;
 
     // Log for monitoring (no credit deduction, no usage logging to DB)
-    console.log(`plan-preview: ip=${ip}, query="${sanitizedQuery.slice(0, 50)}", duration=${durationMs}ms, tokens_in=${result.usage?.input_tokens}, tokens_out=${result.usage?.output_tokens}`);
+    console.log(`plan-preview: ip=${ip}, query="${sanitizedQuery.slice(0, 50)}", model=${model}, duration=${durationMs}ms, tokens_in=${result.usage?.input_tokens}, tokens_out=${result.usage?.output_tokens}, stop=${result.stop_reason}`);
 
     // Parse the JSON response
     let plan;
@@ -104,7 +104,12 @@ Deno.serve(async (req) => {
       return json({ error: 'Reiseplan konnte nicht verarbeitet werden. Bitte versuche es erneut.' }, origin, 500);
     }
 
-    return json({ plan }, origin);
+    // If plan was capped at 5 days, hint the user that there's more
+    const previewHint = (plan.days?.length >= 5)
+      ? `Dies ist eine Vorschau der ersten ${plan.days.length} Tage. Registriere dich kostenlos, um den kompletten Plan mit Fable zu erstellen — mit Details, Buchungslinks und mehr.`
+      : undefined;
+
+    return json({ plan, ...(previewHint && { preview_hint: previewHint }) }, origin);
   } catch (e) {
     console.error('plan-preview error:', e);
     return json({ error: 'Ein unerwarteter Fehler ist aufgetreten.' }, origin, 500);

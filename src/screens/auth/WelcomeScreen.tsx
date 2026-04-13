@@ -13,6 +13,7 @@ import { colors, spacing, borderRadius, typography, shadows, gradients } from '.
 import { Icon, IconName } from '../../utils/icons';
 import { LandingPlanPreview } from '../../components/landing/LandingPlanPreview';
 import { AiTripPlan } from '../../services/ai/planExecutor';
+import { trackLandingEvent } from '../../api/landingEvents';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -164,23 +165,52 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewPlan, setPreviewPlan] = useState<AiTripPlan | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewHint, setPreviewHint] = useState<string | null>(null);
+  const [previewPhase, setPreviewPhase] = useState(0);
   const previewRef = useRef<View>(null);
   const previewSectionY = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const LOADING_PHASES = [
+    'Analysiere Anfrage...',
+    'Erstelle Reiseplan...',
+    'Fast fertig...',
+  ];
+
+  // Cycle through loading phases
+  useEffect(() => {
+    if (!previewLoading) { setPreviewPhase(0); return; }
+    const t1 = setTimeout(() => setPreviewPhase(1), 3000);
+    const t2 = setTimeout(() => setPreviewPhase(2), 8000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [previewLoading]);
 
   const generatePreview = useCallback(async () => {
     const query = previewQuery.trim();
     if (!query || query.length < 3) return;
 
+    // Abort any in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setPreviewLoading(true);
     setPreviewError(null);
+    setPreviewHint(null);
+    setPreviewPhase(0);
+
+    // Timeout after 45s
+    const timeout = setTimeout(() => controller.abort(), 45000);
 
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/plan-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeout);
       const data = await res.json();
 
       if (!res.ok) {
@@ -189,6 +219,8 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
       }
 
       setPreviewPlan(data.plan);
+      setPreviewHint(data.preview_hint || null);
+      trackLandingEvent('plan_generated', query);
 
       // Smooth scroll to preview after a short delay
       setTimeout(() => {
@@ -196,14 +228,27 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           scrollRef.current?.scrollTo({ y: previewSectionY.current - 20, animated: true });
         }
       }, 300);
-    } catch (e) {
-      setPreviewError('Verbindungsfehler. Bitte versuche es erneut.');
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        setPreviewError('Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.');
+      } else {
+        setPreviewError('Verbindungsfehler. Bitte versuche es erneut.');
+      }
     } finally {
+      clearTimeout(timeout);
       setPreviewLoading(false);
+      abortRef.current = null;
     }
   }, [previewQuery]);
 
+  // Cleanup abort on unmount + track page view
+  useEffect(() => {
+    trackLandingEvent('page_view');
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
   const handlePreviewAction = useCallback(() => {
+    trackLandingEvent('signup_click', previewQuery || undefined);
     // Save plan to sessionStorage for post-signup recovery
     if (Platform.OS === 'web' && previewPlan) {
       try {
@@ -460,7 +505,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                     {previewLoading ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                         <ActivityIndicator size="small" color="#FFFFFF" />
-                        <Text style={s.heroBtnText}>Fable plant deine Reise...</Text>
+                        <Text style={s.heroBtnText}>{LOADING_PHASES[previewPhase]}</Text>
                       </View>
                     ) : (
                       <Text style={s.heroBtnText}>Reise planen</Text>
@@ -501,6 +546,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                 onRegenerate={generatePreview}
                 regenerating={previewLoading}
                 isMobile={isMobile}
+                previewHint={previewHint}
               />
             ) : null}
           </View>
@@ -653,7 +699,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                 ))}
               </View>
-              <Button title="Kostenlos starten" variant="secondary" onPress={() => navigation.navigate('SignUp')} />
+              <Button title="Kostenlos starten" variant="secondary" onPress={() => { trackLandingEvent('signup_click'); navigation.navigate('SignUp'); }} />
             </View>
 
             {/* Premium */}
@@ -686,7 +732,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                 ))}
               </View>
-              <Button title="Premium starten" onPress={() => navigation.navigate('SignUp')} />
+              <Button title="Premium starten" onPress={() => { trackLandingEvent('signup_click'); navigation.navigate('SignUp'); }} />
             </View>
           </View>
 
@@ -755,7 +801,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           <View style={s.ctaContent}>
             <Text style={[s.ctaTitle, { fontSize: isDesktop ? 40 : 30 }]}>Bereit für dein nächstes Abenteuer?</Text>
             <Text style={s.ctaSubtitle}>Erstelle deinen ersten Trip in unter 2 Minuten</Text>
-            <TouchableOpacity style={s.heroBtn} onPress={() => navigation.navigate('SignUp')} activeOpacity={0.8}>
+            <TouchableOpacity style={s.heroBtn} onPress={() => { trackLandingEvent('signup_click'); navigation.navigate('SignUp'); }} activeOpacity={0.8}>
               <Text style={s.heroBtnText}>Jetzt kostenlos starten</Text>
             </TouchableOpacity>
           </View>

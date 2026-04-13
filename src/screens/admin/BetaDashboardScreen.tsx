@@ -9,6 +9,7 @@ import {
   adminGetBetaStats, BetaStats,
   getBetaTasks, createBetaTask, updateBetaTask, deleteBetaTask, BetaTask,
 } from '../../api/betaDashboard';
+import { adminGetLandingStats } from '../../api/landingEvents';
 import { adminGetSupportStats, adminGetSupportInsights, adminGetRecentConversations, adminGetEchoStats, EchoStats } from '../../api/support';
 import { SupportInsight, SupportConversation } from '../../types/database';
 import { BetaFeedback } from '../../api/feedback';
@@ -62,15 +63,19 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
   const [echoStats, setEchoStats] = useState<EchoStats | null>(null);
 
+  // Landing funnel state
+  const [landingStats, setLandingStats] = useState<Awaited<ReturnType<typeof adminGetLandingStats>> | null>(null);
+
   const loadAll = useCallback(async () => {
     try {
-      const [fb, s, t, is, rc, es] = await Promise.all([
+      const [fb, s, t, is, rc, es, ls] = await Promise.all([
         adminGetAllFeedback(),
         adminGetBetaStats(),
         getBetaTasks(),
         adminGetSupportStats().catch(() => null),
         adminGetRecentConversations(20).catch(() => []),
         adminGetEchoStats().catch(() => null),
+        adminGetLandingStats().catch(() => null),
       ]);
       setFeedbacks(fb);
       setStats(s);
@@ -78,6 +83,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       if (is) setInsightStats(is);
       setRecentConversations(rc);
       if (es) setEchoStats(es);
+      if (ls) setLandingStats(ls);
     } catch (e) {
       console.error('Beta dashboard load error:', e);
     }
@@ -291,6 +297,43 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
               {renderStatsRow('Free → Premium', `${stats.conversion_rate}%`, colors.success)}
               {renderStatsRow('Trialing', stats.trialing_users, colors.accent)}
             </Card>
+
+            {/* Landing Funnel — "Wie gut konvertiert die Landing Page?" */}
+            {landingStats && (
+              <Card style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Landing Page Funnel</Text>
+                <Text style={styles.sectionHint}>Besucher → Plan → Signup → Registrierung</Text>
+                {renderStatsRow('Besucher heute', landingStats.page_views_today)}
+                {renderStatsRow('Besucher 7 Tage', landingStats.page_views_7d)}
+                {renderStatsRow('Besucher 30 Tage', landingStats.page_views_30d)}
+                <View style={styles.divider} />
+                {renderStatsRow('Pläne generiert (heute)', landingStats.plans_generated_today, colors.accent)}
+                {renderStatsRow('Pläne generiert (7d)', landingStats.plans_generated_7d, colors.accent)}
+                {renderStatsRow('Pläne generiert (30d)', landingStats.plans_generated_30d)}
+                <View style={styles.divider} />
+                {renderStatsRow('Signup-Clicks (heute)', landingStats.signup_clicks_today, colors.primary)}
+                {renderStatsRow('Signup-Clicks (7d)', landingStats.signup_clicks_7d, colors.primary)}
+                {renderStatsRow('Signup-Clicks (30d)', landingStats.signup_clicks_30d)}
+                <View style={styles.divider} />
+                {renderStatsRow('Registriert/Waitlisted (heute)', landingStats.conversions_today, colors.success)}
+                {renderStatsRow('Registriert/Waitlisted (7d)', landingStats.conversions_7d, colors.success)}
+                {renderStatsRow('Registriert/Waitlisted (30d)', landingStats.conversions_30d)}
+                <View style={styles.divider} />
+                {renderStatsRow('Conversion Rate (7d)', `${landingStats.conversion_rate_7d}%`, landingStats.conversion_rate_7d > 5 ? colors.success : colors.warning)}
+                <Text style={styles.insightText}>
+                  {landingStats.page_views_7d > 0
+                    ? `${pct(landingStats.plans_generated_7d, landingStats.page_views_7d)} der Besucher generieren einen Plan, ${pct(landingStats.conversions_7d, landingStats.page_views_7d)} registrieren sich`
+                    : 'Noch keine Daten'}
+                </Text>
+                {landingStats.top_queries.length > 0 && (
+                  <>
+                    <View style={styles.divider} />
+                    <Text style={styles.subsectionTitle}>Beliebteste Anfragen</Text>
+                    {landingStats.top_queries.slice(0, 5).map(q => renderStatsRow(q.query, q.count, colors.accent))}
+                  </>
+                )}
+              </Card>
+            )}
 
             {/* Engagement — "Kommen die User zurück?" */}
             <Card style={styles.sectionCard}>

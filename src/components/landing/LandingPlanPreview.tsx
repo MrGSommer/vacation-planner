@@ -12,10 +12,11 @@ interface LandingPlanPreviewProps {
   onRegenerate: () => void;
   regenerating?: boolean;
   isMobile?: boolean;
+  previewHint?: string | null;
 }
 
 export const LandingPlanPreview: React.FC<LandingPlanPreviewProps> = ({
-  plan, onAction, onRegenerate, regenerating, isMobile = false,
+  plan, onAction, onRegenerate, regenerating, isMobile = false, previewHint,
 }) => {
   const [expandedDay, setExpandedDay] = useState<number | null>(0); // First day expanded by default
   const [expandedExplain, setExpandedExplain] = useState<string | null>(null);
@@ -38,6 +39,11 @@ export const LandingPlanPreview: React.FC<LandingPlanPreviewProps> = ({
           {plan.trip.start_date && plan.trip.end_date && (
             ` · ${formatDate(plan.trip.start_date)} – ${formatDate(plan.trip.end_date)}`
           )}
+        </Text>
+      )}
+      {previewHint && (
+        <Text style={styles.hintText}>
+          Das sind erst die ersten Tage — der volle Plan wartet auf dich!
         </Text>
       )}
 
@@ -324,6 +330,15 @@ const styles = StyleSheet.create({
   },
   budgetTotalLabel: { ...typography.body, fontWeight: '700' },
   budgetTotalValue: { ...typography.body, fontWeight: '700', color: colors.secondary },
+
+  hintText: {
+    ...typography.bodySmall,
+    color: colors.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    fontStyle: 'italic',
+    opacity: 0.85,
+  },
 
   ctaBanner: {
     marginTop: spacing.lg,
