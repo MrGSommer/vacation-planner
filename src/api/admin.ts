@@ -210,6 +210,75 @@ export const adminGetEmailTests = async (limit = 20): Promise<EmailTest[]> => {
   return data || [];
 };
 
+// --- Waitlist Admin Functions (Beta feature — remove when waitlist mode disabled) ---
+
+export interface WaitlistEntry {
+  id: string;
+  email: string;
+  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  confirmed: boolean;
+  status: 'pending' | 'invited' | 'cancelled';
+  created_at: string;
+  confirmed_at: string | null;
+  invited_at: string | null;
+  invited_user_id: string | null;
+  admin_note: string | null;
+}
+
+export const adminGetWaitlist = async (): Promise<WaitlistEntry[]> => {
+  const { data, error } = await supabase
+    .from('waitlist')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const adminUpdateWaitlistEntry = async (
+  id: string,
+  updates: Partial<Pick<WaitlistEntry, 'status' | 'admin_note' | 'invited_at' | 'invited_user_id'>>
+): Promise<WaitlistEntry> => {
+  const { data, error } = await supabase
+    .from('waitlist')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const adminInviteUser = async (params: {
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  subscription_tier?: 'free' | 'premium';
+  ai_credits_balance?: number;
+}): Promise<{ success: boolean; user_id: string; email: string; email_sent: boolean }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Nicht authentifiziert');
+
+  const res = await fetch(
+    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/invite-user`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    },
+  );
+
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Einladung fehlgeschlagen');
+  return json;
+};
+
 export const adminConfirmEmailTest = async (testId: string): Promise<EmailTest> => {
   const { data, error } = await supabase
     .from('email_tests')
