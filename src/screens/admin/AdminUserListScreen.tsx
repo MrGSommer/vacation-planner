@@ -33,7 +33,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<WaitlistEntry | null>(null);
   const [entryNotes, setEntryNotes] = useState<Record<string, string>>({});
 
   // --- Invite state ---
@@ -131,7 +131,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
         admin_note: note || null,
       });
       alert('Erfolg', `${entry.email} eingeladen${result.email_sent ? ' — E-Mail gesendet' : ''}`);
-      setExpandedEntry(null);
+      setSelectedEntry(null);
       loadWaitlist();
     } catch (e: any) {
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
@@ -146,7 +146,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
     setActionLoading(entry.id);
     try {
       await adminUpdateWaitlistEntry(entry.id, { status: 'cancelled', admin_note: note || null });
-      setExpandedEntry(null);
+      setSelectedEntry(null);
       loadWaitlist();
     } catch (e: any) {
       alert('Fehler', e.message || 'Stornierung fehlgeschlagen');
@@ -311,56 +311,22 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                   <>
                     <Text style={styles.sectionLabel}>Bestätigt — bereit zum Einladen ({pendingWaitlist.length})</Text>
                     <View style={styles.tableCard}>
-                      {pendingWaitlist.map((entry, idx) => {
-                        const isExpanded = expandedEntry === entry.id;
-                        return (
-                          <View key={entry.id} style={[idx > 0 && styles.rowBorder]}>
-                            <TouchableOpacity
-                              style={styles.waitlistRow}
-                              onPress={() => setExpandedEntry(isExpanded ? null : entry.id)}
-                            >
-                              <View style={styles.waitlistInfo}>
-                                <Text style={styles.userName} numberOfLines={1}>
-                                  {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
-                                </Text>
-                                <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
-                                <Text style={styles.dateTextSmall}>{formatDate(entry.created_at)}</Text>
-                              </View>
-                              <Text style={styles.expandArrow}>{isExpanded ? '▾' : '▸'}</Text>
-                            </TouchableOpacity>
-                            {isExpanded && (
-                              <View style={styles.expandedPanel}>
-                                {entry.referral_source && (
-                                  <Text style={styles.insightText}>Quelle: {entry.referral_source}</Text>
-                                )}
-                                {entry.user_goal && (
-                                  <Text style={styles.insightText}>Ziel: {entry.user_goal}</Text>
-                                )}
-                                <TextInput
-                                  style={styles.noteInput}
-                                  placeholder="Kommentar (wird zum Profil übernommen)..."
-                                  placeholderTextColor={colors.textLight}
-                                  value={entryNotes[entry.id] ?? entry.admin_note ?? ''}
-                                  onChangeText={(t) => setEntryNotes(prev => ({ ...prev, [entry.id]: t }))}
-                                  multiline
-                                />
-                                {actionLoading === entry.id ? (
-                                  <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.sm }} />
-                                ) : (
-                                  <View style={styles.waitlistActions}>
-                                    <TouchableOpacity style={styles.inviteBtn} onPress={() => handleInviteFromWaitlist(entry)}>
-                                      <Text style={styles.inviteBtnText}>Einladen</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelWaitlist(entry)}>
-                                      <Text style={styles.cancelBtnText}>Stornieren</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                )}
-                              </View>
-                            )}
+                      {pendingWaitlist.map((entry, idx) => (
+                        <TouchableOpacity
+                          key={entry.id}
+                          style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}
+                          onPress={() => setSelectedEntry(entry)}
+                        >
+                          <View style={styles.waitlistInfo}>
+                            <Text style={styles.userName} numberOfLines={1}>
+                              {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
+                            </Text>
+                            <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
+                            <Text style={styles.dateTextSmall}>{formatDate(entry.created_at)}</Text>
                           </View>
-                        );
-                      })}
+                          <Text style={styles.arrow}>{'>'}</Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
                   </>
                 )}
@@ -371,7 +337,11 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Nicht bestätigt ({unconfirmedWaitlist.length})</Text>
                     <View style={styles.tableCard}>
                       {unconfirmedWaitlist.map((entry, idx) => (
-                        <View key={entry.id} style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}>
+                        <TouchableOpacity
+                          key={entry.id}
+                          style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}
+                          onPress={() => setSelectedEntry(entry)}
+                        >
                           <View style={styles.waitlistInfo}>
                             <Text style={styles.userName} numberOfLines={1}>
                               {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
@@ -382,7 +352,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                           <View style={[styles.statusBadge, { backgroundColor: colors.textLight + '20' }]}>
                             <Text style={[styles.statusText, { color: colors.textLight }]}>Unbestätigt</Text>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   </>
@@ -394,34 +364,31 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Bearbeitet ({processedWaitlist.length})</Text>
                     <View style={styles.tableCard}>
                       {processedWaitlist.map((entry, idx) => (
-                        <View key={entry.id} style={[idx > 0 && styles.rowBorder]}>
-                          <View style={styles.waitlistRow}>
-                            <View style={styles.waitlistInfo}>
-                              <Text style={styles.userName} numberOfLines={1}>
-                                {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
-                              </Text>
-                              <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
-                            </View>
-                            <View style={[
-                              styles.statusBadge,
-                              entry.status === 'invited' && { backgroundColor: colors.success + '20' },
-                              entry.status === 'cancelled' && { backgroundColor: colors.error + '20' },
-                            ]}>
-                              <Text style={[
-                                styles.statusText,
-                                entry.status === 'invited' && { color: colors.success },
-                                entry.status === 'cancelled' && { color: colors.error },
-                              ]}>
-                                {entry.status === 'invited' ? 'Eingeladen' : 'Storniert'}
-                              </Text>
-                            </View>
+                        <TouchableOpacity
+                          key={entry.id}
+                          style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}
+                          onPress={() => setSelectedEntry(entry)}
+                        >
+                          <View style={styles.waitlistInfo}>
+                            <Text style={styles.userName} numberOfLines={1}>
+                              {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
+                            </Text>
+                            <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
                           </View>
-                          {entry.admin_note && (
-                            <View style={styles.entryNoteRow}>
-                              <Text style={styles.entryNoteText}>{entry.admin_note}</Text>
-                            </View>
-                          )}
-                        </View>
+                          <View style={[
+                            styles.statusBadge,
+                            entry.status === 'invited' && { backgroundColor: colors.success + '20' },
+                            entry.status === 'cancelled' && { backgroundColor: colors.error + '20' },
+                          ]}>
+                            <Text style={[
+                              styles.statusText,
+                              entry.status === 'invited' && { color: colors.success },
+                              entry.status === 'cancelled' && { color: colors.error },
+                            ]}>
+                              {entry.status === 'invited' ? 'Eingeladen' : 'Storniert'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   </>
@@ -509,6 +476,87 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* === Waitlist Detail Modal === */}
+      <Modal visible={!!selectedEntry} transparent animationType="fade" onRequestClose={() => setSelectedEntry(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {selectedEntry && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>
+                    {[selectedEntry.first_name, selectedEntry.last_name].filter(Boolean).join(' ') || selectedEntry.email}
+                  </Text>
+                  <TouchableOpacity onPress={() => setSelectedEntry(null)} style={styles.modalCloseBtn}>
+                    <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.detailLabel}>E-Mail</Text>
+                <Text style={styles.detailValue}>{selectedEntry.email}</Text>
+
+                <Text style={styles.detailLabel}>Angemeldet</Text>
+                <Text style={styles.detailValue}>{formatDate(selectedEntry.created_at)}</Text>
+
+                <Text style={styles.detailLabel}>Status</Text>
+                <Text style={styles.detailValue}>
+                  {selectedEntry.confirmed ? 'Bestätigt' : 'Unbestätigt'}
+                  {selectedEntry.status === 'invited' && ' — Eingeladen'}
+                  {selectedEntry.status === 'cancelled' && ' — Storniert'}
+                </Text>
+
+                {selectedEntry.referral_source && (
+                  <>
+                    <Text style={styles.detailLabel}>Quelle</Text>
+                    <Text style={styles.detailValue}>{selectedEntry.referral_source}</Text>
+                  </>
+                )}
+
+                {selectedEntry.user_goal && (
+                  <>
+                    <Text style={styles.detailLabel}>Ziel / Erwartung</Text>
+                    <Text style={styles.detailValue}>{selectedEntry.user_goal}</Text>
+                  </>
+                )}
+
+                {selectedEntry.status === 'pending' && (
+                  <>
+                    <Text style={[styles.detailLabel, { marginTop: spacing.md }]}>Kommentar</Text>
+                    <TextInput
+                      style={styles.noteInput}
+                      placeholder="Kommentar (wird zum Profil übernommen)..."
+                      placeholderTextColor={colors.textLight}
+                      value={entryNotes[selectedEntry.id] ?? selectedEntry.admin_note ?? ''}
+                      onChangeText={(t) => setEntryNotes(prev => ({ ...prev, [selectedEntry.id]: t }))}
+                      multiline
+                    />
+
+                    {actionLoading === selectedEntry.id ? (
+                      <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.md }} />
+                    ) : (
+                      <View style={[styles.waitlistActions, { marginTop: spacing.md }]}>
+                        <TouchableOpacity style={styles.inviteBtnLarge} onPress={() => handleInviteFromWaitlist(selectedEntry)}>
+                          <Text style={styles.inviteBtnLargeText}>Einladen & E-Mail senden</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.cancelBtnLarge]} onPress={() => handleCancelWaitlist(selectedEntry)}>
+                          <Text style={styles.cancelBtnLargeText}>Stornieren</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </>
+                )}
+
+                {selectedEntry.status !== 'pending' && selectedEntry.admin_note && (
+                  <>
+                    <Text style={styles.detailLabel}>Kommentar</Text>
+                    <Text style={styles.detailValue}>{selectedEntry.admin_note}</Text>
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </AdminGuard>
   );
 };
@@ -573,13 +621,8 @@ const styles = StyleSheet.create({
   // Waitlist rows
   waitlistRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.sm },
   waitlistInfo: { flex: 1, minWidth: 0 },
-  expandArrow: { ...typography.body, color: colors.textLight, fontSize: 16 },
-  expandedPanel: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
-  noteInput: { ...typography.bodySmall, backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm, minHeight: 48 },
-  insightText: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.xs },
-  entryNoteRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  entryNoteText: { ...typography.caption, color: colors.textSecondary, fontStyle: 'italic' },
-  waitlistActions: { flexDirection: 'row', gap: spacing.xs },
+  noteInput: { ...typography.bodySmall, backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, minHeight: 48, textAlignVertical: 'top' },
+  waitlistActions: { gap: spacing.sm },
   inviteBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.sm },
   inviteBtnText: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' },
   cancelBtn: { backgroundColor: colors.error + '15', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.sm },
@@ -599,8 +642,14 @@ const styles = StyleSheet.create({
   modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   modalCloseText: { fontSize: 16, color: colors.textSecondary, fontWeight: '600' },
 
+  // Detail modal
+  detailLabel: { ...typography.caption, color: colors.textLight, marginTop: spacing.sm },
+  detailValue: { ...typography.body, marginTop: 2 },
+  cancelBtnLarge: { backgroundColor: colors.error + '15', borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
+  cancelBtnLargeText: { ...typography.button, color: colors.error },
+
   // Invite form
   inviteHint: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.lg },
-  inviteBtnLarge: { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  inviteBtnLarge: { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
   inviteBtnLargeText: { ...typography.button, color: '#FFFFFF' },
 });
