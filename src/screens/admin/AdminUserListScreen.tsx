@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdminGuard } from '../../components/admin/AdminGuard';
 import { Avatar } from '../../components/common';
-import { adminListUsers, adminGetWaitlist, adminInviteUser, adminUpdateWaitlistEntry, WaitlistEntry } from '../../api/admin';
+import { adminListUsers, adminGetWaitlist, adminInviteUser, adminCheckEmailExists, adminUpdateWaitlistEntry, WaitlistEntry } from '../../api/admin';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Profile } from '../../types/database';
@@ -14,7 +14,7 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminU
 
 const PAGE_SIZE = 20;
 
-type Tab = 'users' | 'waitlist' | 'invite';
+type Tab = 'users' | 'waitlist';
 
 export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -35,9 +35,8 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // --- Invite state ---
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [invEmail, setInvEmail] = useState('');
-  const [invFirstName, setInvFirstName] = useState('');
-  const [invLastName, setInvLastName] = useState('');
   const [invTier, setInvTier] = useState<'free' | 'premium'>('free');
   const [invCredits, setInvCredits] = useState('20');
   const [inviting, setInviting] = useState(false);
@@ -153,22 +152,26 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       alert('Fehler', 'E-Mail ist erforderlich');
       return;
     }
+    const check = await adminCheckEmailExists(invEmail.trim());
+    if (check.exists) {
+      alert('Fehler', check.where === 'profile'
+        ? 'Diese E-Mail hat bereits einen Account.'
+        : 'Diese E-Mail ist bereits auf der Warteliste.');
+      return;
+    }
     if (!(await confirm(`${invEmail} einladen?`))) return;
     setInviting(true);
     try {
       const result = await adminInviteUser({
         email: invEmail.trim(),
-        first_name: invFirstName.trim() || undefined,
-        last_name: invLastName.trim() || undefined,
         subscription_tier: invTier,
         ai_credits_balance: parseInt(invCredits, 10) || 0,
       });
       alert('Erfolg', `Account erstellt für ${result.email}${result.email_sent ? ' — Einladungs-E-Mail gesendet' : ''}`);
       setInvEmail('');
-      setInvFirstName('');
-      setInvLastName('');
       setInvTier('free');
       setInvCredits('20');
+      setShowInviteModal(false);
     } catch (e: any) {
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
     } finally {
@@ -190,7 +193,6 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const tabs: { label: string; value: Tab; badge?: number }[] = [
     { label: 'Benutzer', value: 'users', badge: totalCount },
     { label: 'Warteliste', value: 'waitlist', badge: pendingWaitlist.length || undefined },
-    { label: 'Einladen', value: 'invite' },
   ];
 
   return (
@@ -201,6 +203,9 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.backText}>{'<'} Zurück</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Mitglieder</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowInviteModal(true)}>
+            <Text style={styles.addBtnText}>+</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Tabs */}
@@ -385,10 +390,18 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
           </>
         )}
 
-        {/* === Invite Tab === */}
-        {tab === 'invite' && (
-          <View style={styles.inviteForm}>
-            <Text style={styles.sectionLabel}>Neuen Benutzer einladen</Text>
+      </ScrollView>
+
+      {/* === Invite Modal === */}
+      <Modal visible={showInviteModal} transparent animationType="fade" onRequestClose={() => setShowInviteModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Benutzer einladen</Text>
+              <TouchableOpacity onPress={() => setShowInviteModal(false)} style={styles.modalCloseBtn}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.inviteHint}>
               Erstellt einen Account und sendet eine Einladungs-E-Mail mit Anweisungen zum Passwort setzen.
             </Text>
@@ -403,17 +416,6 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
               keyboardType="email-address"
               autoCapitalize="none"
             />
-
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Vorname</Text>
-                <TextInput style={styles.searchInput} placeholder="Vorname" placeholderTextColor={colors.textLight} value={invFirstName} onChangeText={setInvFirstName} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Nachname</Text>
-                <TextInput style={styles.searchInput} placeholder="Nachname" placeholderTextColor={colors.textLight} value={invLastName} onChangeText={setInvLastName} />
-              </View>
-            </View>
 
             <Text style={styles.fieldLabel}>Abo-Stufe</Text>
             <View style={styles.filterRow}>
@@ -450,8 +452,8 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
               )}
             </TouchableOpacity>
           </View>
-        )}
-      </ScrollView>
+        </View>
+      </Modal>
     </AdminGuard>
   );
 };
@@ -524,8 +526,19 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm },
   statusText: { ...typography.caption, fontWeight: '600' },
 
+  // + Button
+  addBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  addBtnText: { fontSize: 22, color: '#FFFFFF', fontWeight: '600', lineHeight: 24 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  modalCard: { backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.xl, width: '100%', maxWidth: 440, ...shadows.lg },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  modalTitle: { ...typography.h3, fontWeight: '700' },
+  modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  modalCloseText: { fontSize: 16, color: colors.textSecondary, fontWeight: '600' },
+
   // Invite form
-  inviteForm: {},
   inviteHint: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.lg },
   inviteBtnLarge: { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md },
   inviteBtnLargeText: { ...typography.button, color: '#FFFFFF' },

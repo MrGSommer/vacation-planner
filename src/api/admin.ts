@@ -252,6 +252,27 @@ export const adminUpdateWaitlistEntry = async (
   return data;
 };
 
+export const adminCheckEmailExists = async (email: string): Promise<{ exists: boolean; where: 'profile' | 'waitlist' | null }> => {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (profile) return { exists: true, where: 'profile' };
+
+  const { data: waitlistEntry } = await supabase
+    .from('waitlist')
+    .select('id')
+    .eq('email', email)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (waitlistEntry) return { exists: true, where: 'waitlist' };
+
+  return { exists: false, where: null };
+};
+
 export const adminInviteUser = async (params: {
   email: string;
   first_name?: string;
