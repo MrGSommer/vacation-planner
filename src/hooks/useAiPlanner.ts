@@ -800,7 +800,15 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         ? `Hallo! Meine Reise nach ${destination} ist bereits vorbei. Was kann ich mit diesem Trip machen?`
         : mode === 'enhance'
         ? `Hallo! Ich möchte meinen bestehenden Trip nach ${destination} erweitern. Hilf mir, weitere Aktivitäten und Stops zu planen.${changeNote}`
-        : `Hallo! Ich plane eine Reise nach ${destination}. Hilf mir bei der Planung.`;
+        : (() => {
+          let g = `Hallo! Ich plane eine Reise nach ${destination}.`;
+          const ctx = contextRef.current;
+          if (ctx.startDate && ctx.endDate) g += ` Reisedaten: ${ctx.startDate} bis ${ctx.endDate}.`;
+          if (ctx.travelersCount && ctx.travelersCount > 0) g += ` Wir sind ${ctx.travelersCount} Person(en).`;
+          if (ctx.groupType) g += ` Reisegruppe: ${ctx.groupType}.`;
+          g += ' Hilf mir bei der Planung.';
+          return g;
+        })();
 
       const greeting: AiMessage = { role: 'user', content: `[${shortName}]: ${greetingContent}` };
 
@@ -1300,7 +1308,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
   // Accepts optional structureOverride for skip-resolution where state hasn't committed yet
   const startGeneration = useCallback((structureOverride?: AiTripPlan) => {
     const activeStructure = structureOverride || structure;
-    if (!activeStructure || !tripId) return;
+    if (!activeStructure) return;
     setPhase('generating_plan');
     setError(null);
     setProgressStep('activities');
@@ -1344,7 +1352,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
   // Check for existing activities before generating — shows conflict_review if needed
   const checkConflictsAndGenerate = useCallback(async () => {
-    if (!structure || !tripId) return;
+    if (!structure) return;
 
     // In enhance mode, check for existing activities on planned days
     if (mode === 'enhance') {

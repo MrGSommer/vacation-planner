@@ -8,12 +8,17 @@ export interface UnsplashPhoto {
   links: { html: string; download_location: string };
 }
 
+function stripDiacritics(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 export async function searchPhotos(query: string, perPage = 12): Promise<UnsplashPhoto[]> {
   if (!ACCESS_KEY) {
     console.warn('Unsplash access key not configured');
     return [];
   }
-  const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&orientation=landscape&per_page=${perPage}`;
+  const cleanQuery = stripDiacritics(query);
+  const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(cleanQuery)}&orientation=landscape&per_page=${perPage}`;
   const res = await fetch(url, {
     headers: { Authorization: `Client-ID ${ACCESS_KEY}` },
   });
