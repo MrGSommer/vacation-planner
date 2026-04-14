@@ -36,6 +36,7 @@ import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { AdminEmailTestScreen } from '../screens/admin/AdminEmailTestScreen';
 import { AdminAnnouncementsScreen } from '../screens/admin/AdminAnnouncementsScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
+import { WaitlistConfirmScreen } from '../screens/auth/WaitlistConfirmScreen';
 import { CardSetupScreen } from '../screens/auth/CardSetupScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { SlideshowViewScreen } from '../screens/slideshow/SlideshowViewScreen';
@@ -57,6 +58,7 @@ const SHARED_SCREENS = {
   AGB: 'agb',
   Impressum: 'impressum',
   ResetPassword: 'reset-password',
+  WaitlistConfirm: 'waitlist/confirm',
 } as const;
 
 // Authenticated-only screens config
@@ -351,6 +353,7 @@ export const AppNavigator: React.FC = () => {
             <Stack.Screen name="Auth" component={AuthNavigator} />
           )}
           <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
+          <Stack.Screen name="WaitlistConfirm" component={WaitlistConfirmScreen} />
           <Stack.Screen name="TripShare" component={TripShareScreen} />
           <Stack.Screen name="SlideshowView" component={SlideshowViewScreen} />
         </Stack.Navigator>

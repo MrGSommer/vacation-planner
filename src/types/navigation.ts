@@ -37,6 +37,7 @@ export type RootStackParamList = {
   BetaDashboard: undefined;
   ResetPassword: undefined;
   SlideshowView: { token: string };
+  WaitlistConfirm: { token: string };
   CardSetup: undefined;
 };
 

@@ -26,7 +26,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [localError, setLocalError] = useState<string | null>(null);
   const [agbAccepted, setAgbAccepted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
-  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [waitlistStatus, setWaitlistStatus] = useState<null | 'confirm_email' | 'resent' | 'already_confirmed' | 'has_account'>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
@@ -60,18 +60,17 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     setWaitlistLoading(true);
     setLocalError(null);
     try {
-      const { error: insertError } = await supabase
-        .from('waitlist')
-        .insert({ email: email.trim().toLowerCase(), full_name: `${firstName.trim()} ${lastName.trim()}`.trim() || null });
-      if (insertError) {
-        if (insertError.code === '23505') {
-          setLocalError('Du stehst bereits auf der Warteliste!');
-        } else {
-          setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
-        }
+      const { data, error: rpcError } = await supabase.rpc('waitlist_signup', {
+        p_email: email.trim(),
+        p_first_name: firstName.trim(),
+        p_last_name: lastName.trim(),
+      });
+      if (rpcError) {
+        setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
       } else {
-        setWaitlistSuccess(true);
-        trackLandingEvent('waitlisted');
+        const status = data?.status;
+        setWaitlistStatus(status);
+        if (status === 'confirm_email') trackLandingEvent('waitlisted');
       }
     } catch {
       setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
@@ -83,20 +82,44 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const displayError = localError || error;
 
   if (WAITLIST_MODE) {
-    if (waitlistSuccess) {
+    if (waitlistStatus) {
+      const isConfirmEmail = waitlistStatus === 'confirm_email' || waitlistStatus === 'resent';
+      const isAlreadyConfirmed = waitlistStatus === 'already_confirmed';
+      const isHasAccount = waitlistStatus === 'has_account';
+
       return (
         <View style={styles.container}>
-          <Header title="Warteliste" onBack={() => navigation.goBack()} />
+          <Header title="Warteliste" onBack={() => { setWaitlistStatus(null); }} />
           <View style={styles.successContainer}>
             <LinearGradient colors={[...gradients.ocean]} style={styles.successGradient}>
-              <Icon name="happy-outline" size={48} color="#FFFFFF" />
-              <Text style={styles.successTitle}>Du bist dabei!</Text>
-              <Text style={styles.successMessage}>
-                Wir benachrichtigen dich per E-Mail, sobald WayFable für dich bereit ist.
+              <Icon
+                name={isConfirmEmail ? 'mail-outline' : isAlreadyConfirmed ? 'checkmark-circle-outline' : 'person-outline'}
+                size={48}
+                color="#FFFFFF"
+              />
+              <Text style={styles.successTitle}>
+                {isConfirmEmail
+                  ? (waitlistStatus === 'resent' ? 'E-Mail erneut gesendet!' : 'Fast geschafft!')
+                  : isAlreadyConfirmed
+                  ? 'Bereits bestätigt!'
+                  : 'Konto vorhanden'}
               </Text>
-              <TouchableOpacity style={styles.successButton} onPress={() => navigation.goBack()}>
-                <Text style={styles.successButtonText}>Zurück</Text>
-              </TouchableOpacity>
+              <Text style={styles.successMessage}>
+                {isConfirmEmail
+                  ? 'Wir haben dir eine E-Mail geschickt. Bitte bestätige deine E-Mail-Adresse, damit wir dich benachrichtigen können, sobald WayFable für dich bereit ist.'
+                  : isAlreadyConfirmed
+                  ? 'Deine E-Mail-Adresse ist bereits bestätigt. Wir melden uns, sobald WayFable für dich bereit ist!'
+                  : 'Zu dieser E-Mail-Adresse existiert bereits ein Konto. Melde dich an, um WayFable zu nutzen.'}
+              </Text>
+              {isHasAccount ? (
+                <TouchableOpacity style={styles.successButton} onPress={() => navigation.navigate('Login')}>
+                  <Text style={styles.successButtonText}>Zur Anmeldung</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.successButton} onPress={() => navigation.goBack()}>
+                  <Text style={styles.successButtonText}>Zurück</Text>
+                </TouchableOpacity>
+              )}
             </LinearGradient>
           </View>
         </View>
