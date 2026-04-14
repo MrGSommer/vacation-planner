@@ -49,7 +49,7 @@ export const adminGetUser = async (userId: string): Promise<Profile> => {
 
 export const adminUpdateUser = async (
   userId: string,
-  updates: Partial<Pick<Profile, 'ai_credits_balance' | 'subscription_tier' | 'subscription_status' | 'is_admin'>>
+  updates: Partial<Pick<Profile, 'ai_credits_balance' | 'subscription_tier' | 'subscription_status' | 'is_admin' | 'admin_note'>>
 ): Promise<Profile> => {
   const { data, error } = await supabase
     .from('profiles')
@@ -225,6 +225,8 @@ export interface WaitlistEntry {
   invited_at: string | null;
   invited_user_id: string | null;
   admin_note: string | null;
+  referral_source: string | null;
+  user_goal: string | null;
 }
 
 export const adminGetWaitlist = async (): Promise<WaitlistEntry[]> => {
@@ -279,6 +281,7 @@ export const adminInviteUser = async (params: {
   last_name?: string;
   subscription_tier?: 'free' | 'premium';
   ai_credits_balance?: number;
+  admin_note?: string;
 }): Promise<{ success: boolean; user_id: string; email: string; email_sent: boolean }> => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Nicht authentifiziert');

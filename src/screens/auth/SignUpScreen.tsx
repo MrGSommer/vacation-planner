@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Input, Button } from '../../components/common';
@@ -15,6 +15,14 @@ import { trackLandingEvent } from '../../api/landingEvents';
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
 
+const REFERRAL_OPTIONS = [
+  { label: 'Freunde / Familie', value: 'friends' },
+  { label: 'Social Media', value: 'social_media' },
+  { label: 'Google', value: 'google' },
+  { label: 'Blog / Artikel', value: 'blog' },
+  { label: 'Sonstiges', value: 'other' },
+];
+
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
@@ -27,6 +35,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [agbAccepted, setAgbAccepted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [waitlistStatus, setWaitlistStatus] = useState<null | 'confirm_email' | 'resent' | 'already_confirmed' | 'has_account'>(null);
+  const [referralSource, setReferralSource] = useState('');
+  const [userGoal, setUserGoal] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
@@ -64,6 +74,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         p_email: email.trim(),
         p_first_name: firstName.trim(),
         p_last_name: lastName.trim(),
+        p_referral_source: referralSource || null,
+        p_user_goal: userGoal.trim() || null,
       });
       if (rpcError) {
         setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
@@ -144,6 +156,30 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
               <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} containerStyle={{ flex: 1 }} />
             </View>
             <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
+
+            <Text style={styles.fieldLabel}>Wie bist du auf WayFable gestossen?</Text>
+            <View style={styles.referralRow}>
+              {REFERRAL_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.referralChip, referralSource === opt.value && styles.referralChipActive]}
+                  onPress={() => setReferralSource(referralSource === opt.value ? '' : opt.value)}
+                >
+                  <Text style={[styles.referralChipText, referralSource === opt.value && styles.referralChipTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Was erhoffst du dir von WayFable?</Text>
+            <TextInput
+              style={styles.goalInput}
+              placeholder="z.B. Reiseplanung vereinfachen, Inspiration für Reisen..."
+              placeholderTextColor={colors.textLight}
+              value={userGoal}
+              onChangeText={setUserGoal}
+              multiline
+              maxLength={300}
+            />
 
             <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!firstName.trim() || !lastName.trim() || !email.trim()} style={styles.signUpButton} />
 
@@ -254,6 +290,13 @@ const styles = StyleSheet.create({
   link: { alignItems: 'center', marginTop: spacing.lg },
   linkText: { ...typography.body, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: '600' },
+  fieldLabel: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+  referralRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  referralChip: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  referralChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  referralChipText: { ...typography.bodySmall, color: colors.textSecondary },
+  referralChipTextActive: { color: '#FFFFFF', fontWeight: '600' },
+  goalInput: { ...typography.body, backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, minHeight: 72, textAlignVertical: 'top', marginBottom: spacing.sm },
   waitlistEmoji: { fontSize: 48, textAlign: 'center', marginBottom: spacing.md },
   successContainer: { flex: 1 },
   successGradient: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },

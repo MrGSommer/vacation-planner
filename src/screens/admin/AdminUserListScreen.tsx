@@ -33,12 +33,15 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [entryNotes, setEntryNotes] = useState<Record<string, string>>({});
 
   // --- Invite state ---
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [invEmail, setInvEmail] = useState('');
   const [invTier, setInvTier] = useState<'free' | 'premium'>('free');
   const [invCredits, setInvCredits] = useState('20');
+  const [invNote, setInvNote] = useState('');
   const [inviting, setInviting] = useState(false);
 
   const loadUsers = useCallback(async (reset = true) => {
@@ -109,6 +112,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
 
   // --- Waitlist actions ---
   const handleInviteFromWaitlist = async (entry: WaitlistEntry) => {
+    const note = entryNotes[entry.id]?.trim() || entry.admin_note?.trim() || undefined;
     if (!(await confirm(`${entry.first_name || entry.email} einladen und Account erstellen?`))) return;
     setActionLoading(entry.id);
     try {
@@ -118,13 +122,16 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
         last_name: entry.last_name || undefined,
         subscription_tier: 'free',
         ai_credits_balance: 20,
+        admin_note: note,
       });
       await adminUpdateWaitlistEntry(entry.id, {
         status: 'invited',
         invited_at: new Date().toISOString(),
         invited_user_id: result.user_id,
+        admin_note: note || null,
       });
       alert('Erfolg', `${entry.email} eingeladen${result.email_sent ? ' — E-Mail gesendet' : ''}`);
+      setExpandedEntry(null);
       loadWaitlist();
     } catch (e: any) {
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
@@ -134,10 +141,12 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleCancelWaitlist = async (entry: WaitlistEntry) => {
+    const note = entryNotes[entry.id]?.trim() || entry.admin_note?.trim() || undefined;
     if (!(await confirm(`${entry.first_name || entry.email} stornieren?`))) return;
     setActionLoading(entry.id);
     try {
-      await adminUpdateWaitlistEntry(entry.id, { status: 'cancelled' });
+      await adminUpdateWaitlistEntry(entry.id, { status: 'cancelled', admin_note: note || null });
+      setExpandedEntry(null);
       loadWaitlist();
     } catch (e: any) {
       alert('Fehler', e.message || 'Stornierung fehlgeschlagen');
@@ -166,11 +175,13 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
         email: invEmail.trim(),
         subscription_tier: invTier,
         ai_credits_balance: parseInt(invCredits, 10) || 0,
+        admin_note: invNote.trim() || undefined,
       });
       alert('Erfolg', `Account erstellt für ${result.email}${result.email_sent ? ' — Einladungs-E-Mail gesendet' : ''}`);
       setInvEmail('');
       setInvTier('free');
       setInvCredits('20');
+      setInvNote('');
       setShowInviteModal(false);
     } catch (e: any) {
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
@@ -300,29 +311,56 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                   <>
                     <Text style={styles.sectionLabel}>Bestätigt — bereit zum Einladen ({pendingWaitlist.length})</Text>
                     <View style={styles.tableCard}>
-                      {pendingWaitlist.map((entry, idx) => (
-                        <View key={entry.id} style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}>
-                          <View style={styles.waitlistInfo}>
-                            <Text style={styles.userName} numberOfLines={1}>
-                              {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
-                            </Text>
-                            <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
-                            <Text style={styles.dateTextSmall}>{formatDate(entry.created_at)}</Text>
+                      {pendingWaitlist.map((entry, idx) => {
+                        const isExpanded = expandedEntry === entry.id;
+                        return (
+                          <View key={entry.id} style={[idx > 0 && styles.rowBorder]}>
+                            <TouchableOpacity
+                              style={styles.waitlistRow}
+                              onPress={() => setExpandedEntry(isExpanded ? null : entry.id)}
+                            >
+                              <View style={styles.waitlistInfo}>
+                                <Text style={styles.userName} numberOfLines={1}>
+                                  {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
+                                </Text>
+                                <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
+                                <Text style={styles.dateTextSmall}>{formatDate(entry.created_at)}</Text>
+                              </View>
+                              <Text style={styles.expandArrow}>{isExpanded ? '▾' : '▸'}</Text>
+                            </TouchableOpacity>
+                            {isExpanded && (
+                              <View style={styles.expandedPanel}>
+                                {entry.referral_source && (
+                                  <Text style={styles.insightText}>Quelle: {entry.referral_source}</Text>
+                                )}
+                                {entry.user_goal && (
+                                  <Text style={styles.insightText}>Ziel: {entry.user_goal}</Text>
+                                )}
+                                <TextInput
+                                  style={styles.noteInput}
+                                  placeholder="Kommentar (wird zum Profil übernommen)..."
+                                  placeholderTextColor={colors.textLight}
+                                  value={entryNotes[entry.id] ?? entry.admin_note ?? ''}
+                                  onChangeText={(t) => setEntryNotes(prev => ({ ...prev, [entry.id]: t }))}
+                                  multiline
+                                />
+                                {actionLoading === entry.id ? (
+                                  <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.sm }} />
+                                ) : (
+                                  <View style={styles.waitlistActions}>
+                                    <TouchableOpacity style={styles.inviteBtn} onPress={() => handleInviteFromWaitlist(entry)}>
+                                      <Text style={styles.inviteBtnText}>Einladen</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelWaitlist(entry)}>
+                                      <Text style={styles.cancelBtnText}>Stornieren</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </View>
+                            )}
                           </View>
-                          {actionLoading === entry.id ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
-                          ) : (
-                            <View style={styles.waitlistActions}>
-                              <TouchableOpacity style={styles.inviteBtn} onPress={() => handleInviteFromWaitlist(entry)}>
-                                <Text style={styles.inviteBtnText}>Einladen</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelWaitlist(entry)}>
-                                <Text style={styles.cancelBtnText}>Stornieren</Text>
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   </>
                 )}
@@ -356,26 +394,33 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Bearbeitet ({processedWaitlist.length})</Text>
                     <View style={styles.tableCard}>
                       {processedWaitlist.map((entry, idx) => (
-                        <View key={entry.id} style={[styles.waitlistRow, idx > 0 && styles.rowBorder]}>
-                          <View style={styles.waitlistInfo}>
-                            <Text style={styles.userName} numberOfLines={1}>
-                              {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
-                            </Text>
-                            <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
-                          </View>
-                          <View style={[
-                            styles.statusBadge,
-                            entry.status === 'invited' && { backgroundColor: colors.success + '20' },
-                            entry.status === 'cancelled' && { backgroundColor: colors.error + '20' },
-                          ]}>
-                            <Text style={[
-                              styles.statusText,
-                              entry.status === 'invited' && { color: colors.success },
-                              entry.status === 'cancelled' && { color: colors.error },
+                        <View key={entry.id} style={[idx > 0 && styles.rowBorder]}>
+                          <View style={styles.waitlistRow}>
+                            <View style={styles.waitlistInfo}>
+                              <Text style={styles.userName} numberOfLines={1}>
+                                {[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '—'}
+                              </Text>
+                              <Text style={styles.userEmail} numberOfLines={1}>{entry.email}</Text>
+                            </View>
+                            <View style={[
+                              styles.statusBadge,
+                              entry.status === 'invited' && { backgroundColor: colors.success + '20' },
+                              entry.status === 'cancelled' && { backgroundColor: colors.error + '20' },
                             ]}>
-                              {entry.status === 'invited' ? 'Eingeladen' : 'Storniert'}
-                            </Text>
+                              <Text style={[
+                                styles.statusText,
+                                entry.status === 'invited' && { color: colors.success },
+                                entry.status === 'cancelled' && { color: colors.error },
+                              ]}>
+                                {entry.status === 'invited' ? 'Eingeladen' : 'Storniert'}
+                              </Text>
+                            </View>
                           </View>
+                          {entry.admin_note && (
+                            <View style={styles.entryNoteRow}>
+                              <Text style={styles.entryNoteText}>{entry.admin_note}</Text>
+                            </View>
+                          )}
                         </View>
                       ))}
                     </View>
@@ -438,6 +483,16 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
               value={invCredits}
               onChangeText={setInvCredits}
               keyboardType="number-pad"
+            />
+
+            <Text style={styles.fieldLabel}>Notiz</Text>
+            <TextInput
+              style={[styles.searchInput, { minHeight: 60 }]}
+              placeholder="Interne Notiz zum Benutzer..."
+              placeholderTextColor={colors.textLight}
+              value={invNote}
+              onChangeText={setInvNote}
+              multiline
             />
 
             <TouchableOpacity
@@ -518,6 +573,12 @@ const styles = StyleSheet.create({
   // Waitlist rows
   waitlistRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.sm },
   waitlistInfo: { flex: 1, minWidth: 0 },
+  expandArrow: { ...typography.body, color: colors.textLight, fontSize: 16 },
+  expandedPanel: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  noteInput: { ...typography.bodySmall, backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm, minHeight: 48 },
+  insightText: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.xs },
+  entryNoteRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  entryNoteText: { ...typography.caption, color: colors.textSecondary, fontStyle: 'italic' },
   waitlistActions: { flexDirection: 'row', gap: spacing.xs },
   inviteBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.sm },
   inviteBtnText: { ...typography.caption, color: '#FFFFFF', fontWeight: '600' },

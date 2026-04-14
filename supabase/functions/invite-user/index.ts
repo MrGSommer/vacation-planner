@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     if (!jwt) return json({ error: 'Unauthorized' }, 401);
     if (!(await isAdmin(jwt))) return json({ error: 'Forbidden' }, 403);
 
-    const { email, first_name, last_name, subscription_tier, ai_credits_balance } = await req.json();
+    const { email, first_name, last_name, subscription_tier, ai_credits_balance, admin_note } = await req.json();
     if (!email) return json({ error: 'E-Mail ist erforderlich' }, 400);
 
     const cleanEmail = email.trim().toLowerCase();
@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
     };
     if (first_name?.trim()) updates.first_name = first_name.trim();
     if (last_name?.trim()) updates.last_name = last_name.trim();
+    if (admin_note?.trim()) updates.admin_note = admin_note.trim();
 
     const updateRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,

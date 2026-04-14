@@ -27,6 +27,7 @@ export interface Profile {
   payment_error_message: string | null;
   preferred_maps_app: 'google' | 'apple' | null;
   is_admin: boolean;
+  admin_note: string | null;
   notification_push_fable: boolean;
   notification_email_fable: boolean;
   notification_admin_signups: boolean;

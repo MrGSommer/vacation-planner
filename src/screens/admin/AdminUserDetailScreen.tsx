@@ -52,6 +52,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
   const [editStatus, setEditStatus] = useState<'active' | 'canceled' | 'past_due' | 'trialing'>('active');
   const [editCredits, setEditCredits] = useState('0');
   const [editIsAdmin, setEditIsAdmin] = useState(false);
+  const [editNote, setEditNote] = useState('');
 
   // Stripe data (lazy loaded)
   const [stripeSub, setStripeSub] = useState<StripeSubscriptionDetail | null>(null);
@@ -77,6 +78,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         setEditStatus(p.subscription_status);
         setEditCredits(String(p.ai_credits_balance));
         setEditIsAdmin(p.is_admin);
+        setEditNote(p.admin_note || '');
       } catch (e) {
         console.error('Admin get user error:', e);
       } finally {
@@ -122,6 +124,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
           subscription_status: editStatus,
           ai_credits_balance: parseInt(editCredits, 10) || 0,
           is_admin: editIsAdmin,
+          admin_note: editNote.trim() || null,
         });
         setProfile(updated);
       } catch (e: any) {
@@ -290,6 +293,16 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
           {profile.stripe_customer_id && (
             <Text style={styles.stripeId}>Stripe: {profile.stripe_customer_id}</Text>
           )}
+
+          <Text style={styles.fieldLabel}>Admin-Notiz</Text>
+          <TextInput
+            style={styles.noteInput}
+            value={editNote}
+            onChangeText={setEditNote}
+            placeholder="Interne Notiz..."
+            placeholderTextColor={colors.textLight}
+            multiline
+          />
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
@@ -553,6 +566,7 @@ const styles = StyleSheet.create({
     width: 120,
   },
   stripeId: { ...typography.caption, color: colors.textLight, marginTop: spacing.sm },
+  noteInput: { ...typography.bodySmall, backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, minHeight: 60, marginTop: spacing.xs, textAlignVertical: 'top' },
   saveBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { ...typography.button, color: '#FFFFFF' },
   emptyText: { ...typography.bodySmall, color: colors.textLight },
