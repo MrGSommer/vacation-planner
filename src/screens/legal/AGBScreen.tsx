@@ -23,14 +23,14 @@ export const AGBScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.body}>
           WayFable ist eine Reiseplanungs-Applikation. Es gibt zwei Nutzungsstufen:{'\n\n'}
           <Text style={styles.bold}>Free:</Text>{'\n'}
-          - 2 aktive Trips{'\n'}
-          - 1 vergangener Trip{'\n'}
-          - 2 Kollaborateure pro Trip{'\n'}
-          - Kein Fotospeicher, keine Routen/Stops{'\n'}
+          - 1 aktiver Trip{'\n'}
+          - 1 Kollaborator pro Trip{'\n'}
+          - Bis zu 10 Fotos pro Trip (inkl. Inspirationsbilder){'\n'}
+          - Keine Routen/Stops{'\n'}
           - Reisebegleiter Fable nur mit separat gekauften Inspirationen{'\n\n'}
           <Text style={styles.bold}>Premium:</Text>{'\n'}
-          - Unbegrenzte Trips & Kollaborateure{'\n'}
-          - Foto-Galerie{'\n'}
+          - Unbegrenzte Trips & Kollaboratoren{'\n'}
+          - Unbegrenzte Fotos{'\n'}
           - Routen & Stops{'\n'}
           - Reisebegleiter Fable mit monatlichen Inspirationen
         </Text>

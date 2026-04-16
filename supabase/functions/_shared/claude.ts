@@ -103,6 +103,41 @@ export async function deductCreditsAtomic(userId: string, amount: number): Promi
   return typeof result === 'number' ? result : -1;
 }
 
+// --- Fable rate-limit / suspension check ---
+// See supabase/migrations/20260416140000_fable_rate_limiting.sql
+export interface FableRateLimitResult {
+  allowed: boolean;
+  limit_type?: 'minute' | 'hour' | 'day' | 'month' | 'suspended';
+  current?: number;
+  max?: number;
+  retry_after?: number;
+  suspended_until?: string;
+  tier?: 'admin' | 'premium' | 'free';
+}
+
+export async function checkFableRateLimit(userId: string): Promise<FableRateLimitResult> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_fable_rate_limit`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'apikey': SERVICE_ROLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ p_user_id: userId }),
+    });
+    if (!res.ok) {
+      console.error('checkFableRateLimit RPC failed:', res.status, await res.text());
+      // Fail-open: if rate-limit check is broken, don't block legitimate users.
+      return { allowed: true };
+    }
+    return await res.json() as FableRateLimitResult;
+  } catch (e) {
+    console.error('checkFableRateLimit threw:', e);
+    return { allowed: true };
+  }
+}
+
 // --- Credit refund (on API failure) ---
 
 export async function refundCredits(userId: string, amount: number): Promise<void> {

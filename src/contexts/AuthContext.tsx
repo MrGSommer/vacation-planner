@@ -7,6 +7,7 @@ import { getProfile } from '../api/auth';
 import { useToast } from './ToastContext';
 import { refreshPushSubscription } from '../utils/pushManager';
 import { AiTripPlan } from '../services/ai/planExecutor';
+import { ensureSessionLinked } from '../api/analytics';
 
 interface AuthContextType {
   session: Session | null;
@@ -322,6 +323,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       refreshProfile();
+      // Link anonymous analytics session to this user (backfills prior events)
+      ensureSessionLinked(user.id);
       // Auto-refresh push subscription on session start (keeps endpoint current)
       if (Platform.OS === 'web') {
         refreshPushSubscription(user.id);

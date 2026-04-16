@@ -34,6 +34,7 @@ export type RootStackParamList = {
   AdminUserDetail: { userId: string };
   AdminEmailTest: undefined;
   AdminAnnouncements: undefined;
+  AdminInsights: undefined;
   BetaDashboard: undefined;
   ResetPassword: undefined;
   SlideshowView: { token: string };

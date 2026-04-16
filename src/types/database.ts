@@ -35,6 +35,11 @@ export interface Profile {
   notification_admin_premium: boolean;
   notification_admin_cancellations: boolean;
   notification_admin_feedback: boolean;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  app_opens_total: number;
+  fable_suspended_until: string | null;
+  fable_suspension_reason: string | null;
   created_at: string;
   updated_at: string;
 }

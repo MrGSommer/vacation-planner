@@ -34,6 +34,7 @@ import { PhotosSkeleton } from '../../components/skeletons/PhotosSkeleton';
 import { usePresence } from '../../hooks/usePresence';
 import { MUSIC_TRACKS, MusicTrack, getMusicUrl } from '../../config/music';
 import { SlideshowShareModal } from '../../components/photos/SlideshowShareModal';
+import { trackEvent } from '../../api/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
 
@@ -47,7 +48,7 @@ type SortOrder = 'newest' | 'oldest';
 export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const { tripId } = route.params;
   const { user, profile } = useAuthContext();
-  const { isFeatureAllowed, isSneakPeek, isPremium } = useSubscription();
+  const { isFeatureAllowed, isSneakPeek, isPremium, canAddPhoto, maxPhotosPerTrip } = useSubscription();
   const { showToast } = useToast();
   usePresence(tripId, 'Fotos');
   const creatorName = profile ? getDisplayName(profile) : undefined;
@@ -184,6 +185,18 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   // Upload with progress + EXIF extraction
   const handleUpload = async () => {
     if (!requireOnline('Foto-Upload')) return;
+    // Gate: free tier photo limit (counts uploads + inspiration images)
+    if (!canAddPhoto(photos.length)) {
+      trackEvent('paywall_shown', { trigger: 'photo_limit_reached' });
+      showToast(
+        maxPhotosPerTrip != null
+          ? `Foto-Limit erreicht (${photos.length}/${maxPhotosPerTrip}) — Premium für unbegrenzte Fotos`
+          : 'Foto-Limit erreicht',
+        'error',
+      );
+      navigation.navigate('Subscription');
+      return;
+    }
     if (Platform.OS === 'web') {
       // Web: use native file input to access ORIGINAL files with EXIF intact
       // (expo-image-picker recompresses via Canvas, stripping EXIF)
@@ -198,9 +211,20 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       input.style.display = 'none';
       document.body.appendChild(input);
       input.onchange = async () => {
-        const files = Array.from(input.files || []);
+        let files = Array.from(input.files || []);
         input.remove();
         if (files.length === 0 || !user) return;
+        if (maxPhotosPerTrip != null) {
+          const remaining = Math.max(0, maxPhotosPerTrip - photos.length);
+          if (files.length > remaining) {
+            files = files.slice(0, remaining);
+            showToast(
+              `Nur ${remaining} von ${input.files?.length || 0} Fotos — Free-Limit ${maxPhotosPerTrip}`,
+              'error',
+            );
+            if (remaining === 0) return;
+          }
+        }
         setUploading(true);
         setUploadProgress({ current: 0, total: files.length });
         try {
@@ -220,8 +244,17 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
             }
           }
           await loadPhotos();
-        } catch (e) {
-          showToast('Foto konnte nicht hochgeladen werden', 'error');
+        } catch (e: any) {
+          if (e?.code === 'photo_limit_reached' || e?.message === 'photo_limit_reached') {
+            trackEvent('paywall_shown', { trigger: 'photo_limit_reached' });
+            showToast(
+              `Foto-Limit erreicht — Premium für unbegrenzte Fotos`,
+              'error',
+            );
+            navigation.navigate('Subscription');
+          } else {
+            showToast('Foto konnte nicht hochgeladen werden', 'error');
+          }
         } finally {
           setUploading(false);
           setUploadProgress({ current: 0, total: 0 });
@@ -241,13 +274,25 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
     if (result.canceled || !user) return;
 
-    const total = result.assets.length;
+    let assets = result.assets;
+    if (maxPhotosPerTrip != null) {
+      const remaining = Math.max(0, maxPhotosPerTrip - photos.length);
+      if (assets.length > remaining) {
+        assets = assets.slice(0, remaining);
+        showToast(
+          `Nur ${remaining} von ${result.assets.length} Fotos — Free-Limit ${maxPhotosPerTrip}`,
+          'error',
+        );
+        if (remaining === 0) return;
+      }
+    }
+    const total = assets.length;
     setUploading(true);
     setUploadProgress({ current: 0, total });
     try {
       for (let i = 0; i < total; i++) {
         setUploadProgress({ current: i + 1, total });
-        const asset = result.assets[i];
+        const asset = assets[i];
         const fileName = asset.uri.split('/').pop() || 'photo.jpg';
         // Extract EXIF date — try picker metadata first, then binary EXIF reader
         const exif = (asset as any).exif;
@@ -261,8 +306,14 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         setPhotos(prev => [newPhoto, ...prev]);
       }
       await loadPhotos();
-    } catch (e) {
-      showToast('Foto konnte nicht hochgeladen werden', 'error');
+    } catch (e: any) {
+      if (e?.code === 'photo_limit_reached' || e?.message === 'photo_limit_reached') {
+        trackEvent('paywall_shown', { trigger: 'photo_limit_reached' });
+        showToast('Foto-Limit erreicht — Premium für unbegrenzte Fotos', 'error');
+        navigation.navigate('Subscription');
+      } else {
+        showToast('Foto konnte nicht hochgeladen werden', 'error');
+      }
     } finally {
       setUploading(false);
       setUploadProgress({ current: 0, total: 0 });

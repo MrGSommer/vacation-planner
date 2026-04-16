@@ -10,7 +10,7 @@ import { RootStackParamList } from '../../types/navigation';
 
 const LOST_FEATURES: { icon: IconName; text: string }[] = [
   { icon: 'airplane-outline', text: 'Unbegrenzte Reisen' },
-  { icon: 'images-outline', text: 'Foto-Galerie' },
+  { icon: 'images-outline', text: 'Unbegrenzte Fotos (Free: max. 10/Trip)' },
   { icon: 'wallet-outline', text: 'Budget & Ausgaben' },
   { icon: 'map-outline', text: 'Routen & Stops' },
   { icon: 'sparkles-outline', text: '20 Inspirationen/Monat' },

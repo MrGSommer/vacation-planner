@@ -15,6 +15,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadCoverImage } from '../../api/trips';
+import { trackEvent } from '../../api/analytics';
 import { searchPhotos, triggerDownload, UnsplashPhoto } from '../../api/unsplash';
 import { requireOnline } from '../../utils/offlineGate';
 import { extractDominantColor } from '../../utils/colorExtraction';
@@ -193,6 +194,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleCreate = async () => {
     try {
+      const wasFirstTrip = trips.length === 0;
       // For unsplash, pass URL directly; for upload, create trip first then upload
       const isUnsplash = coverMode === 'unsplash';
       const trip = await create({
@@ -232,6 +234,10 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         } catch (e) {
           console.error('Cover upload failed:', e);
         }
+      }
+
+      if (wasFirstTrip) {
+        trackEvent('first_trip_created', { plan_source: 'app' });
       }
 
       navigation.replace('TripDetail', { tripId: trip.id });
@@ -429,6 +435,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
             title="Trip-Limit erreicht"
             message="Upgrade auf Premium für unbegrenzte Trips"
             inline
+            trigger="second_trip_attempt"
           />
         </View>
       ) : (

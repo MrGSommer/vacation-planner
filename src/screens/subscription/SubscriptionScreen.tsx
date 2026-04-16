@@ -15,9 +15,9 @@ import { Icon, IconName } from '../../utils/icons';
 type Props = { navigation: NativeStackNavigationProp<any> };
 
 const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'airplane-outline', title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst' },
-  { icon: 'people-outline', title: 'Unbegrenzte Kollaborateure', desc: 'Teile mit dem ganzen Team' },
-  { icon: 'images-outline', title: 'Foto-Galerie', desc: 'Lade Reisefotos hoch und teile sie' },
+  { icon: 'airplane-outline', title: 'Unbegrenzte Trips', desc: 'Plane so viele Reisen wie du willst (Free: 1 Trip)' },
+  { icon: 'people-outline', title: 'Unbegrenzte Kollaboratoren', desc: 'Teile mit dem ganzen Team (Free: 1 Kollaborator)' },
+  { icon: 'images-outline', title: 'Unbegrenzte Fotos', desc: 'Lade beliebig viele Reisefotos hoch (Free: max. 10/Trip)' },
   { icon: 'map-outline', title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
   { icon: 'wallet-outline', title: 'Budget & Ausgaben', desc: 'Tracke Kosten und teile fair auf' },
   { icon: 'sparkles-outline', title: 'Reisebegleiter Fable', desc: '20 Inspirationen/Monat — dein persönlicher Reisebegleiter' },

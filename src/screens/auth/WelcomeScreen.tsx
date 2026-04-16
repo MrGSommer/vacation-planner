@@ -103,7 +103,7 @@ const STEPS = [
 ];
 
 const FAQS = [
-  { q: 'Kann ich WayFable kostenlos nutzen?', a: 'Ja! Der Free-Plan ist dauerhaft kostenlos. Du kannst bis zu 2 Trips planen und mit 2 Personen zusammenarbeiten.' },
+  { q: 'Kann ich WayFable kostenlos nutzen?', a: 'Ja! Der Free-Plan ist dauerhaft kostenlos. Du kannst 1 Trip planen, 1 Person einladen und bis zu 10 Fotos pro Trip hochladen.' },
   { q: 'Wie funktioniert Fable?', a: 'Fable ist dein persönlicher Reisebegleiter. Er stellt dir einige Fragen zu deinen Vorlieben und erstellt dann einen kompletten Reiseplan mit Aktivitäten, Unterkünften und Budget. Du kannst Inspirationen auch einzeln kaufen — ganz ohne Abo.' },
   { q: 'Kann ich mein Abo jederzeit kündigen?', a: 'Ja, du kannst jederzeit kündigen. Dein Premium-Zugang bleibt bis zum Ende der Abrechnungsperiode aktiv.' },
   { q: 'Welche Zahlungsmethoden gibt es?', a: 'Wir nutzen Stripe für sichere Zahlungen. Du kannst mit Kreditkarte, Debitkarte und weiteren lokalen Methoden bezahlen.' },
@@ -111,16 +111,17 @@ const FAQS = [
 ];
 
 const FREE_FEATURES = [
-  '2 aktive Trips',
-  '2 Kollaborateure',
+  '1 aktiver Trip',
+  '1 Kollaborator',
+  'Bis zu 10 Fotos pro Trip',
   'Tagesplan & Budget',
   'Packliste',
 ];
 
 const PREMIUM_FEATURES = [
   'Unbegrenzte Trips',
-  'Unbegrenzte Kollaborateure',
-  'Foto-Galerie',
+  'Unbegrenzte Kollaboratoren',
+  'Unbegrenzte Fotos',
   'Routen & Stops',
   'Reisebegleiter Fable',
 ];

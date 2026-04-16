@@ -1,47 +1,32 @@
 import { supabase } from './supabase';
-import { Platform } from 'react-native';
+import { trackEvent } from './analytics';
 
 type LandingEventType = 'page_view' | 'plan_generated' | 'signup_click' | 'registered' | 'waitlisted';
 
-// Stable session ID per browser tab (survives navigation within SPA)
-let sessionId: string | null = null;
-function getSessionId(): string {
-  if (sessionId) return sessionId;
-  if (Platform.OS === 'web') {
-    try {
-      sessionId = sessionStorage.getItem('wf_session_id');
-      if (!sessionId) {
-        sessionId = crypto.randomUUID();
-        sessionStorage.setItem('wf_session_id', sessionId);
-      }
-    } catch {
-      sessionId = crypto.randomUUID();
-    }
-  } else {
-    sessionId = crypto.randomUUID();
-  }
-  return sessionId;
-}
-
-/** Fire-and-forget landing event tracking */
+// Compatibility shim — forwards to the new analytics pipeline so existing
+// call sites keep working while we migrate the catalog.
 export function trackLandingEvent(eventType: LandingEventType, query?: string): void {
-  const referrer = Platform.OS === 'web' ? (document?.referrer || null) : null;
-  const userAgent = Platform.OS === 'web' ? (navigator?.userAgent || null) : null;
-
-  supabase
-    .from('landing_events')
-    .insert({
-      event_type: eventType,
-      session_id: getSessionId(),
-      query: query || null,
-      referrer,
-      user_agent: userAgent,
-    })
-    .then(() => {})
-    .catch(() => {});
+  switch (eventType) {
+    case 'page_view':
+      trackEvent('landing_page_view');
+      break;
+    case 'plan_generated':
+      trackEvent('landing_plan_generated', query ? { query: query.slice(0, 100) } : undefined);
+      break;
+    case 'signup_click':
+      trackEvent('landing_signup_click');
+      break;
+    case 'registered':
+      trackEvent('signup_completed');
+      break;
+    case 'waitlisted':
+      trackEvent('landing_waitlist_joined');
+      break;
+  }
 }
 
-/** Admin: get landing funnel stats */
+/** Admin: landing funnel stats (backwards compat for BetaDashboardScreen).
+ *  Reads from the unified analytics_events table — legacy rows were backfilled. */
 export async function adminGetLandingStats(): Promise<{
   page_views_today: number;
   page_views_7d: number;
@@ -64,34 +49,36 @@ export async function adminGetLandingStats(): Promise<{
   const d30 = new Date(now.getTime() - 30 * 86400000).toISOString();
 
   const { data, error } = await supabase
-    .from('landing_events')
-    .select('event_type, query, created_at')
+    .from('analytics_events')
+    .select('event_name, properties, created_at')
     .gte('created_at', d30)
+    .in('event_name', ['landing_page_view','landing_plan_generated','landing_signup_click','signup_completed','landing_waitlist_joined'])
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   const events = data || [];
 
-  const count = (type: string, since: string) =>
-    events.filter(e => e.event_type === type && e.created_at >= since).length;
+  const count = (name: string, since: string) =>
+    events.filter(e => e.event_name === name && e.created_at >= since).length;
 
-  const pvToday = count('page_view', todayStart);
-  const pv7 = count('page_view', d7);
-  const pv30 = count('page_view', d30);
-  const pgToday = count('plan_generated', todayStart);
-  const pg7 = count('plan_generated', d7);
-  const pg30 = count('plan_generated', d30);
-  const scToday = count('signup_click', todayStart);
-  const sc7 = count('signup_click', d7);
-  const sc30 = count('signup_click', d30);
-  const convToday = events.filter(e => (e.event_type === 'registered' || e.event_type === 'waitlisted') && e.created_at >= todayStart).length;
-  const conv7 = events.filter(e => (e.event_type === 'registered' || e.event_type === 'waitlisted') && e.created_at >= d7).length;
-  const conv30 = events.filter(e => (e.event_type === 'registered' || e.event_type === 'waitlisted') && e.created_at >= d30).length;
+  const pvToday = count('landing_page_view', todayStart);
+  const pv7 = count('landing_page_view', d7);
+  const pv30 = count('landing_page_view', d30);
+  const pgToday = count('landing_plan_generated', todayStart);
+  const pg7 = count('landing_plan_generated', d7);
+  const pg30 = count('landing_plan_generated', d30);
+  const scToday = count('landing_signup_click', todayStart);
+  const sc7 = count('landing_signup_click', d7);
+  const sc30 = count('landing_signup_click', d30);
+  const isConv = (n: string) => n === 'signup_completed' || n === 'landing_waitlist_joined';
+  const convToday = events.filter(e => isConv(e.event_name) && e.created_at >= todayStart).length;
+  const conv7 = events.filter(e => isConv(e.event_name) && e.created_at >= d7).length;
+  const conv30 = events.filter(e => isConv(e.event_name) && e.created_at >= d30).length;
 
-  // Top queries
   const queryCounts: Record<string, number> = {};
-  events.filter(e => e.event_type === 'plan_generated' && e.query).forEach(e => {
-    const q = (e.query as string).toLowerCase().trim();
+  events.filter(e => e.event_name === 'landing_plan_generated' && e.properties && (e.properties as any).query).forEach(e => {
+    const q = String((e.properties as any).query).toLowerCase().trim();
+    if (!q) return;
     queryCounts[q] = (queryCounts[q] || 0) + 1;
   });
   const topQueries = Object.entries(queryCounts)

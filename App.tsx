@@ -15,12 +15,20 @@ import { UpdateBanner } from './src/components/common/UpdateBanner';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
 import { logCritical } from './src/services/errorLogger';
 import { setOfflineGateToast } from './src/utils/offlineGate';
+import { trackSessionStartIfNeeded } from './src/api/analytics';
 
 function OfflineGateInit() {
   const { showToast } = useToast();
   useEffect(() => {
     setOfflineGateToast(showToast);
   }, [showToast]);
+  return null;
+}
+
+function SessionStartTracker() {
+  useEffect(() => {
+    trackSessionStartIfNeeded();
+  }, []);
   return null;
 }
 
@@ -59,6 +67,7 @@ export default function App() {
         <ToastProvider>
           <ErrorBoundary>
             <OfflineGateInit />
+            <SessionStartTracker />
             <UnhandledRejectionHandler>
               <AuthProvider>
                 <SubscriptionProvider>

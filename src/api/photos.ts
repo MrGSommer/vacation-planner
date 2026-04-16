@@ -223,7 +223,20 @@ export const uploadPhoto = async (
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    // Trigger blocked insert (Free tier limit or similar) — clean up orphaned storage files
+    try {
+      const pathsToRemove = [path];
+      if (thumbnailUrl) pathsToRemove.push(thumbPath);
+      await supabase.storage.from('trip-photos').remove(pathsToRemove);
+    } catch { /* ignore cleanup failures */ }
+    if (error.message?.includes('photo_limit_reached')) {
+      const e = new Error('photo_limit_reached');
+      (e as any).code = 'photo_limit_reached';
+      throw e;
+    }
+    throw error;
+  }
   invalidateCache(`photos:${tripId}`);
   return data;
 };

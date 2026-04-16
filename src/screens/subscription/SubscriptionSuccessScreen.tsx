@@ -40,7 +40,7 @@ export const SubscriptionSuccessScreen: React.FC<Props> = ({ navigation }) => {
       </LinearGradient>
 
       <View style={styles.features}>
-        {['Unbegrenzte Trips & Kollaborateure', 'Foto-Galerie', 'Routen & Stops', 'Reisebegleiter Fable mit Inspirationen'].map((item, i) => (
+        {['Unbegrenzte Trips & Kollaboratoren', 'Unbegrenzte Fotos', 'Routen & Stops', 'Reisebegleiter Fable mit Inspirationen'].map((item, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm }}>
             <Icon name="checkmark-circle" size={20} color={colors.secondary} />
             <Text style={styles.featureItem}>{item}</Text>

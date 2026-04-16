@@ -24,6 +24,7 @@ import { fetchWeatherData } from './useWeather';
 import { getShortName } from '../utils/profileHelpers';
 import { logError } from '../services/errorLogger';
 import { PACKING_CATEGORIES } from '../utils/constants';
+import { trackEvent } from '../api/analytics';
 
 export type AiPhase = 'idle' | 'conversing' | 'generating_structure' | 'structure_overview' | 'conflict_review' | 'generating_plan' | 'plan_review' | 'previewing_plan' | 'executing_plan' | 'completed';
 
@@ -887,6 +888,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setError(null);
     setSending(true);
     broadcastTyping(false);
+    trackEvent('first_fable_use', { task_type: 'conversation' });
 
     const shortName = senderNameRef.current || 'User';
     const userMsg: AiChatMessage = {
@@ -1295,7 +1297,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setProgressStep(null);
     } catch (e: any) {
       logError(e, { component: 'useAiPlanner', context: { action: 'generateStructure', status: e?.status, detail: e?.message } });
-      const errorMsg = e?.message?.includes('Inspirationen') ? e.message : 'Struktur konnte nicht erstellt werden – bitte versuche es erneut';
+      const passThrough = e?.code === 'rate_limit_exceeded' || e?.message?.includes('Inspirationen');
+      const errorMsg = passThrough ? e.message : 'Struktur konnte nicht erstellt werden – bitte versuche es erneut';
       setError(errorMsg);
       showToast(errorMsg, 'error');
       lastFailedActionRef.current = { type: 'structure' };
@@ -1312,6 +1315,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
     setPhase('generating_plan');
     setError(null);
     setProgressStep('activities');
+    trackEvent('first_plan_generated', { plan_source: mode === 'create' ? 'landing' : 'app' });
 
     const preferences = extractPreferences(messages, contextRef.current);
     const planContext: AiContext = { ...contextRef.current, preferences };

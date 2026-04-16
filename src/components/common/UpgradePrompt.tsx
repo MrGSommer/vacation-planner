@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows, gradients, iconSize } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
+import { trackEvent } from '../../api/analytics';
 
 interface FeatureHighlight {
   icon: IconName;
@@ -29,6 +30,8 @@ interface UpgradePromptProps {
   /** Secondary button label + handler (e.g. "Inspirationen kaufen") */
   secondaryLabel?: string;
   onSecondaryPress?: () => void;
+  /** Analytics trigger name (e.g. "second_trip_attempt", "photo_limit_reached") */
+  trigger?: string;
 }
 
 export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
@@ -42,6 +45,7 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
   onPress: onPressOverride,
   secondaryLabel,
   onSecondaryPress,
+  trigger,
 }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { width } = useWindowDimensions();
@@ -77,9 +81,15 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
       ])
     );
     Animated.parallel(animations).start();
+    trackEvent('paywall_shown', {
+      trigger: trigger || (buyInspirations ? 'fable_without_credits' : 'generic'),
+    });
   }, []);
 
   const handlePress = () => {
+    trackEvent('checkout_started', {
+      trigger: trigger || (buyInspirations ? 'fable_without_credits' : 'generic'),
+    });
     if (onPressOverride) { onPressOverride(); return; }
     navigation.navigate('Subscription');
   };

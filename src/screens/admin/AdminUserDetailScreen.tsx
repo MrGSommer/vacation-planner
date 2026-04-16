@@ -8,6 +8,7 @@ import {
   adminGetUser, adminUpdateUser, adminGetUserAiUsage,
   adminGetUserBilling, adminGetUserInvoices, adminGetUserSubscription, adminGrantTrial,
 } from '../../api/admin';
+import { adminSetFableSuspension } from '../../api/analytics';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail } from '../../types/database';
@@ -64,6 +65,9 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
   // Trial
   const [trialDays, setTrialDays] = useState('14');
   const [grantingTrial, setGrantingTrial] = useState(false);
+
+  // Fable suspension
+  const [suspensionBusy, setSuspensionBusy] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -194,6 +198,34 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
   const formatDateTime = (iso: string) => {
     const d = new Date(iso);
     return `${formatDate(iso)} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const handleFableSuspension = async (hours: number | null) => {
+    const label = hours === null ? 'entsperren' : `für ${hours}h sperren`;
+    const confirmMsg = `Fable wirklich ${label}?`;
+    const doAction = async () => {
+      setSuspensionBusy(true);
+      try {
+        const until = hours === null ? null : new Date(Date.now() + hours * 3600_000);
+        await adminSetFableSuspension(userId, until, hours === null ? undefined : `manual: ${hours}h via AdminUserDetail`);
+        const updated = await adminGetUser(userId);
+        setProfile(updated);
+      } catch (e: any) {
+        const msg = e?.message || 'Aktion fehlgeschlagen';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Fehler', msg);
+      } finally {
+        setSuspensionBusy(false);
+      }
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(confirmMsg)) await doAction();
+    } else {
+      Alert.alert('Bestätigen', confirmMsg, [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'OK', onPress: doAction },
+      ]);
+    }
   };
 
   const totalCreditsUsed = aiLogs.reduce((sum, log) => sum + log.credits_charged, 0);
@@ -482,6 +514,55 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
           )}
         </Card>
 
+        {/* Fable Suspension */}
+        <Card style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Fable-Limits</Text>
+          {profile.fable_suspended_until && new Date(profile.fable_suspended_until) > new Date() ? (
+            <>
+              <View style={styles.fableSuspendedBanner}>
+                <Text style={styles.fableSuspendedTitle}>Gesperrt bis {formatDateTime(profile.fable_suspended_until)}</Text>
+                {profile.fable_suspension_reason && (
+                  <Text style={styles.fableSuspendedReason}>{profile.fable_suspension_reason}</Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.fableBtn, styles.fableUnsuspendBtn, suspensionBusy && { opacity: 0.6 }]}
+                disabled={suspensionBusy}
+                onPress={() => handleFableSuspension(null)}
+              >
+                <Text style={styles.fableUnsuspendText}>Sofort entsperren</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.fableStatus}>Aktiv — keine Sperre</Text>
+              <View style={styles.fableActionsRow}>
+                <TouchableOpacity
+                  style={[styles.fableBtn, styles.fableSuspendBtn, suspensionBusy && { opacity: 0.6 }]}
+                  disabled={suspensionBusy}
+                  onPress={() => handleFableSuspension(24)}
+                >
+                  <Text style={styles.fableSuspendText}>24h sperren</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.fableBtn, styles.fableSuspendBtn, suspensionBusy && { opacity: 0.6 }]}
+                  disabled={suspensionBusy}
+                  onPress={() => handleFableSuspension(24 * 7)}
+                >
+                  <Text style={styles.fableSuspendText}>7 Tage</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.fableBtn, styles.fableSuspendBtn, suspensionBusy && { opacity: 0.6 }]}
+                  disabled={suspensionBusy}
+                  onPress={() => handleFableSuspension(24 * 365 * 10)}
+                >
+                  <Text style={styles.fableSuspendText}>Permanent</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </Card>
+
         {/* Actions */}
         <Card style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Aktionen</Text>
@@ -633,4 +714,16 @@ const styles = StyleSheet.create({
   trialDaysLabel: { ...typography.bodySmall, color: colors.textSecondary },
   trialBtn: { backgroundColor: colors.accent, borderRadius: borderRadius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   trialBtnText: { ...typography.bodySmall, color: '#FFFFFF', fontWeight: '600' },
+
+  // Fable suspension
+  fableSuspendedBanner: { backgroundColor: colors.error + '15', padding: spacing.md, borderRadius: borderRadius.sm, borderLeftWidth: 3, borderLeftColor: colors.error, marginBottom: spacing.md },
+  fableSuspendedTitle: { ...typography.bodySmall, fontWeight: '700', color: colors.error },
+  fableSuspendedReason: { ...typography.caption, color: colors.textSecondary, marginTop: 4 },
+  fableStatus: { ...typography.bodySmall, color: colors.success, marginBottom: spacing.sm },
+  fableActionsRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  fableBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.sm, borderWidth: 1 },
+  fableSuspendBtn: { borderColor: colors.warning, backgroundColor: colors.warning + '15' },
+  fableSuspendText: { ...typography.bodySmall, color: colors.warning, fontWeight: '600' },
+  fableUnsuspendBtn: { borderColor: colors.success, backgroundColor: colors.success + '15', alignSelf: 'flex-start' },
+  fableUnsuspendText: { ...typography.bodySmall, color: colors.success, fontWeight: '600' },
 });

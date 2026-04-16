@@ -5,6 +5,7 @@ import { getPhotos } from '../../api/photos';
 import { getStopLocations } from '../../api/stops';
 import { updateTrip } from '../../api/trips';
 import { sendAiMessage, AiMessage } from '../../api/aiChat';
+import { trackEvent } from '../../api/analytics';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { getDayCount } from '../../utils/dateHelpers';
@@ -27,6 +28,7 @@ export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent
       getPhotos(trip.id).then(p => setPhotoCount(p.length)).catch(() => {}),
       getStopLocations(trip.id).then(s => setStopCount(s.length)).catch(() => {}),
     ]);
+    trackEvent('rueckblick_viewed');
   }, [trip.id]);
 
   // Sync with trip prop if recap was loaded externally

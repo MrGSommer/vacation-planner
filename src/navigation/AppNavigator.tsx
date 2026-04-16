@@ -32,6 +32,7 @@ import { ImpressumScreen } from '../screens/legal/ImpressumScreen';
 import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { BetaDashboardScreen } from '../screens/admin/BetaDashboardScreen';
 import { AdminUserListScreen } from '../screens/admin/AdminUserListScreen';
+import { AdminInsightsScreen } from '../screens/admin/AdminInsightsScreen';
 import { AdminUserDetailScreen } from '../screens/admin/AdminUserDetailScreen';
 import { AdminEmailTestScreen } from '../screens/admin/AdminEmailTestScreen';
 import { AdminAnnouncementsScreen } from '../screens/admin/AdminAnnouncementsScreen';
@@ -92,6 +93,7 @@ const AUTH_SCREENS = {
   AdminUserDetail: 'admin/users/:userId',
   AdminEmailTest: 'admin/email-test',
   AdminAnnouncements: 'admin/announcements',
+  AdminInsights: 'admin/insights',
 } as const;
 
 // Unauthenticated screens config
@@ -346,6 +348,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
               <Stack.Screen name="AdminEmailTest" component={AdminEmailTestScreen} />
               <Stack.Screen name="AdminAnnouncements" component={AdminAnnouncementsScreen} />
+              <Stack.Screen name="AdminInsights" component={AdminInsightsScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen name="CardSetup" component={CardSetupScreen} />
             </>

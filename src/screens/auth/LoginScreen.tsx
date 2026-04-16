@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography, borderRadius } from '../../utils/theme';
+import { trackEvent } from '../../api/analytics';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -21,6 +22,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const handleLogin = async () => {
     try {
       await signIn(email.trim(), password);
+      trackEvent('login_succeeded');
       showToast('Willkommen zurück!', 'success');
     } catch {}
   };

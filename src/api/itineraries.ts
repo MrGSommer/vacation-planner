@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { ItineraryDay, Activity } from '../types/database';
 import { cachedQuery, invalidateCache } from '../utils/queryCache';
 import { offlineMutation } from '../utils/offlineMutation';
+import { trackEvent } from './analytics';
 
 export const getDays = async (tripId: string): Promise<ItineraryDay[]> => {
   return cachedQuery(`days:${tripId}`, async () => {
@@ -67,6 +68,9 @@ const _createActivity = async (activity: Omit<Activity, 'id' | 'created_at' | 'u
     .single();
   if (error) throw error;
   invalidateCache(`activities:${activity.trip_id}`);
+  // Fire activation events (dedup happens at funnel query time via DISTINCT user_id)
+  const isStop = activity.category === 'hotel' || activity.category === 'stop';
+  trackEvent(isStop ? 'first_stop_added' : 'first_activity_added');
   return data;
 };
 

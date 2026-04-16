@@ -33,6 +33,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { Icon } from '../../utils/icons';
 import { Button, Avatar } from '../../components/common';
 import { TripPrintTab } from '../../components/trip/TripPrintTab';
+import { trackEvent } from '../../api/analytics';
 
 interface ShareModalProps {
   visible: boolean;
@@ -300,6 +301,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const nonOwnerMembers = members.filter(m => m.role !== 'owner');
   const owner = members.find(m => m.role === 'owner');
+
+  // Fire paywall_shown analytics when collaborator limit blocks the UI (once per modal open)
+  const collabLimitReached = type === 'collaborate' && !canAddCollaborator(nonOwnerMembers.length);
+  useEffect(() => {
+    if (visible && collabLimitReached) {
+      trackEvent('paywall_shown', { trigger: 'second_collaborator_attempt' });
+    }
+  }, [visible, collabLimitReached]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>

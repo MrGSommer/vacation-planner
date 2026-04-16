@@ -59,8 +59,13 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (expectedStatus) {
+          const wasCompleted = expectedStatus === 'completed';
           trip.status = expectedStatus;
-          updates.push(updateTrip(trip.id, { status: expectedStatus }).catch(e => {
+          updates.push(updateTrip(trip.id, { status: expectedStatus }).then(() => {
+            if (wasCompleted) {
+              import('../api/analytics').then(({ trackEvent }) => trackEvent('trip_completed')).catch(() => {});
+            }
+          }).catch(e => {
             console.error(`Auto-status update failed for trip ${trip.id}:`, e);
           }));
         }

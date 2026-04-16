@@ -4,7 +4,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import {
   MODELS, VALID_TASKS, CREDIT_COSTS,
-  checkRateLimit, getUser, deductCreditsAtomic, refundCredits,
+  checkRateLimit, checkFableRateLimit, getUser, deductCreditsAtomic, refundCredits,
   logUsage, callClaude, getMaxTokens, getTemperature, getAnthropicKey,
   extractTextContent, validateMessages,
 } from '../_shared/claude.ts';
@@ -45,9 +45,39 @@ Deno.serve(async (req) => {
     const user = await getUser(token);
     if (!user?.id) return json({ error: 'Auth fehlgeschlagen' }, origin, 401);
 
-    // Rate limiting
+    // In-memory per-instance rate limit (fast path, coarse)
     if (!checkRateLimit(user.id)) {
       return json({ error: 'Zu viele Anfragen. Bitte warte kurz.' }, origin, 429);
+    }
+
+    // Fable tier-based rate limit + abuse/suspension check (DB-backed)
+    const rateCheck = await checkFableRateLimit(user.id);
+    if (!rateCheck.allowed) {
+      const retryAfter = rateCheck.retry_after || 60;
+      const errorMsg = rateCheck.limit_type === 'suspended'
+        ? 'Fable ist für dein Konto temporär gesperrt. Kontaktiere Support.'
+        : rateCheck.limit_type === 'month'
+          ? 'Monats-Limit erreicht. Bitte kontaktiere Support wenn du mehr benötigst.'
+          : 'Fable macht kurz Pause (zu viele Anfragen). Bitte kurz warten.';
+      return new Response(
+        JSON.stringify({
+          error: errorMsg,
+          code: 'rate_limit_exceeded',
+          limit_type: rateCheck.limit_type,
+          current: rateCheck.current,
+          max: rateCheck.max,
+          retry_after: retryAfter,
+          suspended_until: rateCheck.suspended_until,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders(origin),
+            'Content-Type': 'application/json',
+            'Retry-After': String(retryAfter),
+          },
+        },
+      );
     }
 
     // Credit deduction (from central config)

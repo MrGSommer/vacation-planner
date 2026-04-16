@@ -150,6 +150,10 @@ export const sendAiMessage = async (
       const err = new Error(data.error) as any;
       err.retryable = data.retryable || false;
       err.status = data.status;
+      if (data.code) err.code = data.code;
+      if (data.limit_type) err.limit_type = data.limit_type;
+      if (data.retry_after) err.retry_after = data.retry_after;
+      if (data.suspended_until) err.suspended_until = data.suspended_until;
       throw err;
     }
 
@@ -165,6 +169,10 @@ export const sendAiMessage = async (
             const err = new Error(body.error) as any;
             err.retryable = body.retryable || false;
             err.status = status;
+            if (body.code) err.code = body.code;
+            if (body.limit_type) err.limit_type = body.limit_type;
+            if (body.retry_after) err.retry_after = body.retry_after;
+            if (body.suspended_until) err.suspended_until = body.suspended_until;
             throw err;
           }
         } catch (parseErr) {
@@ -183,7 +191,9 @@ export const sendAiMessage = async (
   try {
     return await attempt();
   } catch (e: any) {
-    // Retry once on rate limit
+    // Do NOT retry on our own Fable rate-limit (user must wait out the window)
+    if (e.code === 'rate_limit_exceeded') throw e;
+    // Retry once on upstream rate limit / overload (Claude API 429/529)
     if (e.retryable) {
       await delay(2000);
       return await attempt();

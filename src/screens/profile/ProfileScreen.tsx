@@ -253,6 +253,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
             </View>
           </Card>
+          <Card style={styles.settingsCard} onPress={() => navigation.navigate('AdminInsights')}>
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsIconWrap}><Icon name="analytics-outline" size={iconSize.sm} color={colors.primary} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingsText}>Insights & Analytics</Text>
+                <Text style={styles.settingsDesc}>Funnel, Retention, KI-Reports</Text>
+              </View>
+              <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.textSecondary} />
+            </View>
+          </Card>
         </>
       )}
 

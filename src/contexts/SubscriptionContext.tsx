@@ -14,6 +14,10 @@ interface SubscriptionContextType {
   isFeatureAllowed: (feature: PremiumFeature) => boolean;
   canAddTrip: (currentActiveCount: number) => boolean;
   canAddCollaborator: (currentCount: number) => boolean;
+  /** Check if user can upload another photo to this trip (counts inspiration photos). */
+  canAddPhoto: (currentPhotoCount: number) => boolean;
+  /** Max photos per trip (null = unlimited). */
+  maxPhotosPerTrip: number | null;
   /** Check if a specific trip is editable (free users: only newest active trip) */
   isTripEditable: (tripId: string, allTrips: { id: string; start_date: string; end_date: string }[]) => boolean;
   /** Check if feature data should be shown readonly (sneak peek after downgrade) */
@@ -32,6 +36,8 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   isFeatureAllowed: () => false,
   canAddTrip: () => true,
   canAddCollaborator: () => true,
+  canAddPhoto: () => true,
+  maxPhotosPerTrip: null,
   isTripEditable: () => true,
   isSneakPeek: () => false,
 });
@@ -83,6 +89,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       },
       canAddTrip: (currentActiveCount: number) => currentActiveCount < limits.maxActiveTrips,
       canAddCollaborator: (currentCount: number) => currentCount < limits.maxCollaboratorsPerTrip,
+      canAddPhoto: (currentPhotoCount: number) =>
+        limits.maxPhotosPerTrip === null || currentPhotoCount < limits.maxPhotosPerTrip,
+      maxPhotosPerTrip: limits.maxPhotosPerTrip,
       isTripEditable: (tripId: string, allTrips: { id: string; start_date: string; end_date: string }[]) => {
         if (tier === 'premium') return true;
         // Free users: only the newest active trip (by start_date) is editable

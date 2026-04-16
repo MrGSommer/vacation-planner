@@ -15,8 +15,10 @@ export const TIER_LIMITS = {
   free: {
     maxActiveTrips: 1,
     maxPastTrips: 0,
-    maxCollaboratorsPerTrip: 2,
-    photos: false,
+    maxCollaboratorsPerTrip: 1,
+    /** Max photos per trip (incl. inspiration images). null = unlimited */
+    maxPhotosPerTrip: 10 as number | null,
+    photos: true,   // feature visible; enforced via maxPhotosPerTrip
     stops: false,
     ai: false,
     budget: false,
@@ -25,6 +27,7 @@ export const TIER_LIMITS = {
     maxActiveTrips: Infinity,
     maxPastTrips: Infinity,
     maxCollaboratorsPerTrip: Infinity,
+    maxPhotosPerTrip: null as number | null,
     photos: true,
     stops: true,
     ai: true,

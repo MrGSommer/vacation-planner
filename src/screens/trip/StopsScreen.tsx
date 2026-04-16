@@ -490,6 +490,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
           title="Routen & Stops"
           message="Plane deine Route visuell — von Hotel zu Hotel, mit allen Zwischenstopps"
           heroGradient={['#6C5CE7', '#74B9FF']}
+          trigger="stops_feature"
           highlights={[
             { icon: 'bed-outline', text: 'Hotels & Übernachtungen', detail: 'Check-in/out Daten, Buchungslinks & Notizen' },
             { icon: 'navigate-outline', text: 'Zwischenstopps planen', detail: 'Sehenswürdigkeiten, Restaurants & Tankstellen' },

@@ -100,6 +100,35 @@ async function stripeGet(path: string): Promise<any> {
   return res.json();
 }
 
+/** Fire-and-forget server-side analytics event.
+ *  Uses the log_analytics_event RPC with a synthetic session id so the event
+ *  still joins to the user's analytics history. */
+function logServerEvent(
+  userId: string | null,
+  eventName: string,
+  category: 'landing'|'auth'|'activation'|'monetization'|'retention'|'system',
+  stripeEventId: string,
+  properties: Record<string, unknown> = {},
+): void {
+  const sessionId = userId ? `user_${userId}` : `stripe_${stripeEventId}`;
+  fetch(`${SUPABASE_URL}/rest/v1/rpc/log_analytics_event`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+      'apikey': SERVICE_ROLE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      p_session_id: sessionId,
+      p_event_name: eventName,
+      p_category: category,
+      p_properties: properties,
+      p_user_id: userId,
+      p_platform: 'stripe',
+    }),
+  }).catch((e) => console.error('logServerEvent failed:', e));
+}
+
 /** Fire-and-forget admin notification */
 function notifyAdmin(type: string, data: Record<string, string>) {
   fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-admin`, {
@@ -189,6 +218,12 @@ Deno.serve(async (req) => {
           stripe_subscription_id: sub.id,
           subscription_period_end: new Date(sub.current_period_end * 1000).toISOString(),
         });
+
+        if (event.type === 'customer.subscription.created' && tier === 'premium') {
+          logServerEvent(profile.id, 'subscription_purchased', 'monetization', event.id, {
+            price_id: sub.items?.data?.[0]?.price?.id,
+          });
+        }
         break;
       }
 
@@ -196,7 +231,7 @@ Deno.serve(async (req) => {
         const sub = event.data.object;
         const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
 
-        const cancelProfiles = await dbSelect('profiles', `stripe_customer_id=eq.${customerId}`, 'email,first_name,last_name,ai_credits_purchased');
+        const cancelProfiles = await dbSelect('profiles', `stripe_customer_id=eq.${customerId}`, 'id,email,first_name,last_name,ai_credits_purchased');
         const cancelProfile = cancelProfiles?.[0];
 
         await dbUpdate('profiles', `stripe_customer_id=eq.${customerId}`, {
@@ -209,6 +244,7 @@ Deno.serve(async (req) => {
         });
 
         if (cancelProfile) {
+          logServerEvent(cancelProfile.id, 'subscription_cancelled', 'monetization', event.id);
           notifyAdmin('cancellation', {
             user_email: cancelProfile.email,
             user_name: `${cancelProfile.first_name || ''} ${cancelProfile.last_name || ''}`.trim() || cancelProfile.email,
@@ -285,6 +321,9 @@ Deno.serve(async (req) => {
           await dbUpdate('profiles', `id=eq.${profile.id}`, {
             ai_credits_balance: (profile.ai_credits_balance || 0) + 20,
             ai_credits_purchased: (profile.ai_credits_purchased || 0) + 20,
+          });
+          logServerEvent(profile.id, 'inspirations_purchased', 'monetization', event.id, {
+            amount_chf: (session.amount_total ?? 0) / 100,
           });
         } else if (session.mode === 'subscription') {
           await resolveProfile(customerId || null, clientRefId);

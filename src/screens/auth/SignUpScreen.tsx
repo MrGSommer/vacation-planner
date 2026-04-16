@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,7 @@ import { supabase } from '../../api/supabase';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { trackLandingEvent } from '../../api/landingEvents';
+import { trackEvent } from '../../api/analytics';
 
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
@@ -41,6 +42,10 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
 
+  useEffect(() => {
+    trackEvent('signup_started', { tier: WAITLIST_MODE ? 'waitlist' : 'free' });
+  }, []);
+
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
       setLocalError('Passwörter stimmen nicht überein');
@@ -53,6 +58,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLocalError(null);
       await signUp(email.trim(), password, firstName.trim(), lastName.trim());
+      trackEvent('signup_completed', { tier: 'free' });
       trackLandingEvent('registered');
       navigation.replace('SignUpSuccess', { email: email.trim() });
     } catch {}
