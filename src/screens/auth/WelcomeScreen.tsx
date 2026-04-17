@@ -14,6 +14,7 @@ import { Icon, IconName } from '../../utils/icons';
 import { LandingPlanPreview } from '../../components/landing/LandingPlanPreview';
 import { AiTripPlan } from '../../services/ai/planExecutor';
 import { trackLandingEvent } from '../../api/landingEvents';
+import { useAuthContext } from '../../contexts/AuthContext';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -156,6 +157,14 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const sectionRefs = useRef<Record<string, number>>({});
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const { pendingRedirectPath } = useAuthContext();
+
+  // Auto-redirect to Login when user arrived via deep link (e.g. email reminder)
+  useEffect(() => {
+    if (pendingRedirectPath) {
+      navigation.replace('Login');
+    }
+  }, [pendingRedirectPath, navigation]);
 
   const isMobile = width <= 700;
   const isTablet = width > 700 && width <= 1024;
@@ -490,6 +499,9 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                     onSubmitEditing={generatePreview}
                     editable={!previewLoading}
                     returnKeyType="go"
+                    autoComplete="off"
+                    textContentType="none"
+                    autoCorrect={false}
                   />
                 </View>
                 <TouchableOpacity

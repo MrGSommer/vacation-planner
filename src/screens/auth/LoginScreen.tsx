@@ -16,7 +16,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, signInWithGoogle, loading, error, clearError } = useAuth();
-  const { pendingInviteToken } = useAuthContext();
+  const { pendingInviteToken, pendingRedirectPath } = useAuthContext();
   const { showToast } = useToast();
 
   const handleLogin = async () => {
@@ -49,6 +49,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
           {pendingInviteToken && (
             <View style={styles.inviteBanner}>
               <Text style={styles.inviteBannerText}>Du wurdest zu einer Reise eingeladen! Melde dich an, um die Einladung anzunehmen.</Text>
+            </View>
+          )}
+
+          {!pendingInviteToken && pendingRedirectPath && (
+            <View style={styles.inviteBanner}>
+              <Text style={styles.inviteBannerText}>Melde dich an, um zu deiner Reise weitergeleitet zu werden.</Text>
             </View>
           )}
 
