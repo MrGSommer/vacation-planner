@@ -123,6 +123,11 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         const [t, c] = await Promise.all([getTrip(tripId), getCollaborators(tripId)]);
         setTrip(t);
         setCollaborators(c);
+        // Default to budget tab if trip hasn't started yet
+        const today = new Date().toISOString().split('T')[0];
+        if (t.start_date && t.start_date > today) {
+          setTab('budget');
+        }
       } catch (e) {
         console.error('Trip/Collab fetch error:', e);
       }

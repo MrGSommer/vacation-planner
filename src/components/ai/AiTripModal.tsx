@@ -1114,7 +1114,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     marginRight: spacing.sm,
   },
-  chipText: { ...typography.bodySmall, color: colors.secondary },
+  chipText: { ...typography.bodySmall, color: colors.text },
 
   // Form options (vertical buttons for structured choices)
   formOptionsContainer: {

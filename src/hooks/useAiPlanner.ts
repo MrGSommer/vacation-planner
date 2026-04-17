@@ -60,6 +60,7 @@ export interface AiMetadata {
   trip_type?: 'roundtrip' | 'pointtopoint' | null;
   transport_mode?: 'driving' | 'transit' | 'walking' | 'bicycling' | null;
   group_type?: 'solo' | 'couple' | 'family' | 'friends' | 'group' | null;
+  travelers_count?: number | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
   form_options?: FormWidget | Array<{ label: string; value?: string }> | null;
   plan_start_date?: string | null;
@@ -131,6 +132,33 @@ function stripLeakedFormOptions(text: string, metadata: AiMetadata | null): { cl
   }
 
   const cleanText = text.replace(formOptionRegex, '').trim();
+  return { cleanText, metadata: updatedMetadata };
+}
+
+function sanitizeMetadata(meta: AiMetadata): AiMetadata {
+  // RULE 1: agent_action and ready_to_plan must NEVER be true simultaneously
+  // agent_action takes priority (more specific than "create plan")
+  if (meta.agent_action && meta.ready_to_plan) {
+    meta.ready_to_plan = false;
+  }
+  return meta;
+}
+
+function stripLeakedAgentAction(text: string, metadata: AiMetadata | null): { cleanText: string; metadata: AiMetadata | null } {
+  const actionRegex = /<agent_action>([\s\S]*?)<\/agent_action>/g;
+  const matches = [...text.matchAll(actionRegex)];
+  if (matches.length === 0) return { cleanText: text, metadata };
+
+  const action = matches[0][1].trim();
+  const cleanText = text.replace(actionRegex, '').trim();
+  const updatedMetadata = metadata ? { ...metadata } : null;
+  if (updatedMetadata && !updatedMetadata.agent_action && action) {
+    const validActions = ['packing_list', 'budget_categories', 'day_plan'];
+    if (validActions.includes(action)) {
+      updatedMetadata.agent_action = action as any;
+      updatedMetadata.ready_to_plan = false;
+    }
+  }
   return { cleanText, metadata: updatedMetadata };
 }
 
@@ -344,6 +372,35 @@ function mergePlan(
     })),
     budget_categories: structure.budget_categories || [],
   };
+}
+
+async function compressConversation(messages: AiChatMessage[], context: AiContext): Promise<AiChatMessage[]> {
+  if (messages.length <= 20) return messages;
+
+  const oldMessages = messages.slice(0, -10);
+  const recentMessages = messages.slice(-10);
+
+  const summaryPrompt = `Fasse diese Reiseplanungs-Konversation in max 5 Stichpunkten zusammen.
+Fokus auf: getroffene Entscheidungen, User-Wünsche, Reisegruppe, Budget, Stil, Einschränkungen.
+Ignoriere Smalltalk und Begrüssungen.`;
+
+  try {
+    const summaryResponse = await sendAiMessage('greeting', [
+      { role: 'user', content: summaryPrompt + '\n\n' + oldMessages.map(m => `${m.role}: ${m.content}`).join('\n') }
+    ], context);
+
+    const summaryMsg: AiChatMessage = {
+      id: nextId(),
+      role: 'user',
+      content: `[System]: Zusammenfassung der bisherigen Konversation:\n${summaryResponse.content}`,
+      timestamp: Date.now(),
+    };
+
+    return [summaryMsg, ...recentMessages];
+  } catch {
+    // Fallback to simple trim if compression fails
+    return trimMessages(messages);
+  }
 }
 
 export type GenerationGranularity = 'all' | 'weekly' | 'daily';
@@ -849,7 +906,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const tripParsed = parseTripMemory(response.content);
       const personalParsed = parsePersonalMemory(tripParsed.cleanText);
       const parsed = parseMetadata(personalParsed.cleanText);
-      const { cleanText, metadata: meta } = stripLeakedFormOptions(parsed.cleanText, parsed.metadata);
+      const stripped = stripLeakedFormOptions(parsed.cleanText, parsed.metadata);
+      const { cleanText, metadata: meta } = stripLeakedAgentAction(stripped.cleanText, stripped.metadata);
+      if (meta) sanitizeMetadata(meta);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -877,15 +936,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         if (meta.preferences_gathered?.length) {
           contextRef.current.lastPreferencesGathered = meta.preferences_gathered;
         }
-        if (meta.group_type && tripId) {
-          contextRef.current.groupType = meta.group_type;
-          const updates: Partial<Trip> = { group_type: meta.group_type };
-          if (meta.group_type === 'solo') updates.travelers_count = 1;
-          else if (meta.group_type === 'couple') updates.travelers_count = 2;
-          else if (meta.group_type === 'family') updates.travelers_count = 4;
-          else if (meta.group_type === 'friends' || meta.group_type === 'group') updates.travelers_count = 4;
+        if ((meta.group_type || meta.travelers_count) && tripId) {
+          const updates: Partial<Trip> = {};
+          if (meta.group_type) {
+            contextRef.current.groupType = meta.group_type;
+            updates.group_type = meta.group_type;
+          }
+          // Use explicit travelers_count from Fable if provided, otherwise derive from group_type
+          if (meta.travelers_count && meta.travelers_count > 0) {
+            contextRef.current.travelersCount = meta.travelers_count;
+            updates.travelers_count = meta.travelers_count;
+          } else if (meta.group_type) {
+            const derived = meta.group_type === 'solo' ? 1 : meta.group_type === 'couple' ? 2 : 4;
+            contextRef.current.travelersCount = derived;
+            updates.travelers_count = derived;
+          }
           updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
         }
+      } else {
+        // No metadata from greeting — ensure no stale buttons
+        setMetadata(null);
       }
 
       // Save data snapshot for future auto-analysis
@@ -945,8 +1015,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         lockAcquired = true;
       }
 
-      // Prepare messages for API (trimmed, with sender prefix for user messages)
-      const trimmed = trimMessages(updatedMessages);
+      // Prepare messages for API (compressed/trimmed, with sender prefix for user messages)
+      const trimmed = await compressConversation(updatedMessages, contextRef.current);
       const apiMessages: AiMessage[] = trimmed.map(m => ({
         role: m.role,
         content: m.role === 'user' && m.senderName
@@ -989,7 +1059,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       let tripParsed = parseTripMemory(response.content);
       let personalParsed = parsePersonalMemory(tripParsed.cleanText);
       let parsedMeta = parseMetadata(personalParsed.cleanText);
-      let { cleanText, metadata: meta } = stripLeakedFormOptions(parsedMeta.cleanText, parsedMeta.metadata);
+      const strippedForm = stripLeakedFormOptions(parsedMeta.cleanText, parsedMeta.metadata);
+      let { cleanText, metadata: meta } = stripLeakedAgentAction(strippedForm.cleanText, strippedForm.metadata);
+      if (meta) sanitizeMetadata(meta);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -1027,7 +1099,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const fuTripParsed = parseTripMemory(followUpResponse.content);
           const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
           const fuParsed = parseMetadata(fuPersonalParsed.cleanText);
-          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedFormOptions(fuParsed.cleanText, fuParsed.metadata);
+          const fuStrippedForm = stripLeakedFormOptions(fuParsed.cleanText, fuParsed.metadata);
+          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedAgentAction(fuStrippedForm.cleanText, fuStrippedForm.metadata);
+          if (fuMeta) sanitizeMetadata(fuMeta);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
@@ -1094,7 +1168,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const fuTripParsed = parseTripMemory(followUpResponse.content);
           const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
           const fuParsedWs = parseMetadata(fuPersonalParsed.cleanText);
-          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedFormOptions(fuParsedWs.cleanText, fuParsedWs.metadata);
+          const fuStrippedForm = stripLeakedFormOptions(fuParsedWs.cleanText, fuParsedWs.metadata);
+          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedAgentAction(fuStrippedForm.cleanText, fuStrippedForm.metadata);
+          if (fuMeta) sanitizeMetadata(fuMeta);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
@@ -1143,19 +1219,26 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         if (meta.preferences_gathered?.length) {
           contextRef.current.lastPreferencesGathered = meta.preferences_gathered;
         }
-        if (meta.group_type && tripId) {
-          contextRef.current.groupType = meta.group_type;
-          const updates: Partial<Trip> = { group_type: meta.group_type };
-          if (meta.group_type === 'solo') updates.travelers_count = 1;
-          else if (meta.group_type === 'couple') updates.travelers_count = 2;
-          else if (meta.group_type === 'family') updates.travelers_count = 4;
-          else if (meta.group_type === 'friends' || meta.group_type === 'group') updates.travelers_count = 4;
+        if ((meta.group_type || meta.travelers_count) && tripId) {
+          const updates: Partial<Trip> = {};
+          if (meta.group_type) {
+            contextRef.current.groupType = meta.group_type;
+            updates.group_type = meta.group_type;
+          }
+          if (meta.travelers_count && meta.travelers_count > 0) {
+            contextRef.current.travelersCount = meta.travelers_count;
+            updates.travelers_count = meta.travelers_count;
+          } else if (meta.group_type) {
+            const derived = meta.group_type === 'solo' ? 1 : meta.group_type === 'couple' ? 2 : 4;
+            contextRef.current.travelersCount = derived;
+            updates.travelers_count = derived;
+          }
           updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
         }
       } else {
-        // K10: Reset stale interactive elements when Fable doesn't include <metadata> tags
-        // Keep ready_to_plan — user may still want to trigger plan generation
-        setMetadata(prev => prev ? { ...prev, agent_action: null, form_options: null, suggested_questions: [] } : prev);
+        // K10: Reset ALL interactive elements when Fable doesn't include <metadata> tags
+        // No metadata = no buttons — safest default, user can always re-trigger via text
+        setMetadata(prev => prev ? { ...prev, agent_action: null, ready_to_plan: false, form_options: null, suggested_questions: [] } : prev);
       }
 
       debouncedSave('conversing', meta, null);

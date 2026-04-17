@@ -6,6 +6,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { MODELS, getUser, isPremiumUser, deductCreditsAtomic, refundCredits, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey, extractTextContent, getTemperature } from '../_shared/claude.ts';
 import { buildStructureSystemPrompt, buildActivitiesSystemPrompt } from '../_shared/prompts.ts';
 import { lookupPlace } from '../_shared/places.ts';
+import { verifyAndAdjustDayActivities } from '../_shared/verifyTravelTimes.ts';
 
 const VALID_CATEGORIES = ['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'stop', 'other'];
 const MAX_ACTIVITY_DAYS = 31; // Max days for activity generation (cost protection for long trips)
@@ -427,6 +428,7 @@ async function generateInBackground(
       try {
         const parsed = parsePlanJson(content);
         dayActivities = parsed.days?.[0]?.activities || parsed.activities || [];
+
       } catch (parseErr) {
         console.error(`Failed to parse activities for ${currentDate}:`, parseErr);
         // Continue with next day
@@ -441,6 +443,10 @@ async function generateInBackground(
       const stopName = getStopForDate(structure.stops || [], currentDate);
       const placeContext = stopName || destination;
       await enrichActivitiesWithPlaces(dayActivities, placeContext);
+
+      // Verify and adjust travel times between activities (silent correction)
+      const transportMode = context.transportMode || 'transit';
+      dayActivities = await verifyAndAdjustDayActivities(dayActivities, transportMode);
 
       // Insert activities into DB
       const dbActivities = dayActivities.map((act: any, idx: number) => ({

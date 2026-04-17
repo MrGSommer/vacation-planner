@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   singleOptionText: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.secondary,
+    color: colors.text,
   },
   // Multi select chips
   chipsWrap: {
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   chipText: {
     ...typography.bodySmall,
     fontWeight: '500',
-    color: colors.secondary,
+    color: colors.text,
   },
   chipTextSelected: {
     color: '#fff',

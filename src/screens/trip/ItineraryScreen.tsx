@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, PanResponder, Platform, RefreshControl, Modal } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header, Card, TripBottomNav, ActivityModal, ActivityViewModal } from '../../components/common';
@@ -82,6 +82,9 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const [docActivityIds, setDocActivityIds] = useState<Set<string>>(new Set());
   const [showMapsPicker, setShowMapsPicker] = useState(false);
   const [mapsTarget, setMapsTarget] = useState<{ lat: number; lng: number; label?: string; context?: string } | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteCategories, setDeleteCategories] = useState<Set<string>>(new Set(['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'other']));
+  const [deleteScope, setDeleteScope] = useState<'day' | 'all'>('day');
   const tabScrollRef = useRef<ScrollView>(null);
   const tabWidths = useRef<number[]>([]);
 
@@ -627,14 +630,75 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
     return null;
   };
 
+  const toggleDeleteCategory = (cat: string) => {
+    setDeleteCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  const deleteCount = useMemo(() => {
+    const source = deleteScope === 'day' ? activities : allTripActivities;
+    return source.filter(a => deleteCategories.has(a.category)).length;
+  }, [deleteScope, deleteCategories, activities, allTripActivities]);
+
+  const handleBulkDelete = async () => {
+    const toDelete = deleteScope === 'day'
+      ? activities.filter(a => deleteCategories.has(a.category))
+      : allTripActivities.filter(a => deleteCategories.has(a.category));
+
+    if (toDelete.length === 0) {
+      showToast('Keine Aktivitäten zum Löschen gefunden', 'info');
+      setShowDeleteModal(false);
+      return;
+    }
+
+    // Optimistic UI update
+    const deleteIds = new Set(toDelete.map(a => a.id));
+    setActivities(prev => prev.filter(a => !deleteIds.has(a.id)));
+    setHotelActivities(prev => prev.filter(a => !deleteIds.has(a.id)));
+    setAllTripActivities(prev => prev.filter(a => !deleteIds.has(a.id)));
+    setShowDeleteModal(false);
+
+    // Delete from DB
+    for (const act of toDelete) {
+      try {
+        await deleteActivity(act.id);
+      } catch (e) {
+        console.error('Failed to delete activity:', e);
+      }
+    }
+    showToast(`${toDelete.length} Aktivitäten gelöscht`, 'success');
+  };
+
+  const DELETE_CATEGORY_LABELS: Record<string, string> = {
+    hotel: 'Unterkunft',
+    transport: 'Transport',
+    sightseeing: 'Sightseeing',
+    food: 'Essen',
+    activity: 'Aktivitäten',
+    shopping: 'Shopping',
+    relaxation: 'Entspannung',
+    other: 'Sonstiges',
+  };
+
   return (
     <View style={styles.container}>
       <Header
         title="Programm"
         rightAction={
-          <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+            {editable && allTripActivities.length > 0 && (
+              <TouchableOpacity onPress={() => setShowDeleteModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Icon name="trash-outline" size={iconSize.md} color={colors.error} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setShowAiModal(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="sparkles-outline" size={iconSize.md} color={colors.secondary} />
+            </TouchableOpacity>
+          </View>
         }
       />
 
@@ -909,6 +973,67 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         />
       )}
 
+      {/* Delete by Category Modal */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
+        <TouchableOpacity style={styles.deleteModalOverlay} activeOpacity={1} onPress={() => setShowDeleteModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.deleteModalContent} onPress={() => {}}>
+            <Text style={styles.deleteModalTitle}>Aktivitäten löschen</Text>
+            <Text style={styles.deleteModalSubtitle}>Wähle die Kategorien, die gelöscht werden sollen:</Text>
+
+            {/* Scope Toggle */}
+            <View style={styles.deleteScopeRow}>
+              <TouchableOpacity
+                style={[styles.deleteScopeBtn, deleteScope === 'day' && styles.deleteScopeBtnActive]}
+                onPress={() => setDeleteScope('day')}
+              >
+                <Text style={[styles.deleteScopeBtnText, deleteScope === 'day' && styles.deleteScopeBtnTextActive]}>Nur diesen Tag</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteScopeBtn, deleteScope === 'all' && styles.deleteScopeBtnActive]}
+                onPress={() => setDeleteScope('all')}
+              >
+                <Text style={[styles.deleteScopeBtnText, deleteScope === 'all' && styles.deleteScopeBtnTextActive]}>Alle Tage</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Category Chips */}
+            <View style={styles.deleteCategoryChips}>
+              {Object.entries(DELETE_CATEGORY_LABELS).map(([catId, label]) => {
+                const selected = deleteCategories.has(catId);
+                const catColor = CATEGORY_COLORS[catId] || colors.textSecondary;
+                return (
+                  <TouchableOpacity
+                    key={catId}
+                    style={[
+                      styles.deleteCategoryChip,
+                      { borderColor: catColor },
+                      selected && { backgroundColor: catColor + '20' },
+                    ]}
+                    onPress={() => toggleDeleteCategory(catId)}
+                  >
+                    <Icon name={getActivityIconName(catId)} size={16} color={selected ? catColor : colors.textLight} />
+                    <Text style={[styles.deleteCategoryChipText, selected && { color: catColor, fontWeight: '600' }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Actions */}
+            <TouchableOpacity
+              style={[styles.deleteConfirmBtn, deleteCount === 0 && { opacity: 0.5 }]}
+              onPress={handleBulkDelete}
+              disabled={deleteCount === 0}
+            >
+              <Icon name="trash-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.deleteConfirmBtnText}>{deleteCount} Aktivitäten löschen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteCancelBtn} onPress={() => setShowDeleteModal(false)}>
+              <Text style={styles.deleteCancelBtnText}>Abbrechen</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <TripBottomNav tripId={tripId} activeTab="Itinerary" />
     </View>
   );
@@ -1014,4 +1139,98 @@ const styles = StyleSheet.create({
   transitTitle: { ...typography.body, fontWeight: '600' as const },
   transitDetail: { ...typography.caption, color: colors.secondary, marginTop: 2, fontWeight: '500' as const },
   pollsSection: { marginBottom: spacing.md },
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  deleteModalContent: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  deleteModalTitle: {
+    ...typography.h3,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  deleteModalSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  deleteScopeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  deleteScopeBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  deleteScopeBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  deleteScopeBtnText: {
+    ...typography.bodySmall,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  deleteScopeBtnTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  deleteCategoryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  deleteCategoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    backgroundColor: colors.background,
+  },
+  deleteCategoryChipText: {
+    ...typography.bodySmall,
+    color: colors.textLight,
+  },
+  deleteConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.error,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+  },
+  deleteConfirmBtnText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  deleteCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  deleteCancelBtnText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
 });
