@@ -141,6 +141,10 @@ function sanitizeMetadata(meta: AiMetadata): AiMetadata {
   if (meta.agent_action && meta.ready_to_plan) {
     meta.ready_to_plan = false;
   }
+  // RULE 2: Filter out null/undefined entries from suggested_questions
+  if (meta.suggested_questions) {
+    meta.suggested_questions = meta.suggested_questions.filter(q => typeof q === 'string' && q.trim());
+  }
   return meta;
 }
 
@@ -984,7 +988,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
   const sendMessage = useCallback(async (text: string) => {
     if (!requireOnline('Fable')) return;
-    if (!text.trim() || sending) return;
+    if (!text?.trim() || sending) return;
 
     setError(null);
     setSending(true);
