@@ -51,7 +51,7 @@ export const BudgetSkeleton: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.md },
+  container: { flex: 1, padding: spacing.md },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

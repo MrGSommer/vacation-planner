@@ -36,7 +36,9 @@ export const TripBottomNav: React.FC<Props> = ({ tripId, activeTab }) => {
             key={tab.key}
             style={[styles.tab, active && styles.tabActive]}
             onPress={() => {
-              if (!active) {
+              if (active && tab.key === 'TripDetail') {
+                navigation.navigate('Main', { screen: 'Home' });
+              } else if (!active) {
                 navigation.replace(tab.key, { tripId });
               }
             }}

@@ -26,7 +26,7 @@ export const HomeScreenSkeleton: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.md, gap: spacing.md },
+  container: { flex: 1, padding: spacing.md, gap: spacing.md },
   card: {
     height: 200,
     borderRadius: borderRadius.lg,

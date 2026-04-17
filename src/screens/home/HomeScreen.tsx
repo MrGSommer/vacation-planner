@@ -207,7 +207,7 @@ const Separator = () => <View style={styles.separator} />;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips, remove } = useTrips();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const { paymentWarning, paymentErrorMessage, isPremium, isTrialing } = useSubscription();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -395,7 +395,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </View>
         <View style={styles.headerBody}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Meine Reisen</Text>
+            <Text style={styles.headerTitle}>{profile?.first_name ? `Hallo ${profile.first_name}` : 'Meine Reisen'}</Text>
             <Text style={styles.headerSubtitle}>{trips.length} {trips.length === 1 ? 'Reise' : 'Reisen'}</Text>
           </View>
           {(() => {

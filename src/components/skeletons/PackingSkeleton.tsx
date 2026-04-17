@@ -24,7 +24,7 @@ export const PackingSkeleton: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.md },
+  container: { flex: 1, padding: spacing.md },
   progress: { marginBottom: spacing.lg },
   section: { marginBottom: spacing.lg },
   itemRow: {

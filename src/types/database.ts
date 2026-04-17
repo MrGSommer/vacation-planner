@@ -40,6 +40,8 @@ export interface Profile {
   app_opens_total: number;
   fable_suspended_until: string | null;
   fable_suspension_reason: string | null;
+  onboarding_completed: boolean;
+  onboarding_dismissed: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -79,7 +81,7 @@ export interface AiUsageLog {
   id: string;
   user_id: string;
   trip_id: string | null;
-  task_type: 'conversation' | 'plan_generation' | 'plan_activities';
+  task_type: 'conversation' | 'plan_generation' | 'plan_activities' | 'agent_packing' | 'agent_budget' | 'agent_day_plan' | 'web_search' | 'onboarding';
   credits_charged: number;
   created_at: string;
 }

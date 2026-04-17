@@ -41,6 +41,7 @@ import { WaitlistConfirmScreen } from '../screens/auth/WaitlistConfirmScreen';
 import { CardSetupScreen } from '../screens/auth/CardSetupScreen';
 import { SupportChatScreen } from '../screens/profile/SupportChatScreen';
 import { SlideshowViewScreen } from '../screens/slideshow/SlideshowViewScreen';
+import { OnboardingChatScreen } from '../screens/onboarding/OnboardingChatScreen';
 import { TrialExpiredModal } from '../components/common/TrialExpiredModal';
 import { AnnouncementModal } from '../components/common/AnnouncementModal';
 import { PlanGenerationBar } from '../components/common/PlanGenerationBar';
@@ -94,6 +95,7 @@ const AUTH_SCREENS = {
   AdminEmailTest: 'admin/email-test',
   AdminAnnouncements: 'admin/announcements',
   AdminInsights: 'admin/insights',
+  Onboarding: 'onboarding',
 } as const;
 
 // Unauthenticated screens config
@@ -288,6 +290,20 @@ export const AppNavigator: React.FC = () => {
     }
   }, [session, profile, pendingInviteToken, pendingRedirectPath, passwordRecovery]);
 
+  // Onboarding redirect: show onboarding chat for new users who haven't completed or dismissed it
+  const onboardingShownRef = useRef(false);
+  useEffect(() => {
+    if (!session || !profile || onboardingShownRef.current) return;
+    if (pendingInviteToken || pendingRedirectPath || passwordRecovery || pendingSetPassword || pendingPlanPreview) return;
+    if (profile.subscription_status === 'trialing' && !profile.stripe_customer_id) return; // CardSetup takes priority
+    if (profile.onboarding_completed || profile.onboarding_dismissed) return;
+
+    onboardingShownRef.current = true;
+    setTimeout(() => {
+      navigationRef.current?.navigate('Onboarding');
+    }, 400);
+  }, [session, profile, pendingInviteToken, pendingRedirectPath, passwordRecovery, pendingSetPassword, pendingPlanPreview]);
+
   // Remove HTML bootstrap loader once auth is resolved
   // This ensures a single smooth transition: HTML loader → real content
   useEffect(() => {
@@ -351,6 +367,7 @@ export const AppNavigator: React.FC = () => {
               <Stack.Screen name="AdminInsights" component={AdminInsightsScreen} />
               <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
               <Stack.Screen name="CardSetup" component={CardSetupScreen} />
+              <Stack.Screen name="Onboarding" component={OnboardingChatScreen} />
             </>
           ) : (
             <Stack.Screen name="Auth" component={AuthNavigator} />

@@ -40,6 +40,7 @@ export type RootStackParamList = {
   SlideshowView: { token: string };
   WaitlistConfirm: { token: string };
   CardSetup: undefined;
+  Onboarding: undefined;
 };
 
 export type MainTabParamList = {

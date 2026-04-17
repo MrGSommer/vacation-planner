@@ -13,7 +13,7 @@ const LOST_FEATURES: { icon: IconName; text: string }[] = [
   { icon: 'images-outline', text: 'Unbegrenzte Fotos (Free: max. 10/Trip)' },
   { icon: 'wallet-outline', text: 'Budget & Ausgaben' },
   { icon: 'map-outline', text: 'Routen & Stops' },
-  { icon: 'sparkles-outline', text: '20 Inspirationen/Monat' },
+  { icon: 'sparkles-outline', text: 'Fable inklusive' },
 ];
 
 const DISMISSED_KEY = 'wayfable_trial_expired_dismissed';

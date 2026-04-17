@@ -17,6 +17,6 @@ export const PhotosSkeleton: React.FC = () => (
 );
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.md },
+  grid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', padding: spacing.md },
   photoWrapper: { margin: spacing.xs },
 });

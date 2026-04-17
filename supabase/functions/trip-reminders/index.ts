@@ -49,6 +49,11 @@ async function logN(u: string, t: string, ty: string, c: string) {
   });
 }
 
+function uniqueUserIds(ownerIds: string[], collaborators: {user_id: string}[]): string[] {
+  const set = new Set([...ownerIds, ...collaborators.map(c => c.user_id)]);
+  return [...set];
+}
+
 const UNSUB = `${SITE}/notifications`;
 
 const footer = `<hr style="border:none;border-top:1px solid #eee;margin:24px 0 16px"/><p style="font-size:12px;color:#999;text-align:center"><a href="${UNSUB}" style="color:#999">Benachrichtigungseinstellungen \u00e4ndern</a></p>`;
@@ -82,7 +87,7 @@ Deno.serve(async (req) => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     // 1) Upcoming trip reminders
-    const trips = await sq(`trips?start_date=in.(${f(d1)},${f(d3)})&select=id,name,destination,start_date,end_date`);
+    const trips = await sq(`trips?start_date=in.(${f(d1)},${f(d3)})&select=id,name,destination,start_date,end_date,owner_id`);
     let sent = 0;
 
     if (trips?.length) {
@@ -92,9 +97,10 @@ Deno.serve(async (req) => {
         const title = days === 1 ? `${t.name} startet morgen!` : `${t.name} startet in 3 Tagen!`;
 
         const cs = await sq(`trip_collaborators?trip_id=eq.${t.id}&select=user_id`);
-        if (!cs?.length) continue;
+        const userIds = uniqueUserIds([t.owner_id], cs || []);
+        if (!userIds.length) continue;
 
-        const ps = await sq(`profiles?id=in.(${cs.map((c: any) => c.user_id).join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_push_reminders,notification_email_reminders`);
+        const ps = await sq(`profiles?id=in.(${userIds.join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_push_reminders,notification_email_reminders`);
         for (const p of ps) {
           if (await wasN(p.id, t.id, ty)) continue;
 
@@ -129,13 +135,14 @@ Deno.serve(async (req) => {
 
     // 2) Trip completion emails — trips that ended yesterday
     let completionSent = 0;
-    const completedTrips = await sq(`trips?end_date=eq.${f(yesterday)}&select=id,name,destination,start_date,end_date`);
+    const completedTrips = await sq(`trips?end_date=eq.${f(yesterday)}&select=id,name,destination,start_date,end_date,owner_id`);
 
     if (completedTrips?.length) {
       for (const t of completedTrips) {
         const ty = 'trip_completed';
         const cs = await sq(`trip_collaborators?trip_id=eq.${t.id}&select=user_id`);
-        if (!cs?.length) continue;
+        const userIds = uniqueUserIds([t.owner_id], cs || []);
+        if (!userIds.length) continue;
 
         // Gather stats
         const [activities, stops, photos] = await Promise.all([
@@ -153,7 +160,7 @@ Deno.serve(async (req) => {
           photos: Array.isArray(photos) ? photos.length : 0,
         };
 
-        const ps = await sq(`profiles?id=in.(${cs.map((c: any) => c.user_id).join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_email_reminders`);
+        const ps = await sq(`profiles?id=in.(${userIds.join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_email_reminders`);
         for (const p of ps) {
           if (await wasN(p.id, t.id, ty)) continue;
           const wantsEmail = (p.notification_email_enabled !== false) && (p.notification_email_reminders !== false);
@@ -199,7 +206,7 @@ Deno.serve(async (req) => {
         const ty = 'activity_digest';
 
         // Get trip info
-        const tripInfo = await sq(`trips?id=eq.${tid}&select=id,name,destination,start_date,end_date`);
+        const tripInfo = await sq(`trips?id=eq.${tid}&select=id,name,destination,start_date,end_date,owner_id`);
         if (!Array.isArray(tripInfo) || tripInfo.length === 0) continue;
         const trip = tripInfo[0];
 
@@ -207,12 +214,13 @@ Deno.serve(async (req) => {
         const tripEnd = new Date(trip.end_date);
         if (tripEnd < yesterday) continue;
 
-        // Get collaborators
+        // Get collaborators + owner
         const cs = await sq(`trip_collaborators?trip_id=eq.${tid}&select=user_id`);
-        if (!Array.isArray(cs) || cs.length === 0) continue;
+        const userIds = uniqueUserIds([trip.owner_id], Array.isArray(cs) ? cs : []);
+        if (userIds.length === 0) continue;
 
         const ps = await sq(
-          `profiles?id=in.(${cs.map((c: any) => c.user_id).join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_email_reminders,notification_push_collaborators`
+          `profiles?id=in.(${userIds.join(',')})&notifications_enabled=eq.true&select=id,email,first_name,notification_email_enabled,notification_email_reminders,notification_push_collaborators`
         );
         if (!Array.isArray(ps)) continue;
 
