@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Pressable, Modal, StyleSheet,
 import { Button } from './Button';
 import { Input } from './Input';
 import { TimePickerInput } from './TimePickerInput';
+import { DatePickerInput } from './DatePickerInput';
 import { CategoryFieldsInput } from './CategoryFieldsInput';
 import { PlaceAutocomplete, PlaceResult } from './PlaceAutocomplete';
 import { ACTIVITY_CATEGORIES } from '../../utils/constants';
@@ -21,6 +22,8 @@ export interface ActivityFormData {
   locationAddress: string | null;
   notes: string;
   categoryData: Record<string, any>;
+  /** Selected date for moving activity to a different day */
+  activityDate?: string;
 }
 
 interface Props {
@@ -30,6 +33,8 @@ interface Props {
   onCancel: () => void;
   tripStartDate?: string;
   tripEndDate?: string;
+  /** Current day date (YYYY-MM-DD) for the selected day — used as default for date picker */
+  currentDayDate?: string;
   /** Filter which categories are shown. If omitted, all categories are shown. */
   categoryFilter?: string[];
   /** Default category for new activities */
@@ -45,9 +50,12 @@ const CATEGORY_BASE_CONFIG: Record<string, { showTime: boolean; showPlace: boole
 };
 const DEFAULT_BASE_CONFIG = { showTime: true, showPlace: true };
 
+// Categories that have their own date fields (hotel: check_in/out, transport: departure/arrival)
+const CATEGORIES_WITH_OWN_DATE = ['hotel', 'transport'];
+
 export const ActivityModal: React.FC<Props> = ({
   visible, activity, onSave, onCancel,
-  tripStartDate, tripEndDate,
+  tripStartDate, tripEndDate, currentDayDate,
   categoryFilter, defaultCategory = 'activity', defaultCategoryData,
 }) => {
   const [title, setTitle] = useState('');
@@ -59,6 +67,7 @@ export const ActivityModal: React.FC<Props> = ({
   const [locationAddress, setLocationAddress] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [categoryData, setCategoryData] = useState<Record<string, any>>({});
+  const [activityDate, setActivityDate] = useState('');
 
   // Reset form when modal opens/closes or activity changes
   useEffect(() => {
@@ -73,6 +82,7 @@ export const ActivityModal: React.FC<Props> = ({
         setLocationAddress(activity.location_address || null);
         setNotes(activity.description || '');
         setCategoryData(activity.category_data || {});
+        setActivityDate(currentDayDate || '');
       } else {
         setTitle('');
         setCategory(defaultCategory);
@@ -83,9 +93,10 @@ export const ActivityModal: React.FC<Props> = ({
         setLocationAddress(null);
         setNotes('');
         setCategoryData(defaultCategoryData || {});
+        setActivityDate(currentDayDate || '');
       }
     }
-  }, [visible, activity, defaultCategory, defaultCategoryData]);
+  }, [visible, activity, defaultCategory, defaultCategoryData, currentDayDate]);
 
   const handleSave = () => {
     onSave({
@@ -98,8 +109,12 @@ export const ActivityModal: React.FC<Props> = ({
       locationAddress,
       notes: notes.trim(),
       categoryData,
+      activityDate: activityDate || undefined,
     });
   };
+
+  // Show date picker for categories that don't have their own date fields
+  const showDatePicker = !CATEGORIES_WITH_OWN_DATE.includes(category) && !!activity && !!tripStartDate && !!tripEndDate;
 
   const categories = categoryFilter
     ? ACTIVITY_CATEGORIES.filter(c => categoryFilter.includes(c.id))
@@ -135,6 +150,16 @@ export const ActivityModal: React.FC<Props> = ({
 
             {baseConfig.showTime && (
               <TimePickerInput label="Uhrzeit" value={startTime} onChange={setStartTime} placeholder="z.B. 09:00" />
+            )}
+
+            {showDatePicker && (
+              <DatePickerInput
+                label="Datum (Tag verschieben)"
+                value={activityDate}
+                onChange={setActivityDate}
+                minDate={tripStartDate}
+                maxDate={tripEndDate}
+              />
             )}
 
             <CategoryFieldsInput

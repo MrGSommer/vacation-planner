@@ -144,10 +144,15 @@ function sanitizeMetadata(meta: AiMetadata, prevMeta: AiMetadata | null): AiMeta
   // RULE 2: If previous turn had agent_action and this turn switches to ready_to_plan
   // without keeping agent_action, carry over the agent_action instead.
   // This prevents: user asks "budget" → agent_action=budget_categories, user says "mid-range" → Fable wrongly sets ready_to_plan.
-  // The user was giving details for the SPECIFIC task, not asking for a full plan.
+  // EXCEPTION: If plan_start_date or plan_end_date is set, this is a multi-day plan → allow ready_to_plan.
+  // Also exception for day_plan → ready_to_plan transitions (user escalating from single day to multi-day).
   if (prevMeta?.agent_action && !meta.agent_action && meta.ready_to_plan) {
-    meta.agent_action = prevMeta.agent_action;
-    meta.ready_to_plan = false;
+    const isMultiDayPlan = meta.plan_start_date || meta.plan_end_date;
+    const isEscalatingFromDayPlan = prevMeta.agent_action === 'day_plan';
+    if (!isMultiDayPlan && !isEscalatingFromDayPlan) {
+      meta.agent_action = prevMeta.agent_action;
+      meta.ready_to_plan = false;
+    }
   }
   // RULE 3: Filter out null/undefined entries from suggested_questions
   if (meta.suggested_questions) {

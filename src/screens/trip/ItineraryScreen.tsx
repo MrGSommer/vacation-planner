@@ -267,7 +267,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleModalSave = async (data: ActivityFormData) => {
     if (!data.title) return;
     try {
-      const actDate = getActivityDate(data.category, data.categoryData);
+      // Priority: explicit activityDate (date picker) > category-specific date > current day
+      const actDate = data.activityDate || getActivityDate(data.category, data.categoryData);
       const targetDayId = getDayIdForDate(actDate) || selectedDayId;
       if (!targetDayId) return;
 
@@ -939,6 +940,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         onCancel={() => { setShowModal(false); setModalActivity(null); setModalDefaultCategory(undefined); }}
         tripStartDate={tripStartDate}
         tripEndDate={tripEndDate}
+        currentDayDate={selectedDay?.date}
         defaultCategory={modalDefaultCategory}
         defaultCategoryData={modalDefaultCategoryData}
       />

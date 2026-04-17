@@ -187,8 +187,8 @@ AUFGABEN-FOKUS:
 - Wenn der User eine SPEZIFISCHE Aufgabe anfragt, konzentriere dich NUR darauf:
   * "Packliste" / "Was soll ich einpacken" → agent_action="packing_list", ready_to_plan=false
   * "Budget" / "Budgetkategorien" / "Was kostet das" → agent_action="budget_categories", ready_to_plan=false
-  * "Plane den Tag" / "Was kann ich morgen machen" → agent_action="day_plan", ready_to_plan=false
-  * "Plane die Reise" / "Reiseplan erstellen" / "Plane alles" → ready_to_plan=true, agent_action=null
+  * "Plane den Tag" / "Was kann ich morgen machen" (EIN Tag) → agent_action="day_plan", ready_to_plan=false
+  * "Plane die Reise" / "Reiseplan erstellen" / "Plane alles" / MEHRERE Tage → ready_to_plan=true, agent_action=null
 - Bei spezifischen Aufgaben: Bestätige kurz ("Ich erstelle dir eine Packliste!"), setze agent_action, und schlage NICHTS anderes vor.
 - Bestätigungs-Wörter ("ja", "mach", "ok", "los") beziehen sich IMMER auf die LETZTE Frage/den LETZTEN Vorschlag — nicht automatisch auf Plan-Erstellung.
 - Setze ready_to_plan NIEMALS gleichzeitig mit einer agent_action-Anfrage.
@@ -250,7 +250,10 @@ Beispiel RICHTIG: Text + <metadata>{"agent_action": "budget_categories", "ready_
   * Berechne die konkreten Daten basierend auf den Trip-Daten (${startDate} bis ${endDate})
   * Beispiel: Trip 20.-27. März, User sagt "plane Tag 4-7" → plan_start_date="YYYY-03-23", plan_end_date="YYYY-03-26"
 - Wenn der User die gesamte Reise planen will: plan_start_date=null, plan_end_date=null
-- Setze agent_action="day_plan" wenn der User einen EINZELNEN Tag füllen will.
+- Setze agent_action="day_plan" NUR wenn der User einen EINZELNEN Tag füllen will (z.B. "plane den Montag", "was kann ich morgen machen").
+- WICHTIG: Wenn du Aktivitäten für MEHRERE Tage beschreibst oder der User mehrere Tage plant → setze ready_to_plan=true (NICHT day_plan!). day_plan erzeugt nur Einträge für EINEN Tag. Für mehrere Tage MUSS ready_to_plan=true sein, damit die Aktivitäten korrekt auf verschiedene Tage verteilt werden.
+- Beispiel: User sagt "plane mir die 3 Tage in Lissabon wie besprochen" → ready_to_plan=true (NICHT day_plan)
+- Beispiel: User sagt "was kann ich am Dienstag machen?" → agent_action="day_plan"
 - Setze agent_action="packing_list" SOFORT wenn der User nach einer Packliste fragt — auch ohne weitere Rückfragen, wenn Reiseziel und Daten bekannt sind.
 - Setze agent_action="budget_categories" SOFORT wenn der User nach Budget fragt — auch ohne Budget-Level, verwende dann einen ausgewogenen Standard.
 - Frage NICHT nach weiteren Details wenn die Grunddaten (Ziel, Daten) vorhanden sind — handle proaktiv.
