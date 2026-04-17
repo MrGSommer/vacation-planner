@@ -1830,17 +1830,35 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         assigned_to: item.assigned_to && validCollabIds.has(item.assigned_to) ? item.assigned_to : null,
       }));
 
-      // H1: Add items to existing packing list with dedup
-      const { getPackingLists, getPackingItems: getExistingItems, createPackingList: createList, createPackingItems: createItems } = await import('../api/packing');
+      // H1: Add/update items in existing packing list
+      const { getPackingLists, getPackingItems: getExistingItems, createPackingList: createList, createPackingItems: createItems, updatePackingItem } = await import('../api/packing');
       const existingLists = await getPackingLists(tripId);
       const list = existingLists.length > 0 ? existingLists[0] : await createList(tripId, 'Packliste');
 
-      // Filter out items that already exist (by name, case-insensitive)
+      // Separate new items from existing ones (match by name, case-insensitive)
       const existingItems = existingLists.length > 0 ? await getExistingItems(list.id) : [];
-      const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()));
-      const newItems = validItems.filter(item => !existingNames.has(item.name.toLowerCase()));
+      const existingItemMap = new Map(existingItems.map(i => [i.name.toLowerCase(), i]));
+
+      const newItems: typeof validItems = [];
+      const updatedItems: Array<{ id: string; name: string; quantity: number; category: string }> = [];
+
+      for (const item of validItems) {
+        const existing = existingItemMap.get(item.name.toLowerCase());
+        if (existing) {
+          // Update quantity/category if changed
+          if (existing.quantity !== item.quantity || existing.category !== item.category) {
+            updatedItems.push({ id: existing.id, name: item.name, quantity: item.quantity, category: item.category });
+          }
+        } else {
+          newItems.push(item);
+        }
+      }
+
       if (newItems.length > 0) {
         await createItems(list.id, newItems);
+      }
+      for (const item of updatedItems) {
+        await updatePackingItem(item.id, { quantity: item.quantity, category: item.category });
       }
 
       // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
@@ -1848,12 +1866,15 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setMetadata(clearedMeta);
       debouncedSave('conversing', clearedMeta, null);
 
+      const parts: string[] = [];
+      if (newItems.length > 0) parts.push(`**${newItems.length}** neue Items`);
+      if (updatedItems.length > 0) parts.push(`**${updatedItems.length}** Items aktualisiert`);
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: newItems.length > 0
-          ? `Packliste erstellt mit **${newItems.length} Items** in ${[...new Set(newItems.map(i => i.category))].length} Kategorien.${validItems.length > newItems.length ? ` (${validItems.length - newItems.length} Duplikate übersprungen)` : ''} Schau im Packlisten-Tab nach!`
-          : 'Alle vorgeschlagenen Items sind bereits in der Packliste vorhanden.',
+        content: parts.length > 0
+          ? `Packliste angepasst: ${parts.join(', ')} in ${[...new Set([...newItems, ...updatedItems].map(i => i.category))].length} Kategorien. Schau im Packlisten-Tab nach!`
+          : 'Packliste ist bereits auf dem neusten Stand — keine Änderungen nötig.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
@@ -1917,21 +1938,45 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         dayId = newDay.id;
       }
 
-      // H3: Dedup — filter out activities that already exist for this day
-      const existingTitlesForDay = new Set<string>();
+      // H3: Separate new activities from existing ones (match by title, case-insensitive)
+      const { updateActivity } = await import('../api/itineraries');
+      const existingActivitiesForDay = new Map<string, { id: string }>();
       if (dayId && existingDay) {
         const { getActivitiesForTrip: getTripsActivities } = await import('../api/itineraries');
         const existingActivities = await getTripsActivities(tripId);
         for (const a of existingActivities) {
           if (a.day_id === dayId) {
-            existingTitlesForDay.add(a.title.toLowerCase());
+            existingActivitiesForDay.set(a.title.toLowerCase(), { id: a.id });
           }
         }
       }
 
-      const newActivities = parsed.activities.filter(a => !existingTitlesForDay.has(a.title.toLowerCase()));
+      const newActivities: typeof parsed.activities = [];
+      const updatedActivities: Array<{ id: string; updates: Record<string, any> }> = [];
 
-      // Create activities
+      for (const a of parsed.activities) {
+        const existing = existingActivitiesForDay.get(a.title.toLowerCase());
+        if (existing) {
+          // Update existing activity with new data
+          updatedActivities.push({
+            id: existing.id,
+            updates: {
+              description: a.description,
+              start_time: a.start_time,
+              end_time: a.end_time,
+              cost: a.cost,
+              location_name: a.location_name,
+              location_lat: a.location_lat,
+              location_lng: a.location_lng,
+              category_data: a.category_data || {},
+            },
+          });
+        } else {
+          newActivities.push(a);
+        }
+      }
+
+      // Create new activities
       if (newActivities.length > 0) {
         const activitiesToCreate = newActivities.map((a, i) => ({
           day_id: dayId!,
@@ -1956,18 +2001,25 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
         await createActivities(activitiesToCreate);
       }
 
+      // Update existing activities
+      for (const { id, updates } of updatedActivities) {
+        await updateActivity(id, updates);
+      }
+
       // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
       const clearedDayMeta = metadata ? { ...metadata, agent_action: null } : null;
       setMetadata(clearedDayMeta);
       debouncedSave('conversing', clearedDayMeta, null);
 
-      const skipped = parsed.activities.length - newActivities.length;
+      const parts: string[] = [];
+      if (newActivities.length > 0) parts.push(`**${newActivities.length}** neue Aktivitäten`);
+      if (updatedActivities.length > 0) parts.push(`**${updatedActivities.length}** Aktivitäten aktualisiert`);
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: newActivities.length > 0
-          ? `Tagesplan für **${targetDate}** erstellt mit **${newActivities.length} Aktivitäten**.${skipped > 0 ? ` (${skipped} Duplikate übersprungen)` : ''} Schau im Tagesplan nach!`
-          : 'Alle vorgeschlagenen Aktivitäten existieren bereits für diesen Tag.',
+        content: parts.length > 0
+          ? `Tagesplan für **${targetDate}** angepasst: ${parts.join(', ')}. Schau im Tagesplan nach!`
+          : 'Tagesplan ist bereits auf dem neusten Stand — keine Änderungen nötig.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
@@ -2007,14 +2059,34 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
       if (!parsed.categories?.length) throw new Error('Keine Kategorien erhalten');
 
-      // H2: Dedup — filter out budget categories that already exist
-      const { getBudgetCategories: getExistingCats, createBudgetCategory } = await import('../api/budgets');
+      // H2: Separate new categories from existing ones (match by name, case-insensitive)
+      const { getBudgetCategories: getExistingCats, createBudgetCategory, updateBudgetCategory } = await import('../api/budgets');
       const existingCats = await getExistingCats(tripId);
-      const existingCatNames = new Set(existingCats.map(c => c.name.toLowerCase()));
-      const newCategories = parsed.categories.filter(cat => !existingCatNames.has(cat.name.toLowerCase()));
+      const existingCatMap = new Map(existingCats.map(c => [c.name.toLowerCase(), c]));
 
+      const newCategories: typeof parsed.categories = [];
+      const updatedCategories: Array<{ id: string; name: string; budget_limit: number; color: string }> = [];
+
+      for (const cat of parsed.categories) {
+        const existing = existingCatMap.get(cat.name.toLowerCase());
+        if (existing) {
+          // Update budget_limit if it changed
+          if (existing.budget_limit !== cat.budget_limit || existing.color !== cat.color) {
+            updatedCategories.push({ id: existing.id, name: cat.name, budget_limit: cat.budget_limit, color: cat.color });
+          }
+        } else {
+          newCategories.push(cat);
+        }
+      }
+
+      // Create new categories
       for (const cat of newCategories) {
         await createBudgetCategory(tripId, cat.name, cat.color, cat.budget_limit);
+      }
+
+      // Update existing categories with new budget limits
+      for (const cat of updatedCategories) {
+        await updateBudgetCategory(cat.id, { budget_limit: cat.budget_limit, color: cat.color });
       }
 
       // K11: Clear agent_action after successful execution + force-save to prevent stale DB state
@@ -2022,15 +2094,17 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       setMetadata(clearedBudgetMeta);
       debouncedSave('conversing', clearedBudgetMeta, null);
 
-      const totalBudget = newCategories.reduce((sum, c) => sum + (c.budget_limit || 0), 0);
+      const totalBudget = [...newCategories, ...updatedCategories].reduce((sum, c) => sum + (c.budget_limit || 0), 0);
       const currency = contextRef.current.currency || 'CHF';
-      const skipped = parsed.categories.length - newCategories.length;
+      const parts: string[] = [];
+      if (newCategories.length > 0) parts.push(`**${newCategories.length}** neue Kategorien erstellt`);
+      if (updatedCategories.length > 0) parts.push(`**${updatedCategories.length}** Kategorien aktualisiert`);
       const successMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: newCategories.length > 0
-          ? `**${newCategories.length} Budget-Kategorien** erstellt (Total: ${totalBudget} ${currency}).${skipped > 0 ? ` (${skipped} Duplikate übersprungen)` : ''} Schau im Budget-Tab nach!`
-          : 'Alle vorgeschlagenen Budget-Kategorien existieren bereits.',
+        content: parts.length > 0
+          ? `Budget angepasst: ${parts.join(', ')} (Total: ${totalBudget} ${currency}). Schau im Budget-Tab nach!`
+          : 'Budget ist bereits auf dem neusten Stand — keine Änderungen nötig.',
         timestamp: Date.now(),
         creditsAfter: response.credits_remaining,
         senderName: 'Fable',
