@@ -822,10 +822,12 @@ export const AiTripModal: React.FC<Props> = ({
 
         {/* Suggestion chips (conversing only — horizontal) */}
         {!isPlanReview && !metadata?.form_options && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (() => {
-          // Filter out already-shown suggestions to prevent loops
-          const newSuggestions = metadata.suggested_questions.filter(q => !shownSuggestionsRef.current.has(q));
+          // Filter out empty/invalid suggestions and already-shown ones to prevent loops
+          const validSuggestions = metadata.suggested_questions.filter(q => typeof q === 'string' && q.trim());
+          if (validSuggestions.length === 0) return null;
+          const newSuggestions = validSuggestions.filter(q => !shownSuggestionsRef.current.has(q));
           // If all filtered out, show current ones (AI generated fresh set)
-          const displaySuggestions = newSuggestions.length > 0 ? newSuggestions : metadata.suggested_questions;
+          const displaySuggestions = newSuggestions.length > 0 ? newSuggestions : validSuggestions;
           // Track shown suggestions
           displaySuggestions.forEach(q => shownSuggestionsRef.current.add(q));
           return (
