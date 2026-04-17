@@ -154,6 +154,10 @@ function SliderWidget({ widget, onSubmit }: { widget: FormSlider; onSubmit: (tex
 }
 
 export function ChatFormWidget({ widget, onSubmit }: ChatFormWidgetProps) {
+  // Guard: don't render empty select widgets
+  if ((widget.type === 'single_select' || widget.type === 'multi_select') && (!widget.options || widget.options.length === 0)) {
+    return null;
+  }
   switch (widget.type) {
     case 'single_select':
       return <SingleSelectWidget widget={widget} onSubmit={onSubmit} />;

@@ -833,8 +833,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           let g = `Hallo! Ich plane eine Reise nach ${destination}.`;
           const ctx = contextRef.current;
           if (ctx.startDate && ctx.endDate) g += ` Reisedaten: ${ctx.startDate} bis ${ctx.endDate}.`;
-          if (ctx.travelersCount && ctx.travelersCount > 0) g += ` Wir sind ${ctx.travelersCount} Person(en).`;
-          if (ctx.groupType) g += ` Reisegruppe: ${ctx.groupType}.`;
+          // Only include travelers/group if explicitly set (not just defaults of 1/solo)
+          if (ctx.travelersCount && ctx.travelersCount > 1) g += ` Wir sind ${ctx.travelersCount} Personen.`;
+          if (ctx.groupType && ctx.groupType !== 'solo') g += ` Reisegruppe: ${ctx.groupType}.`;
           g += ' Hilf mir bei der Planung.';
           return g;
         })();
