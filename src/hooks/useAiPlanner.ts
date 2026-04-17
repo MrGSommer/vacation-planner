@@ -14,7 +14,7 @@ import { useToast } from '../contexts/ToastContext';
 import { getAiConversation, saveAiConversation, deleteAiConversation } from '../api/aiConversations';
 import { getAiTripMessages, insertAiTripMessage, deleteAiTripMessages } from '../api/aiTripMessages';
 import { getAiTripMemory, saveAiTripMemory, deleteAiTripMemory } from '../api/aiTripMemory';
-import { getPlanJobStatus, getActiveJob, getRecentCompletedJob } from '../api/aiPlanJobs';
+import { getPlanJobStatus, getActiveJob, getRecentCompletedJob, startPlanGeneration } from '../api/aiPlanJobs';
 import { usePlanGeneration } from '../contexts/PlanGenerationContext';
 import { acquireProcessingLock, releaseProcessingLock } from '../api/aiProcessingLock';
 import { searchWeb, WebSearchResult } from '../api/webSearch';
@@ -47,6 +47,12 @@ export interface AiChatMessage {
   senderName?: string;
 }
 
+export interface FormOptionItem { label: string; emoji?: string; }
+export interface FormSingleSelect { type: 'single_select'; question?: string; options: FormOptionItem[]; }
+export interface FormMultiSelect { type: 'multi_select'; question?: string; options: FormOptionItem[]; min?: number; max?: number; confirm_label?: string; }
+export interface FormSlider { type: 'slider'; question?: string; min: number; max: number; step?: number; unit?: string; default_value?: number; labels?: { min: string; max: string }; }
+export type FormWidget = FormSingleSelect | FormMultiSelect | FormSlider;
+
 export interface AiMetadata {
   ready_to_plan: boolean;
   preferences_gathered: string[];
@@ -55,7 +61,7 @@ export interface AiMetadata {
   transport_mode?: 'driving' | 'transit' | 'walking' | 'bicycling' | null;
   group_type?: 'solo' | 'couple' | 'family' | 'friends' | 'group' | null;
   agent_action?: 'packing_list' | 'budget_categories' | 'day_plan' | null;
-  form_options?: Array<{ label: string; value?: string }> | null;
+  form_options?: FormWidget | Array<{ label: string; value?: string }> | null;
   plan_start_date?: string | null;
   plan_end_date?: string | null;
 }
@@ -103,6 +109,28 @@ function parseMetadata(text: string): { cleanText: string; metadata: AiMetadata 
   } catch {
     return { cleanText, metadata: null };
   }
+}
+
+function stripLeakedFormOptions(text: string, metadata: AiMetadata | null): { cleanText: string; metadata: AiMetadata | null } {
+  const formOptionRegex = /<form_option>([\s\S]*?)<\/form_option>/g;
+  const matches = [...text.matchAll(formOptionRegex)];
+  if (matches.length === 0) return { cleanText: text, metadata };
+
+  // Parse leaked options
+  const leakedOptions: Array<{ label: string }> = [];
+  for (const m of matches) {
+    const label = m[1].trim();
+    if (label) leakedOptions.push({ label });
+  }
+
+  // If metadata has no form_options, inject the leaked ones
+  const updatedMetadata = metadata ? { ...metadata } : null;
+  if (updatedMetadata && !updatedMetadata.form_options && leakedOptions.length > 0) {
+    updatedMetadata.form_options = leakedOptions;
+  }
+
+  const cleanText = text.replace(formOptionRegex, '').trim();
+  return { cleanText, metadata: updatedMetadata };
 }
 
 interface MemoryParseResult {
@@ -818,7 +846,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       // Parse trip memory, personal memory, and metadata from response
       const tripParsed = parseTripMemory(response.content);
       const personalParsed = parsePersonalMemory(tripParsed.cleanText);
-      const { cleanText, metadata: meta } = parseMetadata(personalParsed.cleanText);
+      const parsed = parseMetadata(personalParsed.cleanText);
+      const { cleanText, metadata: meta } = stripLeakedFormOptions(parsed.cleanText, parsed.metadata);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -957,7 +986,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       // Parse trip memory, personal memory, and metadata
       let tripParsed = parseTripMemory(response.content);
       let personalParsed = parsePersonalMemory(tripParsed.cleanText);
-      let { cleanText, metadata: meta } = parseMetadata(personalParsed.cleanText);
+      let parsedMeta = parseMetadata(personalParsed.cleanText);
+      let { cleanText, metadata: meta } = stripLeakedFormOptions(parsedMeta.cleanText, parsedMeta.metadata);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -994,7 +1024,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
           const fuTripParsed = parseTripMemory(followUpResponse.content);
           const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
-          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuPersonalParsed.cleanText);
+          const fuParsed = parseMetadata(fuPersonalParsed.cleanText);
+          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedFormOptions(fuParsed.cleanText, fuParsed.metadata);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
@@ -1060,7 +1091,8 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           // Parse the follow-up response
           const fuTripParsed = parseTripMemory(followUpResponse.content);
           const fuPersonalParsed = parsePersonalMemory(fuTripParsed.cleanText);
-          const { cleanText: fuCleanText, metadata: fuMeta } = parseMetadata(fuPersonalParsed.cleanText);
+          const fuParsedWs = parseMetadata(fuPersonalParsed.cleanText);
+          const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedFormOptions(fuParsedWs.cleanText, fuParsedWs.metadata);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
@@ -1119,9 +1151,9 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           updateTrip(tripId, updates).catch(e => console.error('group_type update failed:', e));
         }
       } else {
-        // K10: Reset stale agent_action when Fable doesn't include <metadata> tags
+        // K10: Reset stale interactive elements when Fable doesn't include <metadata> tags
         // Keep ready_to_plan — user may still want to trigger plan generation
-        setMetadata(prev => prev ? { ...prev, agent_action: null } : prev);
+        setMetadata(prev => prev ? { ...prev, agent_action: null, form_options: null, suggested_questions: [] } : prev);
       }
 
       debouncedSave('conversing', meta, null);
@@ -1309,7 +1341,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
 
   // Start the actual generation (called after conflict resolution or directly)
   // Accepts optional structureOverride for skip-resolution where state hasn't committed yet
-  const startGeneration = useCallback((structureOverride?: AiTripPlan) => {
+  const startGeneration = useCallback(async (structureOverride?: AiTripPlan) => {
     const activeStructure = structureOverride || structure;
     if (!activeStructure) return;
     setPhase('generating_plan');
@@ -1334,24 +1366,43 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       planContext.conversationSummary = conversationSummary;
     }
 
-    // Delegate to PlanGenerationContext (runs tag-by-tag, survives modal close)
-    planGeneration.startClientGeneration({
-      structure: activeStructure,
-      context: planContext,
-      tripId,
-      userId,
-      destination: contextRef.current.destination || '',
-    });
+    // Build API messages for server-side generation
+    const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
 
-    // Show info message so user can close modal
-    const infoMsg: AiChatMessage = {
-      id: nextId(),
-      role: 'assistant',
-      content: 'Fable erstellt deinen Plan Tag für Tag. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt.',
-      timestamp: Date.now(),
-      senderName: 'Fable',
-    };
-    setMessages(prev => [...prev, infoMsg]);
+    try {
+      // Server-side generation: survives app background/close
+      const { job_id } = await startPlanGeneration(planContext, apiMessages, activeStructure);
+      planGeneration.startTracking(job_id, contextRef.current.destination || undefined);
+
+      // Show info message so user can close modal
+      const infoMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: 'Fable erstellt deinen Plan im Hintergrund. Du kannst die App schliessen — der Fortschritt wird gespeichert und geht nicht verloren.',
+        timestamp: Date.now(),
+        senderName: 'Fable',
+      };
+      setMessages(prev => [...prev, infoMsg]);
+    } catch (serverErr: any) {
+      console.warn('Server-side generation failed, falling back to client-side:', serverErr.message);
+      // Fallback: client-side generation
+      planGeneration.startClientGeneration({
+        structure: activeStructure,
+        context: planContext,
+        tripId: tripId || '',
+        userId,
+        destination: contextRef.current.destination || '',
+      });
+
+      const infoMsg: AiChatMessage = {
+        id: nextId(),
+        role: 'assistant',
+        content: 'Fable erstellt deinen Plan Tag für Tag. Du kannst dieses Fenster schliessen — der Fortschritt wird oben im Bildschirm angezeigt.',
+        timestamp: Date.now(),
+        senderName: 'Fable',
+      };
+      setMessages(prev => [...prev, infoMsg]);
+    }
   }, [structure, messages, planGeneration, tripId, userId]);
 
   // Check for existing activities before generating — shows conflict_review if needed

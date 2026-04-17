@@ -9,9 +9,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../hooks/useAuth';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
-import { useAiPlanner, AiPhase, ConflictResolution } from '../../hooks/useAiPlanner';
+import { useAiPlanner, AiPhase, ConflictResolution, FormWidget } from '../../hooks/useAiPlanner';
 import { AiPlanningAnimation } from './AiPlanningAnimation';
 import { AiPlanPreview } from './AiPlanPreview';
+import { ChatFormWidget } from './ChatFormWidget';
 import { BuyInspirationenModal } from '../common/BuyInspirationenModal';
 import { UpgradePrompt } from '../common/UpgradePrompt';
 import { Icon } from '../../utils/icons';
@@ -762,24 +763,38 @@ export const AiTripModal: React.FC<Props> = ({
           </View>
         )}
 
-        {/* Form options (structured choices — vertical buttons) */}
-        {!isPlanReview && metadata?.form_options && metadata.form_options.length > 0 && !sending && (
-          <View style={styles.formOptionsContainer}>
-            {metadata.form_options.map((opt, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.formOption}
-                onPress={() => handleChipPress(opt.label)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.formOptionText}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        {/* Form options (structured choices — widget or legacy buttons) */}
+        {!isPlanReview && metadata?.form_options && !sending && (() => {
+          const fo = metadata.form_options;
+          // New FormWidget (has 'type' property)
+          if (fo && 'type' in fo) {
+            const widget = fo as FormWidget;
+            return (
+              <ChatFormWidget
+                widget={widget}
+                onSubmit={(text) => {
+                  handleChipPress(text);
+                  // Clear form_options immediately after submission
+                }}
+              />
+            );
+          }
+          // Legacy: plain array of {label}
+          if (Array.isArray(fo) && fo.length > 0) {
+            return (
+              <ChatFormWidget
+                widget={{ type: 'single_select', options: fo.map(o => ({ label: o.label })) }}
+                onSubmit={(text) => {
+                  handleChipPress(text);
+                }}
+              />
+            );
+          }
+          return null;
+        })()}
 
         {/* Conversation starters (shown when chat just started, no suggestions yet) */}
-        {!isPlanReview && !sending && phase === 'conversing' && messages.length <= 2 && !metadata?.suggested_questions?.length && !metadata?.form_options?.length && (
+        {!isPlanReview && !sending && phase === 'conversing' && messages.length <= 2 && !metadata?.suggested_questions?.length && !metadata?.form_options && (
           <View style={styles.startersContainer}>
             {(mode === 'create' ? [
               'Erstelle einen Reiseplan für mich',
@@ -806,7 +821,7 @@ export const AiTripModal: React.FC<Props> = ({
         )}
 
         {/* Suggestion chips (conversing only — horizontal) */}
-        {!isPlanReview && !metadata?.form_options?.length && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (() => {
+        {!isPlanReview && !metadata?.form_options && metadata?.suggested_questions && metadata.suggested_questions.length > 0 && !sending && (() => {
           // Filter out already-shown suggestions to prevent loops
           const newSuggestions = metadata.suggested_questions.filter(q => !shownSuggestionsRef.current.has(q));
           // If all filtered out, show current ones (AI generated fresh set)

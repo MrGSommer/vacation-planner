@@ -250,7 +250,13 @@ Wenn agent_action gesetzt ist, MUSS ready_to_plan false sein.
 - Frage NICHT nach weiteren Details wenn die Grunddaten (Ziel, Daten) vorhanden sind — handle proaktiv.
 - Bei spezifischer Aufgabe: Setze agent_action im SELBEN Turn wie die Bestätigung, nicht erst nach einer Rückfrage.
 Sonst null.
-form_options: Setze auf ein Array von Optionen wenn du eine strukturierte Auswahl anbietest (z.B. Transportmittel, Unterkunftstyp, Budget-Level). Format: [{"label": "Auto"}, {"label": "Zug/öV"}, ...]. Sonst null. Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat. Der User antwortet mit dem label-Text — interpretiere diesen in deiner nächsten Antwort.`;
+form_options: Interaktive UI-Widgets für strukturierte User-Eingaben. WICHTIG: form_options gehört NUR in den metadata JSON-Block, NIEMALS als separater <form_option>-Tag im Text!
+Drei Typen verfügbar:
+1. single_select (Tap = sofort senden): {"type": "single_select", "question": "Wie reist du an?", "options": [{"label": "Auto", "emoji": "🚗"}, {"label": "Zug", "emoji": "🚂"}, {"label": "Flug", "emoji": "✈️"}]}
+2. multi_select (Chips togglen + Bestätigen): {"type": "multi_select", "question": "Was interessiert dich?", "options": [{"label": "Kultur", "emoji": "🏛️"}, {"label": "Natur", "emoji": "🌿"}, {"label": "Essen", "emoji": "🍽️"}], "min": 1, "max": 3, "confirm_label": "Weiter"}
+3. slider (Wert auswählen + Bestätigen): {"type": "slider", "question": "Tagesbudget?", "min": 50, "max": 500, "step": 10, "unit": "CHF", "default_value": 150, "labels": {"min": "Sparsam", "max": "Luxus"}}
+Legacy-Format (einfaches Array) funktioniert auch: [{"label": "Auto"}, {"label": "Zug"}]
+Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat. Setze auf null wenn keine strukturierte Auswahl nötig ist.`;
 
   return prompt;
 }
