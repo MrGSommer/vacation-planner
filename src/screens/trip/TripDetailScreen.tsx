@@ -270,7 +270,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           const pin = new PinElement({
             background: stop.type === 'overnight' ? colors.primary : colors.secondary,
             borderColor: '#FFFFFF',
-            glyph: `${i + 1}`,
+            glyphText: `${i + 1}`,
             glyphColor: '#FFFFFF',
           });
           const marker = new AdvancedMarkerElement({
@@ -497,7 +497,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <Icon name="sparkles" size={22} color={colors.accent} />
               <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
               <Text style={[styles.gridCardInfo, { color: colors.accent }]}>
-                {aiCredits > 0 ? `${aiCredits} Inspirationen` : 'Reisebegleiter'}
+                {isPremium ? 'Inklusive' : aiCredits > 0 ? `${aiCredits} Inspirationen` : 'Reisebegleiter'}
               </Text>
             </TouchableOpacity>
           </View>

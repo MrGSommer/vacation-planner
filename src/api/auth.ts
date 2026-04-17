@@ -77,6 +77,12 @@ export const getProfile = async (userId: string) => {
   return data;
 };
 
+export async function activateFreeTrial(): Promise<{ success: boolean; reason?: string; trial_ends_at?: string }> {
+  const { data, error } = await supabase.rpc('activate_free_trial');
+  if (error) throw error;
+  return data;
+}
+
 export const deleteAccount = async (password?: string, confirmText?: string) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Nicht angemeldet');
@@ -106,6 +112,8 @@ type ProfileUpdates = {
   notification_email_collaborators?: boolean;
   ai_trip_context_enabled?: boolean;
   ai_custom_instruction?: string | null;
+  onboarding_completed?: boolean;
+  onboarding_dismissed?: boolean;
 };
 
 const _updateProfile = async (userId: string, updates: ProfileUpdates) => {

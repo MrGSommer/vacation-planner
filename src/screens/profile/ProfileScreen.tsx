@@ -15,7 +15,7 @@ import { createPortalSession } from '../../api/stripe';
 import { deleteAccount, updateProfile } from '../../api/auth';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
-import { Icon, SETTINGS_ICONS, NAV_ICONS } from '../../utils/icons';
+import { Icon, SETTINGS_ICONS, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import appJson from '../../../app.json';
 import { BUILD_NUMBER, BUILD_STAMP } from '../../utils/buildInfo';
 
@@ -170,10 +170,17 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             }
           </Text>
         </View>
-        <View style={styles.subscriptionRow}>
-          <Text style={styles.subscriptionLabel}>Inspirationen</Text>
-          <Text style={styles.subscriptionValue}>{aiCredits}</Text>
-        </View>
+        {isPremium ? (
+          <View style={styles.subscriptionRow}>
+            <Text style={styles.subscriptionLabel}>Fable</Text>
+            <Text style={[styles.subscriptionValue, { color: colors.secondary }]}>Inklusive</Text>
+          </View>
+        ) : (
+          <View style={styles.subscriptionRow}>
+            <Text style={styles.subscriptionLabel}>Inspirationen</Text>
+            <Text style={styles.subscriptionValue}>{aiCredits}</Text>
+          </View>
+        )}
         {stripeError && (
           <View style={styles.stripeErrorBox}>
             <Text style={styles.stripeErrorText}>{stripeError}</Text>
@@ -201,19 +208,21 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={[styles.subscriptionBtn, { marginTop: spacing.xs }]}
-          onPress={() => {
-            if (!user) return;
-            if (Platform.OS === 'web') {
-              setShowBuyModal(true);
-            } else {
-              navigation.navigate('Subscription');
-            }
-          }}
-        >
-          <Text style={styles.subscriptionBtnText}>Inspirationen kaufen</Text>
-        </TouchableOpacity>
+        {!isPremium && (
+          <TouchableOpacity
+            style={[styles.subscriptionBtn, { marginTop: spacing.xs }]}
+            onPress={() => {
+              if (!user) return;
+              if (Platform.OS === 'web') {
+                setShowBuyModal(true);
+              } else {
+                navigation.navigate('Subscription');
+              }
+            }}
+          >
+            <Text style={styles.subscriptionBtnText}>Inspirationen kaufen</Text>
+          </TouchableOpacity>
+        )}
         {!isPremium && (
           <TouchableOpacity
             style={[styles.subscriptionBtn, { backgroundColor: colors.secondary, marginTop: spacing.xs }]}
@@ -223,6 +232,21 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </Card>
+
+      {profile && !profile.onboarding_completed && (
+        <Card style={styles.onboardingCard} onPress={() => navigation.navigate('Onboarding')}>
+          <View style={styles.settingsRow}>
+            <View style={[styles.settingsIconWrap, { backgroundColor: colors.secondary + '20' }]}>
+              <Icon name={MISC_ICONS.sparkles} size={iconSize.sm} color={colors.secondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsText}>Fable kennenlernen</Text>
+              <Text style={styles.settingsDesc}>Lass mich deine Reisepräferenzen erfahren</Text>
+            </View>
+            <Icon name={NAV_ICONS.forward} size={iconSize.xs} color={colors.secondary} />
+          </View>
+        </Card>
+      )}
 
       {isFeatureAllowed('ai') && (
         <Card style={styles.settingsCard} onPress={() => navigation.navigate('FableSettings')}>
@@ -412,6 +436,7 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, alignItems: 'center' },
   statValue: { ...typography.h2, color: colors.primary },
   statLabel: { ...typography.caption, marginTop: 2 },
+  onboardingCard: { marginBottom: spacing.xl, borderWidth: 1, borderColor: colors.secondary + '30' },
   settingsCard: { marginBottom: spacing.xl },
   settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md },
   settingsIconWrap: { width: 32, height: 32, borderRadius: 8, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },

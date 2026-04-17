@@ -360,7 +360,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         const pin = new PinElement({
           background: stop.type === 'overnight' ? colors.primary : colors.secondary,
           borderColor: '#FFFFFF',
-          glyph: `${i + 1}`,
+          glyphText: `${i + 1}`,
           glyphColor: '#FFFFFF',
         });
         const marker = new AdvancedMarkerElement({
@@ -384,11 +384,12 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         const glyphEl = document.createElement('span');
         glyphEl.textContent = getCategoryIcon(act.category, act.category_data);
         glyphEl.style.fontSize = '14px';
+        glyphEl.slot = 'glyph';
         const pin = new PinElement({
           background: catColor,
           borderColor: '#FFFFFF',
-          glyph: glyphEl,
         });
+        pin.appendChild(glyphEl);
         const marker = new AdvancedMarkerElement({
           position: pos, map, title: act.title,
           content: pin.element,
@@ -418,9 +419,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           const depGlyph = document.createElement('span');
           depGlyph.textContent = '🛫';
           depGlyph.style.fontSize = '14px';
+          depGlyph.slot = 'glyph';
           const depPin = new PinElement({
-            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF', glyph: depGlyph,
+            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF',
           });
+          depPin.appendChild(depGlyph);
           const depMarker = new AdvancedMarkerElement({
             position: depPos, map, title: catData.departure_station_name || 'Abfahrt',
             content: depPin.element,
@@ -434,9 +437,11 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
           const arrGlyph = document.createElement('span');
           arrGlyph.textContent = '🛬';
           arrGlyph.style.fontSize = '14px';
+          arrGlyph.slot = 'glyph';
           const arrPin = new PinElement({
-            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF', glyph: arrGlyph,
+            background: CATEGORY_COLORS.transport, borderColor: '#FFFFFF',
           });
+          arrPin.appendChild(arrGlyph);
           const arrMarker = new AdvancedMarkerElement({
             position: arrPos, map, title: catData.arrival_station_name || 'Ankunft',
             content: arrPin.element,

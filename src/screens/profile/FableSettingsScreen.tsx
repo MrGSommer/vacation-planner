@@ -77,13 +77,14 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Credits */}
         <Card style={styles.card}>
-          <Text style={styles.cardTitle}>Inspirationen</Text>
-          <View style={styles.creditRow}>
-            <Text style={styles.creditLabel}>Aktueller Stand</Text>
-            <Text style={styles.creditValue}>{aiCredits}</Text>
-          </View>
-          {isPremium && (
-            <Text style={styles.creditNote}>30 Inspirationen pro Monat inklusive</Text>
+          <Text style={styles.cardTitle}>{isPremium ? 'Fable' : 'Inspirationen'}</Text>
+          {isPremium ? (
+            <Text style={styles.creditNote}>Fable ist bei Premium inklusive — unbegrenzt nutzbar.</Text>
+          ) : (
+            <View style={styles.creditRow}>
+              <Text style={styles.creditLabel}>Aktueller Stand</Text>
+              <Text style={styles.creditValue}>{aiCredits}</Text>
+            </View>
           )}
         </Card>
 

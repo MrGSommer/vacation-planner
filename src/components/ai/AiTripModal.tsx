@@ -433,22 +433,7 @@ export const AiTripModal: React.FC<Props> = ({
         }
       };
 
-      return isPremium ? (
-        // Premium user with 0 credits — just buy Inspirationen
-        <UpgradePrompt
-          iconName="sparkles"
-          title="Keine Inspirationen mehr"
-          message="Kaufe Inspirationen um Fable weiter nutzen zu können."
-          buyInspirations
-          heroGradient={gradients.sunset}
-          onPress={handleBuyInspirations}
-          highlights={[
-            { icon: 'chatbubbles-outline', text: 'Reisepläne erstellen', detail: 'Fable plant deine Reise Tag für Tag' },
-            { icon: 'list-outline', text: 'Packlisten generieren', detail: 'Nie wieder etwas vergessen' },
-            { icon: 'wallet-outline', text: 'Budget-Kategorien', detail: 'Ausgaben intelligent aufteilen' },
-          ]}
-        />
-      ) : (
+      return (
         // Free user — full feature showcase + buy option
         <UpgradePrompt
           iconName="sparkles"
@@ -582,7 +567,7 @@ export const AiTripModal: React.FC<Props> = ({
                     {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                   </Text>
                 </View>
-                {msg.role === 'assistant' && msg.creditsAfter !== undefined && (
+                {!isPremium && msg.role === 'assistant' && msg.creditsAfter !== undefined && (
                   <View style={styles.creditIndicator}>
                     <Text style={styles.creditIndicatorText}>
                       {msg.creditsCost !== undefined && msg.creditsCost > 0
@@ -870,7 +855,7 @@ export const AiTripModal: React.FC<Props> = ({
               style={styles.input}
               value={inputText}
               onChangeText={handleInputChange}
-              placeholder={!canSendMessages ? 'Kaufe Inspirationen um mitzuschreiben' : adjustMode ? 'Was soll angepasst werden...' : 'Nachricht eingeben...'}
+              placeholder={!canSendMessages ? 'Kaufe Inspirationen um mitzuschreiben' : adjustMode ? 'Was soll angepasst werden...' : isPremium ? 'Frag Fable...' : 'Nachricht eingeben...'}
               placeholderTextColor={colors.textLight}
               multiline
               maxLength={1000}
@@ -919,7 +904,7 @@ export const AiTripModal: React.FC<Props> = ({
                 <Icon name="sparkles-outline" size={18} color={colors.secondary} />
                 <Text style={styles.headerTitle}>Fable</Text>
               </View>
-              {creditsBalance !== null && (
+              {!isPremium && creditsBalance !== null && (
                 <Text style={styles.creditsLabel}>{creditsBalance} Inspirationen</Text>
               )}
             </View>

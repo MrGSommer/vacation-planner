@@ -22,6 +22,8 @@ interface SubscriptionContextType {
   isTripEditable: (tripId: string, allTrips: { id: string; start_date: string; end_date: string }[]) => boolean;
   /** Check if feature data should be shown readonly (sneak peek after downgrade) */
   isSneakPeek: (feature: PremiumFeature, hasData: boolean) => boolean;
+  /** True if user has ever had a trial or subscription (subscription_period_end is set) */
+  hasHadTrial: boolean;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType>({
@@ -40,6 +42,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   maxPhotosPerTrip: null,
   isTripEditable: () => true,
   isSneakPeek: () => false,
+  hasHadTrial: false,
 });
 
 export const useSubscription = () => useContext(SubscriptionContext);
@@ -110,6 +113,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Show readonly view if user is free but has data from when they were premium
         return tier === 'free' && !limits[feature] && hasData;
       },
+      hasHadTrial: !!profile?.subscription_period_end,
     };
   }, [
     profile?.subscription_tier, profile?.subscription_status,

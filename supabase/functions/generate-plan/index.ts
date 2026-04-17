@@ -3,7 +3,7 @@
 // ItineraryScreen's Realtime subscription auto-refreshes as activities appear
 
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { MODELS, getUser, deductCreditsAtomic, refundCredits, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey, extractTextContent, getTemperature } from '../_shared/claude.ts';
+import { MODELS, getUser, isPremiumUser, deductCreditsAtomic, refundCredits, logUsage, callClaude, getAnthropicKey, getSupabaseUrl, getServiceRoleKey, extractTextContent, getTemperature } from '../_shared/claude.ts';
 import { buildStructureSystemPrompt, buildActivitiesSystemPrompt } from '../_shared/prompts.ts';
 import { lookupPlace } from '../_shared/places.ts';
 
@@ -234,6 +234,7 @@ async function generateInBackground(
   userId: string,
   context: any,
   structureJson: any | null,
+  premium: boolean = false,
 ): Promise<void> {
   let totalCredits = 0;
   let tripId = context.tripId || null;
@@ -247,13 +248,15 @@ async function generateInBackground(
       const structurePrompt = buildStructureSystemPrompt(context);
       const structureMsg = [{ role: 'user', content: 'Erstelle die Grundstruktur des Reiseplans als JSON (Trip, Stops, Budget, Tage — ohne Aktivitäten).' }];
 
-      const creditsNeeded = 3;
-      const balance = await deductCreditsAtomic(userId, creditsNeeded);
-      if (balance === -1) {
-        await updateJob(jobId, { status: 'failed', error: 'Nicht genügend Inspirationen', completed_at: new Date().toISOString() });
-        return;
+      if (!premium) {
+        const creditsNeeded = 3;
+        const balance = await deductCreditsAtomic(userId, creditsNeeded);
+        if (balance === -1) {
+          await updateJob(jobId, { status: 'failed', error: 'Nicht genügend Inspirationen', completed_at: new Date().toISOString() });
+          return;
+        }
+        totalCredits += creditsNeeded;
       }
-      totalCredits += creditsNeeded;
 
       const startTime = Date.now();
       const response = await callClaude(MODELS.plan_generation, structurePrompt, structureMsg, 4096, getTemperature('plan_generation'));
@@ -358,8 +361,8 @@ async function generateInBackground(
         return;
       }
 
-      // Deduct credits: 1 credit per 7 days (deduct at day 0, 7, 14, ...)
-      if (i % 7 === 0) {
+      // Deduct credits: 1 credit per 7 days (deduct at day 0, 7, 14, ...) — premium skips
+      if (!premium && i % 7 === 0) {
         const creditsNeeded = 1;
         const balance = await deductCreditsAtomic(userId, creditsNeeded);
         if (balance === -1) {
@@ -544,15 +547,18 @@ Deno.serve(async (req) => {
 
     if (!getAnthropicKey()) return json({ error: 'AI-Service nicht konfiguriert' }, origin, 500);
 
+    // Check premium status — premium users skip credit deduction
+    const premium = await isPremiumUser(user.id);
+
     // Create job
     const jobId = await createJob(user.id, context.tripId || null, context, messages);
 
     // Start background generation (Deno-specific: keeps running after response)
     // @ts-ignore — EdgeRuntime.waitUntil is available in Supabase Edge Functions
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-      EdgeRuntime.waitUntil(generateInBackground(jobId, user.id, context, structure_json || null));
+      EdgeRuntime.waitUntil(generateInBackground(jobId, user.id, context, structure_json || null, premium));
     } else {
-      generateInBackground(jobId, user.id, context, structure_json || null).catch(console.error);
+      generateInBackground(jobId, user.id, context, structure_json || null, premium).catch(console.error);
     }
 
     return json({ job_id: jobId, status: 'pending' }, origin);

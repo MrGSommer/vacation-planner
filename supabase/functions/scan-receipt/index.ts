@@ -4,7 +4,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import {
   MODELS, CREDIT_COSTS,
-  checkRateLimit, getUser, deductCreditsAtomic, refundCredits,
+  checkRateLimit, getUser, isPremiumUser, deductCreditsAtomic, refundCredits,
   logUsage, callClaude, getMaxTokens, getTemperature, getAnthropicKey,
   extractTextContent, getSupabaseUrl, getServiceRoleKey,
 } from '../_shared/claude.ts';
@@ -46,12 +46,8 @@ Deno.serve(async (req) => {
     }
 
     // Hybrid-Gating: Premium scannt gratis, Free zahlt 1 Inspiration
-    let creditsRequired = CREDIT_COSTS['receipt_scan'] ?? 1;
-    const profileRes = await fetch(`${getSupabaseUrl()}/rest/v1/profiles?id=eq.${user.id}&select=subscription_tier`, {
-      headers: { 'Authorization': `Bearer ${getServiceRoleKey()}`, 'apikey': getServiceRoleKey() },
-    });
-    const profiles = await profileRes.json();
-    if (profiles?.[0]?.subscription_tier === 'premium') creditsRequired = 0;
+    const premium = await isPremiumUser(user.id);
+    const creditsRequired = premium ? 0 : (CREDIT_COSTS['receipt_scan'] ?? 1);
 
     let newBalance: number | undefined;
 

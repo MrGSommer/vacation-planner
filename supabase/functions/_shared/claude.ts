@@ -14,6 +14,7 @@ export const MODELS: Record<string, string> = {
   agent_day_plan: Deno.env.get('MODEL_PLANNING') || 'claude-sonnet-4-6',
   receipt_scan: Deno.env.get('MODEL_PLANNING') || 'claude-sonnet-4-6',
   packing_import: Deno.env.get('MODEL_CONVERSATION') || 'claude-haiku-4-5',
+  onboarding: Deno.env.get('MODEL_CONVERSATION') || 'claude-haiku-4-5',
 };
 
 // --- Task validation & credit costs (single source of truth) ---
@@ -21,7 +22,7 @@ export const MODELS: Record<string, string> = {
 export const VALID_TASKS = [
   'greeting', 'conversation', 'plan_generation', 'plan_activities',
   'plan_generation_full', 'agent_packing', 'agent_budget', 'agent_day_plan',
-  'web_search', 'recap', 'receipt_scan', 'packing_import',
+  'web_search', 'recap', 'receipt_scan', 'packing_import', 'onboarding',
 ] as const;
 
 export const CREDIT_COSTS: Record<string, number> = {
@@ -37,6 +38,7 @@ export const CREDIT_COSTS: Record<string, number> = {
   web_search: 1,
   receipt_scan: 1,
   packing_import: 0,
+  onboarding: 0,
 };
 
 // Tasks that produce structured JSON output → lower temperature for consistency
@@ -85,6 +87,31 @@ export async function getUser(token: string) {
   });
   if (!res.ok) return null;
   return res.json();
+}
+
+// --- Premium check ---
+
+export async function isPremiumUser(userId: string): Promise<boolean> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=subscription_tier,subscription_status,subscription_period_end`,
+    {
+      headers: {
+        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'apikey': SERVICE_ROLE_KEY,
+      },
+    },
+  );
+  if (!res.ok) return false;
+  const rows = await res.json();
+  if (!rows?.length) return false;
+  const p = rows[0];
+  // Premium: tier=premium AND (active, trialing with valid end date, or past_due)
+  if (p.subscription_tier !== 'premium') return false;
+  if (p.subscription_status === 'active' || p.subscription_status === 'past_due') return true;
+  if (p.subscription_status === 'trialing' && p.subscription_period_end) {
+    return new Date(p.subscription_period_end) > new Date();
+  }
+  return false;
 }
 
 // --- Credits ---

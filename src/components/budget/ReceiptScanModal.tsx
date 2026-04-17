@@ -292,15 +292,15 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                       ref={fileInputRef as any}
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       style={{ display: 'none' }}
                       onChange={(e: any) => {
                         const file = e.target?.files?.[0];
                         if (file) handleFileSelect(file);
+                        if (e.target) e.target.value = '';
                       }}
                     />
                     <Button
-                      title="Beleg fotografieren"
+                      title="Beleg fotografieren oder auswählen"
                       onPress={() => (fileInputRef.current as any)?.click()}
                       style={styles.captureButton}
                     />

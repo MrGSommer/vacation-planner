@@ -30,7 +30,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
   const route = useRoute<RouteProp<RootStackParamList, 'CreateTrip'>>();
   const { create, update, loading, trips } = useTrips();
   const { user } = useAuthContext();
-  const { isFeatureAllowed, canAddTrip, aiCredits } = useSubscription();
+  const { isFeatureAllowed, canAddTrip, aiCredits, isPremium } = useSubscription();
   const { showToast } = useToast();
   const [step, setStep] = useState(0);
   const [showAiModal, setShowAiModal] = useState(false);
@@ -293,9 +293,11 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Icon name="sparkles-outline" size={18} color="#FFFFFF" /><Text style={styles.aiButtonText}>Mit Fable planen</Text></View>
                   <Text style={styles.aiButtonSubtext}>Dein Reisebegleiter hilft dir bei der Planung</Text>
-                  {aiCredits > 0 && (
+                  {isPremium ? (
+                    <Text style={styles.aiButtonSubtext}>Im Premium inklusive</Text>
+                  ) : aiCredits > 0 ? (
                     <Text style={styles.aiButtonSubtext}>{aiCredits} Inspirationen verfügbar</Text>
-                  )}
+                  ) : null}
                 </LinearGradient>
               </TouchableOpacity>
 

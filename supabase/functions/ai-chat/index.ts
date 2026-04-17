@@ -4,9 +4,10 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import {
   MODELS, VALID_TASKS, CREDIT_COSTS,
-  checkRateLimit, checkFableRateLimit, getUser, deductCreditsAtomic, refundCredits,
+  checkRateLimit, checkFableRateLimit, getUser, isPremiumUser, deductCreditsAtomic, refundCredits,
   logUsage, callClaude, getMaxTokens, getTemperature, getAnthropicKey,
   extractTextContent, validateMessages,
+  getSupabaseUrl, getServiceRoleKey,
 } from '../_shared/claude.ts';
 import { buildSystemPrompt } from '../_shared/prompts.ts';
 
@@ -80,8 +81,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Credit deduction (from central config)
-    const creditsRequired = CREDIT_COSTS[task] ?? 1;
+    // Credit deduction (from central config) — Premium users skip
+    const premium = await isPremiumUser(user.id);
+    const creditsRequired = premium ? 0 : (CREDIT_COSTS[task] ?? 1);
     let newBalance: number | undefined;
 
     if (creditsRequired > 0) {
@@ -89,7 +91,7 @@ Deno.serve(async (req) => {
 
       if (newBalance === -1) {
         return json({
-          error: `Nicht genügend Inspirationen. Du brauchst ${creditsRequired}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
+          error: `Nicht genügend Inspirationen. Du brauchst ${CREDIT_COSTS[task] ?? 1}. Kaufe weitere Inspirationen um Fable zu nutzen.`,
         }, origin, 403);
       }
     }
@@ -124,6 +126,61 @@ Deno.serve(async (req) => {
 
     const result = await response.json();
     const content = extractTextContent(result);
+
+    // Onboarding post-processing: profile update + onboarding_completed flag
+    if (task === 'onboarding') {
+      const supabaseUrl = getSupabaseUrl();
+      const serviceKey = getServiceRoleKey();
+      const patchHeaders = {
+        'Authorization': `Bearer ${serviceKey}`,
+        'apikey': serviceKey,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      };
+      const profileUrl = `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`;
+
+      // Parse <profile_update> tags — fire-and-forget (supplementary)
+      const profileMatch = content.match(/<profile_update>([\s\S]*?)<\/profile_update>/);
+      if (profileMatch) {
+        try {
+          const profileData = JSON.parse(profileMatch[1]);
+          const updates: Record<string, any> = {};
+          if (profileData.first_name && typeof profileData.first_name === 'string') {
+            updates.first_name = profileData.first_name.slice(0, 100);
+          }
+          if (profileData.last_name && typeof profileData.last_name === 'string') {
+            updates.last_name = profileData.last_name.slice(0, 100);
+          }
+          if (Object.keys(updates).length > 0) {
+            updates.updated_at = new Date().toISOString();
+            fetch(profileUrl, {
+              method: 'PATCH',
+              headers: patchHeaders,
+              body: JSON.stringify(updates),
+            }).catch((e) => console.error('Onboarding profile update failed:', e));
+          }
+        } catch (e) {
+          console.error('Failed to parse profile_update:', e);
+        }
+      }
+
+      // Parse <metadata> for onboarding_complete flag — awaited so client refresh sees it
+      const metaMatch = content.match(/<metadata>([\s\S]*?)<\/metadata>/);
+      if (metaMatch) {
+        try {
+          const meta = JSON.parse(metaMatch[1]);
+          if (meta.onboarding_complete === true) {
+            await fetch(profileUrl, {
+              method: 'PATCH',
+              headers: patchHeaders,
+              body: JSON.stringify({ onboarding_completed: true, updated_at: new Date().toISOString() }),
+            }).catch((e) => console.error('Onboarding completed update failed:', e));
+          }
+        } catch (e) {
+          console.error('Failed to parse onboarding metadata:', e);
+        }
+      }
+    }
 
     // Log usage
     const logTask = task === 'plan_generation_full' ? 'plan_generation' : (task === 'greeting' || task === 'recap') ? 'conversation' : task;

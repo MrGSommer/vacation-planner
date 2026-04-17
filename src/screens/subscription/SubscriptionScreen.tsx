@@ -20,7 +20,7 @@ const FEATURES: { icon: IconName; title: string; desc: string }[] = [
   { icon: 'images-outline', title: 'Unbegrenzte Fotos', desc: 'Lade beliebig viele Reisefotos hoch (Free: max. 10/Trip)' },
   { icon: 'map-outline', title: 'Routen & Stops', desc: 'Plane Reiserouten mit Zwischenstopps' },
   { icon: 'wallet-outline', title: 'Budget & Ausgaben', desc: 'Tracke Kosten und teile fair auf' },
-  { icon: 'sparkles-outline', title: 'Reisebegleiter Fable', desc: '20 Inspirationen/Monat — dein persönlicher Reisebegleiter' },
+  { icon: 'sparkles-outline', title: 'Reisebegleiter Fable', desc: 'Fable inklusive — dein persönlicher Reisebegleiter' },
 ];
 
 export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
@@ -156,7 +156,8 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.termsLink} onPress={() => navigation.navigate('Datenschutz')}>Datenschutzerklärung</Text>.
           </Text>
 
-          {/* Inspirationen for everyone */}
+          {/* Inspirationen for free users only */}
+          {!isPremium && (
           <View style={[styles.inspirationSection, isWide && styles.inspirationSectionWide]}>
             <Text style={styles.inspirationTitle}>Oder: Inspirationen einzeln kaufen</Text>
             <Text style={styles.inspirationDesc}>
@@ -196,6 +197,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
               )}
             </TouchableOpacity>
           </View>
+          )}
         </View>
       </ScrollView>
     </View>
