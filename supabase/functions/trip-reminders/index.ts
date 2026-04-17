@@ -162,15 +162,21 @@ function reminderEmailHtml(p: any, t: any, days: number) {
   const dur = tripDuration(t.start_date, t.end_date);
   const dateRange = tripDateRange(t.start_date, t.end_date);
 
-  const headline = days === 1
+  const headline = days === 0
+    ? `Heute geht\u2019s los, ${name}!`
+    : days === 1
     ? `Morgen geht\u2019s los, ${name}!`
     : `Noch ${days} Tage, ${name}!`;
 
-  const subtext = days === 1
+  const subtext = days === 0
+    ? `Dein Abenteuer nach <b>${t.destination}</b> beginnt heute \u2014 geniess jeden Moment!`
+    : days === 1
     ? `Dein Abenteuer nach <b>${t.destination}</b> beginnt morgen \u2014 bist du bereit?`
     : `Dein Trip nach <b>${t.destination}</b> r\u00fcckt n\u00e4her. Zeit f\u00fcr die letzten Vorbereitungen!`;
 
-  const tipText = days === 1
+  const tipText = days === 0
+    ? '\ud83c\udf1f Wir w\u00fcnschen dir eine fantastische Reise! Schau unterwegs in deinen Reiseplan.'
+    : days === 1
     ? '\ud83d\udcdd Letzte Checkliste: Reisepass, Ladeger\u00e4te, Zahnb\u00fcrste \u2014 alles dabei?'
     : '\ud83d\udca1 Tipp: Schau dir deine Packliste und den Reiseplan nochmal an.';
 
@@ -266,15 +272,16 @@ Deno.serve(async (req) => {
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    // 1) Upcoming trip reminders
-    const trips = await sq(`trips?start_date=in.(${f(d1)},${f(d3)})&select=id,name,destination,start_date,end_date,owner_id`);
+    // 1) Upcoming trip reminders (today, tomorrow, 3 days)
+    const today = f(now);
+    const trips = await sq(`trips?start_date=in.(${today},${f(d1)},${f(d3)})&select=id,name,destination,start_date,end_date,owner_id`);
     let sent = 0;
 
     if (trips?.length) {
       for (const t of trips) {
-        const days = t.start_date === f(d1) ? 1 : 3;
+        const days = t.start_date === today ? 0 : t.start_date === f(d1) ? 1 : 3;
         const ty = `trip_starts_${days}d`;
-        const title = days === 1 ? `${t.name} startet morgen! \u2708\ufe0f` : `${t.name} startet in 3 Tagen! \ud83d\udcc5`;
+        const title = days === 0 ? `${t.name} startet heute! \ud83c\udf89` : days === 1 ? `${t.name} startet morgen! \u2708\ufe0f` : `${t.name} startet in 3 Tagen! \ud83d\udcc5`;
 
         const cs = await sq(`trip_collaborators?trip_id=eq.${t.id}&select=user_id`);
         const userIds = uniqueUserIds([t.owner_id], cs || []);
