@@ -227,7 +227,7 @@ Folgende Vorlieben wurden bereits besprochen (preferences_gathered aus vorherige
 ${context.lastPreferencesGathered?.length ? context.lastPreferencesGathered.join(', ') : 'noch keine'}
 
 Am Ende JEDER Antwort:
-<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "transport_mode": null, "group_type": null, "agent_action": null, "form_options": null, "plan_start_date": null, "plan_end_date": null}</metadata>
+<metadata>{"ready_to_plan": false, "preferences_gathered": ["destination"], "suggested_questions": ["Entspannt", "Moderat", "Durchgetaktet"], "trip_type": null, "transport_mode": null, "group_type": null, "agent_action": null, "form_options": null, "plan_start_date": null, "plan_end_date": null, "skip_activities": false}</metadata>
 
 ready_to_plan=true gemäss den PLAN-BEREITSCHAFT-Regeln oben. Setze es SOFORT wenn die Bedingungen erfüllt sind.
 suggested_questions: 2-3 kurze ANTWORT-Vorschläge (nicht Fragen) passend zu deiner Frage. WICHTIG: Variiere deine Vorschläge — wiederhole NICHT dieselben Vorschläge die du bereits gegeben hast.
@@ -256,7 +256,11 @@ Drei Typen verfügbar:
 2. multi_select (Chips togglen + Bestätigen): {"type": "multi_select", "question": "Was interessiert dich?", "options": [{"label": "Kultur", "emoji": "🏛️"}, {"label": "Natur", "emoji": "🌿"}, {"label": "Essen", "emoji": "🍽️"}], "min": 1, "max": 3, "confirm_label": "Weiter"}
 3. slider (Wert auswählen + Bestätigen): {"type": "slider", "question": "Tagesbudget?", "min": 50, "max": 500, "step": 10, "unit": "CHF", "default_value": 150, "labels": {"min": "Sparsam", "max": "Luxus"}}
 Legacy-Format (einfaches Array) funktioniert auch: [{"label": "Auto"}, {"label": "Zug"}]
-Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat. Setze auf null wenn keine strukturierte Auswahl nötig ist.`;
+Verwende form_options statt suggested_questions wenn die Frage klare, vordefinierte Antwortmöglichkeiten hat. Setze auf null wenn keine strukturierte Auswahl nötig ist.
+skip_activities: Setze auf true wenn der User EXPLIZIT sagt, dass er KEINE Aktivitäten/Tagesplanung will (z.B. "nur Stops", "nur Route", "keine Aktivitäten", "nur Grundstruktur"). Wenn true, werden nur Stops, Budget und Tage erstellt — KEINE Aktivitäten pro Tag. Standard: false.
+
+USER-ANWEISUNGEN RESPEKTIEREN:
+WICHTIG: Wenn der User spezifische Anweisungen gibt (z.B. "nur Stops ohne Aktivitäten", "keine Hotels", "nur morgens Aktivitäten", "maximal 3 Aktivitäten pro Tag", "keine Museen"), merke dir diese in trip_memory UND respektiere sie bei der Plan-Generierung. Der User erwartet, dass seine Wünsche umgesetzt werden — nicht ignoriert.`;
 
   return prompt;
 }
@@ -428,7 +432,8 @@ Verwende KEINE anderen Daten. Die Anzahl der Einträge in "days" MUSS ${(dayDate
 ERLAUBTE KATEGORIEN: sightseeing, food, activity, transport, hotel, shopping, relaxation, stop, other
 
 REGELN:
-- Pro Tag 4-6 Aktivitäten (je nach Reisestil)
+- WICHTIG: Respektiere ALLE User-Anweisungen aus dem KONVERSATIONS-KONTEXT und TRIP-MEMORY oben (z.B. "keine Museen", "maximal 2 Aktivitäten pro Tag", "nur morgens", "keine Hotels"). User-Wünsche haben HÖCHSTE Priorität.
+- Pro Tag 4-6 Aktivitäten (je nach Reisestil, anpassen falls User weniger/mehr wünscht)
 - Realistische Uhrzeiten (Frühstück 08:00-09:00, Sightseeing ab 09:30, Mittagessen 12:00-13:30, etc.)
 - Verwende echte Koordinaten für bekannte Orte und Sehenswürdigkeiten
 - Kosten in ${currency} schätzen (realistisch für das Ziel)

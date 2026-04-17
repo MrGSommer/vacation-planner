@@ -8,6 +8,7 @@ import { buildStructureSystemPrompt, buildActivitiesSystemPrompt } from '../_sha
 import { lookupPlace } from '../_shared/places.ts';
 
 const VALID_CATEGORIES = ['sightseeing', 'food', 'activity', 'transport', 'hotel', 'shopping', 'relaxation', 'stop', 'other'];
+const MAX_ACTIVITY_DAYS = 31; // Max days for activity generation (cost protection for long trips)
 
 // --- Supabase REST helpers ---
 
@@ -346,10 +347,28 @@ async function generateInBackground(
     // Cover image (async, non-blocking)
     setTripCoverImage(tripId, destination).catch(() => {});
 
-    // --- Phase 3: Activities day by day ---
+    // --- Phase 3: Activities day by day (skip if user requested structure-only) ---
+    if (context.skipActivities) {
+      // User explicitly asked for stops/structure only — skip activity generation
+      await updateJob(jobId, {
+        status: 'completed',
+        credits_charged: totalCredits,
+        completed_at: new Date().toISOString(),
+        progress: { phase: 'done', current_day: totalDays, total_days: totalDays, trip_id: tripId },
+      });
+      await sendFablePushNotification(userId, jobId, tripId, destination);
+      return;
+    }
+
     const activitiesContext = { ...context, dayDates, tripId };
 
-    for (let i = 0; i < totalDays; i++) {
+    // Cost protection: limit activity generation for very long trips
+    const activityDays = Math.min(totalDays, MAX_ACTIVITY_DAYS);
+    if (totalDays > MAX_ACTIVITY_DAYS) {
+      console.log(`Trip has ${totalDays} days — generating activities for first ${MAX_ACTIVITY_DAYS} only`);
+    }
+
+    for (let i = 0; i < activityDays; i++) {
       // Check cancellation
       if (await checkJobCancelled(jobId)) {
         await updateJob(jobId, {

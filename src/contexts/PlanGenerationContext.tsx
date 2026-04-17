@@ -67,9 +67,10 @@ function mergePlan(
   };
 }
 
-const STUCK_JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const STUCK_JOB_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes — long trips (3+ weeks, world trips) need more time
 const COMPLETED_DISMISS_MS = 15_000;
 const CLIENT_BATCH_SIZE = 3;
+const MAX_ACTIVITY_DAYS = 31; // Cost protection: max days for activity generation
 
 export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuthContext();
@@ -257,9 +258,32 @@ export const PlanGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     // Run the generation loop asynchronously
     (async () => {
       try {
+        // Skip activity generation if user requested structure-only (e.g. "nur Stops")
+        if (context.skipActivities) {
+          const fullPlan = mergePlan(structure, { days: [] });
+          await executePlan(fullPlan, tripId, userId, context.currency || 'CHF');
+          setState(prev => ({
+            ...prev,
+            isGenerating: false,
+            clientGenerating: false,
+            clientProgress: null,
+          }));
+          setCompleted(true);
+          completedTimerRef.current = setTimeout(() => {
+            setCompleted(false);
+            setState(prev => ({ ...prev, activeJobId: null, progress: null }));
+          }, COMPLETED_DISMISS_MS);
+          invalidateCache('trips');
+          invalidateCache('activities');
+          invalidateCache('stops');
+          return;
+        }
+
+        // Cost protection: cap activity generation at MAX_ACTIVITY_DAYS
+        const cappedDayDates = dayDates.slice(0, MAX_ACTIVITY_DAYS);
         const batches: string[][] = [];
-        for (let i = 0; i < dayDates.length; i += CLIENT_BATCH_SIZE) {
-          batches.push(dayDates.slice(i, i + CLIENT_BATCH_SIZE));
+        for (let i = 0; i < cappedDayDates.length; i += CLIENT_BATCH_SIZE) {
+          batches.push(cappedDayDates.slice(i, i + CLIENT_BATCH_SIZE));
         }
 
         let allActivities: { days: Array<{ date: string; activities: any[] }> } = { days: [] };

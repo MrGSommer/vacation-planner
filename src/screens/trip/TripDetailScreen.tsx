@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking, Modal, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -460,6 +460,107 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           </LinearGradient>
         )}
 
+        {/* When notes exist: scrollable layout. Otherwise: fixed layout with map filling space */}
+        {trip.notes ? (
+        <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: spacing.lg }}>
+          {/* Stats */}
+          <View style={[styles.statsRow, { backgroundColor: themeTint }]}>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Itinerary', { tripId })} activeOpacity={0.7}>
+              <Text style={[styles.statValue, { color: themeColor }]}>{days}</Text>
+              <Text style={styles.statLabel}>Tage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Itinerary', { tripId })} activeOpacity={0.7}>
+              <Text style={[styles.statValue, { color: themeColor }]}>{activityCount}</Text>
+              <Text style={styles.statLabel}>Aktivitäten</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stat} onPress={() => navigation.replace('Budget', { tripId })} activeOpacity={0.7}>
+              <Text style={[styles.statValue, { color: themeColor }]}>{totalSpent.toFixed(0)}</Text>
+              <Text style={styles.statLabel}>{trip.currency}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Photos + Fable Grid */}
+          <View style={styles.gridRow}>
+            <TouchableOpacity
+              style={[styles.gridCard, { backgroundColor: themeTint }]}
+              onPress={() => navigation.navigate('Photos', { tripId })}
+              activeOpacity={0.7}
+            >
+              <Icon name="images" size={22} color={colors.primary} />
+              <Text style={[styles.gridCardTitle, { color: themeColor }]}>Fotos</Text>
+              {photoCount > 0 && <Text style={[styles.gridCardInfo, { color: themeColor }]}>{photoCount}</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.gridCard, { backgroundColor: themeTint }]}
+              onPress={() => setShowAiModal(true)}
+              activeOpacity={0.7}
+            >
+              <Icon name="sparkles" size={22} color={colors.accent} />
+              <Text style={[styles.gridCardTitle, { color: colors.accent }]}>Fable</Text>
+              <Text style={[styles.gridCardInfo, { color: colors.accent }]}>
+                {isPremium ? 'Inklusive' : aiCredits > 0 ? `${aiCredits} Inspirationen` : 'Reisebegleiter'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Post-Trip Recap */}
+          {trip.status === 'completed' && (
+            <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} />
+          )}
+
+          {/* Map — fixed height when notes present */}
+          {Platform.OS === 'web' && (
+            <Card style={[styles.mapCard, { height: 350, backgroundColor: themeTint }]}>
+              <View style={styles.mapHeader}>
+                <View style={styles.mapTitleRow}>
+                  <Icon name="map-outline" size={18} color={themeColor} />
+                  <Text style={[styles.mapTitle, { color: themeColor }]}>Karte</Text>
+                </View>
+                {mapReady && (
+                  <View style={styles.mapHeaderActions}>
+                    <TouchableOpacity onPress={handleExportToMaps} style={styles.mapActionBtn}>
+                      <Icon name="download-outline" size={18} color={themeColor} />
+                    </TouchableOpacity>
+                    {editable && (
+                      <TouchableOpacity onPress={() => setShowMapSearch(s => !s)} style={styles.mapActionBtn}>
+                        <Icon name="search-outline" size={18} color={themeColor} />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={() => setMapFullscreen(true)} style={styles.mapActionBtn}>
+                      <Icon name="expand-outline" size={18} color={themeColor} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+              {showMapSearch && (
+                <View style={styles.mapSearchOverlay}>
+                  <PlaceAutocomplete
+                    placeholder="Ort suchen und hinzufügen..."
+                    onSelect={handleMapPlaceSelect}
+                  />
+                </View>
+              )}
+              <View style={{ flex: 1, position: 'relative', minHeight: 200 }}>
+                {!mapReady && (
+                  <View style={styles.mapPlaceholder}>
+                    <Icon name="map-outline" size={32} color={colors.textLight} />
+                    <Text style={styles.mapPlaceholderText}>Karte wird geladen...</Text>
+                  </View>
+                )}
+                <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+              </View>
+            </Card>
+          )}
+
+          {!mapFullscreen && (
+            <Card style={[styles.notesCard, { backgroundColor: themeTint }]}>
+              <Text style={styles.notesTitle}>Notizen</Text>
+              <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
+            </Card>
+          )}
+        </ScrollView>
+        ) : (
         <View style={styles.content}>
           {/* Stats */}
           <View style={[styles.statsRow, { backgroundColor: themeTint }]}>
@@ -550,14 +651,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               </View>
             </Card>
           )}
-
-          {!mapFullscreen && trip.notes && (
-            <Card style={[styles.notesCard, { backgroundColor: themeTint }]}>
-              <Text style={styles.notesTitle}>Notizen</Text>
-              <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
-            </Card>
-          )}
         </View>
+        )}
       </View>
 
       <TripBottomNav tripId={tripId} activeTab="TripDetail" />

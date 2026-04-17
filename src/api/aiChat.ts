@@ -74,6 +74,7 @@ export interface AiContext {
   previousBatchActivities?: Array<{
     title: string; category: string; date: string;
   }>;
+  skipActivities?: boolean;
 }
 
 export interface AiResponse {

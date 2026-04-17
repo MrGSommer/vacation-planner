@@ -64,6 +64,7 @@ export interface AiMetadata {
   form_options?: FormWidget | Array<{ label: string; value?: string }> | null;
   plan_start_date?: string | null;
   plan_end_date?: string | null;
+  skip_activities?: boolean;
 }
 
 export interface UseAiPlannerOptions {
@@ -1367,6 +1368,11 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       planContext.conversationSummary = conversationSummary;
     }
 
+    // Respect user instruction to skip activities (e.g. "nur Stops")
+    if (metadata?.skip_activities) {
+      planContext.skipActivities = true;
+    }
+
     // Build API messages for server-side generation
     const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
 
@@ -1376,10 +1382,16 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       planGeneration.startTracking(job_id, contextRef.current.destination || undefined);
 
       // Show info message so user can close modal
+      const totalDays = activeStructure.days?.length || 0;
+      const MAX_ACTIVITY_DAYS = 31;
+      let infoContent = 'Fable erstellt deinen Plan im Hintergrund. Du kannst die App schliessen — der Fortschritt wird gespeichert und geht nicht verloren.';
+      if (totalDays > MAX_ACTIVITY_DAYS) {
+        infoContent += `\n\nHinweis: Dein Trip hat ${totalDays} Tage. Aktivitäten werden für die ersten ${MAX_ACTIVITY_DAYS} Tage erstellt. Die restlichen Tage kannst du danach einzeln mit "Tagesplan erstellen" füllen.`;
+      }
       const infoMsg: AiChatMessage = {
         id: nextId(),
         role: 'assistant',
-        content: 'Fable erstellt deinen Plan im Hintergrund. Du kannst die App schliessen — der Fortschritt wird gespeichert und geht nicht verloren.',
+        content: infoContent,
         timestamp: Date.now(),
         senderName: 'Fable',
       };
