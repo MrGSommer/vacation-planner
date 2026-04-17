@@ -135,13 +135,21 @@ function stripLeakedFormOptions(text: string, metadata: AiMetadata | null): { cl
   return { cleanText, metadata: updatedMetadata };
 }
 
-function sanitizeMetadata(meta: AiMetadata): AiMetadata {
+function sanitizeMetadata(meta: AiMetadata, prevMeta: AiMetadata | null): AiMetadata {
   // RULE 1: agent_action and ready_to_plan must NEVER be true simultaneously
   // agent_action takes priority (more specific than "create plan")
   if (meta.agent_action && meta.ready_to_plan) {
     meta.ready_to_plan = false;
   }
-  // RULE 2: Filter out null/undefined entries from suggested_questions
+  // RULE 2: If previous turn had agent_action and this turn switches to ready_to_plan
+  // without keeping agent_action, carry over the agent_action instead.
+  // This prevents: user asks "budget" → agent_action=budget_categories, user says "mid-range" → Fable wrongly sets ready_to_plan.
+  // The user was giving details for the SPECIFIC task, not asking for a full plan.
+  if (prevMeta?.agent_action && !meta.agent_action && meta.ready_to_plan) {
+    meta.agent_action = prevMeta.agent_action;
+    meta.ready_to_plan = false;
+  }
+  // RULE 3: Filter out null/undefined entries from suggested_questions
   if (meta.suggested_questions) {
     meta.suggested_questions = meta.suggested_questions.filter(q => typeof q === 'string' && q.trim());
   }
@@ -912,7 +920,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       const parsed = parseMetadata(personalParsed.cleanText);
       const stripped = stripLeakedFormOptions(parsed.cleanText, parsed.metadata);
       const { cleanText, metadata: meta } = stripLeakedAgentAction(stripped.cleanText, stripped.metadata);
-      if (meta) sanitizeMetadata(meta);
+      if (meta) sanitizeMetadata(meta, null);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -1065,7 +1073,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
       let parsedMeta = parseMetadata(personalParsed.cleanText);
       const strippedForm = stripLeakedFormOptions(parsedMeta.cleanText, parsedMeta.metadata);
       let { cleanText, metadata: meta } = stripLeakedAgentAction(strippedForm.cleanText, strippedForm.metadata);
-      if (meta) sanitizeMetadata(meta);
+      if (meta) sanitizeMetadata(meta, metadata);
 
       applyPersonalMemory(personalParsed);
       applyTripMemory(tripParsed);
@@ -1105,7 +1113,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const fuParsed = parseMetadata(fuPersonalParsed.cleanText);
           const fuStrippedForm = stripLeakedFormOptions(fuParsed.cleanText, fuParsed.metadata);
           const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedAgentAction(fuStrippedForm.cleanText, fuStrippedForm.metadata);
-          if (fuMeta) sanitizeMetadata(fuMeta);
+          if (fuMeta) sanitizeMetadata(fuMeta, meta);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
@@ -1174,7 +1182,7 @@ export const useAiPlanner = ({ mode, tripId, userId, initialContext = {}, initia
           const fuParsedWs = parseMetadata(fuPersonalParsed.cleanText);
           const fuStrippedForm = stripLeakedFormOptions(fuParsedWs.cleanText, fuParsedWs.metadata);
           const { cleanText: fuCleanText, metadata: fuMeta } = stripLeakedAgentAction(fuStrippedForm.cleanText, fuStrippedForm.metadata);
-          if (fuMeta) sanitizeMetadata(fuMeta);
+          if (fuMeta) sanitizeMetadata(fuMeta, meta);
 
           applyPersonalMemory(fuPersonalParsed);
           applyTripMemory(fuTripParsed);
