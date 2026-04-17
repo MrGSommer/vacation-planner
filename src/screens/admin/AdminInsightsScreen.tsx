@@ -13,12 +13,16 @@ import {
   adminGetRecentViolations,
   adminGetSuspendedUsers,
   adminSetFableSuspension,
+  adminGetSubscriptionStats,
 } from '../../api/analytics';
+import { adminGetRevenueStats } from '../../api/admin';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import type {
   LiveSnapshot, FunnelStats, InsightsReport,
   FableTopUser, RateLimitViolation, SuspendedUser,
+  SubscriptionStats,
 } from '../../types/analytics';
+import type { RevenueStats } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminInsights'> };
@@ -34,6 +38,8 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
   const [topUsers, setTopUsers] = useState<FableTopUser[]>([]);
   const [violations, setViolations] = useState<RateLimitViolation[]>([]);
   const [suspended, setSuspended] = useState<SuspendedUser[]>([]);
+  const [subStats, setSubStats] = useState<SubscriptionStats | null>(null);
+  const [revenue, setRevenue] = useState<RevenueStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportFocus, setReportFocus] = useState<'full'|'funnel'|'retention'|'monetization'|'engagement'>('full');
@@ -42,13 +48,14 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [snap, fun, reps, top, vios, susp] = await Promise.all([
+      const [snap, fun, reps, top, vios, susp, sStats] = await Promise.all([
         adminGetLiveSnapshot(),
         adminGetFunnelStats(),
         adminListInsightsReports(10),
         adminGetFableTopUsers(7),
         adminGetRecentViolations(24),
         adminGetSuspendedUsers(),
+        adminGetSubscriptionStats(),
       ]);
       setSnapshot(snap);
       setFunnel(fun);
@@ -56,6 +63,9 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
       setTopUsers(top);
       setViolations(vios);
       setSuspended(susp);
+      setSubStats(sStats);
+      // Revenue from Stripe API — load async, don't block render
+      adminGetRevenueStats().then(setRevenue).catch((e) => console.error('Revenue stats error:', e));
     } catch (e) {
       console.error('Insights load error:', e);
     } finally {
@@ -189,6 +199,93 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
               ))}
               {funnel && (
                 <Text style={styles.overallText}>Visitor→Paid: {fmtPct(funnel.overall_visitor_to_paid)}</Text>
+              )}
+            </Card>
+
+            {/* ----- Revenue & Abonnements ----- */}
+            <Card style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Revenue & Abonnements</Text>
+
+              {/* Revenue tiles (from Stripe API) */}
+              <View style={styles.tileGrid}>
+                <Tile label="MRR" value={revenue ? formatCHF(revenue.mrr) : '…'} color={colors.secondary} isText />
+                <Tile label="Umsatz (Netto)" value={revenue ? formatCHF(revenue.total_revenue_net) : '…'} color={colors.success} isText />
+                <Tile label="Aktive Abos" value={revenue?.active_subscriptions ?? '…'} color={colors.primary} isText={!revenue} />
+                <Tile label="Stripe-Gebühren" value={revenue ? formatCHF(revenue.total_fees) : '…'} color={colors.error} isText />
+              </View>
+
+              {/* Subscription tier breakdown */}
+              {subStats && (
+                <View style={styles.subBlock}>
+                  <Text style={styles.subTitle}>Abo-Verteilung ({subStats.tier_breakdown.total} User)</Text>
+                  <View style={styles.tierGrid}>
+                    <TierPill label="Free" count={subStats.tier_breakdown.free_users} color={colors.textSecondary} />
+                    <TierPill label="Premium" count={subStats.tier_breakdown.premium_active} color={colors.secondary} />
+                    <TierPill label="Trialing" count={subStats.tier_breakdown.trialing} color={colors.accent} />
+                    <TierPill label="Past Due" count={subStats.tier_breakdown.past_due} color={colors.warning} />
+                    <TierPill label="Canceled" count={subStats.tier_breakdown.canceled} color={colors.error} />
+                    <TierPill label="Free + Credits" count={subStats.tier_breakdown.free_with_credits} color={colors.sky} />
+                  </View>
+                </View>
+              )}
+
+              {/* Monetization events summary */}
+              {subStats && (
+                <View style={styles.subBlock}>
+                  <Text style={styles.subTitle}>Monetarisierung</Text>
+                  <View style={styles.monetGrid}>
+                    <View style={styles.monetCol}>
+                      <Text style={styles.monetPeriod}>7 Tage</Text>
+                      <Text style={styles.monetRow}>+{subStats.events_7d.purchases_7d} Abos</Text>
+                      <Text style={styles.monetRow}>-{subStats.events_7d.cancellations_7d} Kündigungen</Text>
+                      <Text style={styles.monetRow}>{subStats.events_7d.inspirations_7d} Inspirationen</Text>
+                    </View>
+                    <View style={styles.monetCol}>
+                      <Text style={styles.monetPeriod}>30 Tage</Text>
+                      <Text style={styles.monetRow}>+{subStats.events_30d.purchases_30d} Abos</Text>
+                      <Text style={styles.monetRow}>-{subStats.events_30d.cancellations_30d} Kündigungen</Text>
+                      <Text style={styles.monetRow}>{subStats.events_30d.inspirations_30d} Inspirationen</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Paywall trigger breakdown */}
+              {subStats && subStats.paywall.shown_30d > 0 && (
+                <View style={styles.subBlock}>
+                  <Text style={styles.subTitle}>Paywall-Trigger (30 Tage · {subStats.paywall.shown_30d}x gezeigt)</Text>
+                  {Object.entries(subStats.paywall.trigger_breakdown)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([trigger, count]) => (
+                      <View key={trigger} style={styles.pathRow}>
+                        <Text style={styles.pathName}>{triggerLabel(trigger)}</Text>
+                        <Text style={styles.pathCount}>{count}</Text>
+                      </View>
+                    ))}
+                </View>
+              )}
+
+              {/* Recent monetization events timeline */}
+              {subStats && subStats.recent_events.length > 0 && (
+                <View style={styles.subBlock}>
+                  <Text style={styles.subTitle}>Letzte Events</Text>
+                  {subStats.recent_events.slice(0, 10).map((evt, idx) => (
+                    <View key={idx} style={styles.recentEventRow}>
+                      <Text style={styles.recentEventIcon}>
+                        {evt.event_name === 'subscription_purchased' ? '💎' :
+                         evt.event_name === 'subscription_cancelled' ? '🚪' : '✨'}
+                      </Text>
+                      <Text style={styles.recentEventLabel} numberOfLines={1}>
+                        {evt.event_name === 'subscription_purchased' ? 'Abo gekauft' :
+                         evt.event_name === 'subscription_cancelled' ? 'Abo gekündigt' : 'Inspirationen gekauft'}
+                        {evt.properties?.amount_chf ? ` · CHF ${evt.properties.amount_chf}` : ''}
+                      </Text>
+                      <Text style={styles.recentEventTime}>
+                        {new Date(evt.created_at).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               )}
             </Card>
 
@@ -335,13 +432,34 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-const Tile: React.FC<{ label: string; value: number; sub?: string; color: string }> = ({ label, value, sub, color }) => (
+const Tile: React.FC<{ label: string; value: number | string; sub?: string; color: string; isText?: boolean }> = ({ label, value, sub, color, isText }) => (
   <View style={styles.tile}>
-    <Text style={[styles.tileValue, { color }]}>{value}</Text>
+    <Text style={[isText || typeof value === 'string' ? styles.tileValueText : styles.tileValue, { color }]}>{value}</Text>
     <Text style={styles.tileLabel}>{label}</Text>
     {sub && <Text style={styles.tileSub}>{sub}</Text>}
   </View>
 );
+
+const TierPill: React.FC<{ label: string; count: number; color: string }> = ({ label, count, color }) => (
+  <View style={[styles.tierPill, { borderColor: color + '60', backgroundColor: color + '15' }]}>
+    <Text style={[styles.tierPillCount, { color }]}>{count}</Text>
+    <Text style={styles.tierPillLabel}>{label}</Text>
+  </View>
+);
+
+const formatCHF = (cents: number) => `CHF ${(cents / 100).toFixed(2)}`;
+
+function triggerLabel(trigger: string): string {
+  switch (trigger) {
+    case 'second_trip_attempt': return 'Zweite Reise';
+    case 'second_collaborator_attempt': return 'Zweiter Kollaborateur';
+    case 'photo_limit_reached': return 'Foto-Limit';
+    case 'stops_feature': return 'Stops-Feature';
+    case 'fable_without_credits': return 'Fable (keine Credits)';
+    case 'budget_feature': return 'Budget-Feature';
+    default: return trigger;
+  }
+}
 
 const ReportCard: React.FC<{ report: InsightsReport }> = ({ report }) => {
   const [expanded, setExpanded] = useState(false);
@@ -459,6 +577,22 @@ const styles = StyleSheet.create({
   pathRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   pathName: { ...typography.caption, color: colors.textSecondary, flex: 1, marginRight: spacing.sm },
   pathCount: { ...typography.caption, fontWeight: '600', color: colors.text },
+
+  tileValueText: { fontSize: 18, fontWeight: '700' },
+
+  // Revenue & Abonnements
+  tierGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  tierPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: borderRadius.sm, borderWidth: 1 },
+  tierPillCount: { fontSize: 16, fontWeight: '700' },
+  tierPillLabel: { ...typography.caption, color: colors.textSecondary },
+  monetGrid: { flexDirection: 'row', gap: spacing.xl },
+  monetCol: { flex: 1 },
+  monetPeriod: { ...typography.bodySmall, fontWeight: '700', marginBottom: spacing.xs },
+  monetRow: { ...typography.caption, color: colors.textSecondary, marginBottom: 2 },
+  recentEventRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, gap: spacing.sm },
+  recentEventIcon: { fontSize: 14, width: 20, textAlign: 'center' },
+  recentEventLabel: { ...typography.caption, flex: 1, color: colors.textSecondary },
+  recentEventTime: { ...typography.caption, color: colors.textLight, fontVariant: ['tabular-nums'] },
 
   // Funnel
   funnelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, gap: spacing.sm },

@@ -211,3 +211,36 @@ export interface SuspendedUser {
   fable_suspension_reason: string | null;
   violations_7d: number;
 }
+
+// Subscription & revenue analytics for AdminInsightsScreen
+export interface SubscriptionStats {
+  tier_breakdown: {
+    free_users: number;
+    premium_active: number;
+    trialing: number;
+    past_due: number;
+    canceled: number;
+    free_with_credits: number;
+    total: number;
+  };
+  events_30d: {
+    purchases_30d: number;
+    cancellations_30d: number;
+    inspirations_30d: number;
+  };
+  events_7d: {
+    purchases_7d: number;
+    cancellations_7d: number;
+    inspirations_7d: number;
+  };
+  paywall: {
+    shown_30d: number;
+    trigger_breakdown: Record<string, number>;
+  };
+  recent_events: Array<{
+    event_name: string;
+    properties: Record<string, unknown>;
+    created_at: string;
+  }>;
+  generated_at: string;
+}

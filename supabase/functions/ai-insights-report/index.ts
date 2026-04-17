@@ -155,14 +155,50 @@ Gib deinen Report als JSON zurück (keine Markdown-Codefences, nur das JSON-Obje
 
 // --- Metric collection --------------------------------------------------
 
+async function fetchRevenueStats(): Promise<any | null> {
+  const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY');
+  if (!STRIPE_KEY) return null;
+
+  try {
+    // Active subscriptions for MRR
+    const subsRes = await fetch('https://api.stripe.com/v1/subscriptions?status=active&limit=100', {
+      headers: { 'Authorization': `Bearer ${STRIPE_KEY}` },
+    });
+    const subsData = await subsRes.json();
+    if (subsData.error) return null;
+
+    let mrr = 0;
+    for (const sub of subsData.data || []) {
+      const item = sub.items?.data?.[0];
+      const amount = item?.price?.unit_amount || 0;
+      const interval = item?.price?.recurring?.interval;
+      if (interval === 'year') mrr += Math.round(amount / 12);
+      else mrr += amount;
+    }
+
+    return {
+      mrr,
+      active_subscriptions: subsData.data?.length || 0,
+      currency: 'chf',
+    };
+  } catch (e) {
+    console.error('fetchRevenueStats error:', e);
+    return null;
+  }
+}
+
 async function collectMetrics(fromIso: string, toIso: string) {
-  const [liveSnapshot, funnelStats] = await Promise.all([
+  const [liveSnapshot, funnelStats, subscriptionStats, revenueStats] = await Promise.all([
     rpc('admin_get_live_snapshot', {}),
     rpc('admin_get_funnel_stats', { p_from: fromIso, p_to: toIso }),
+    rpc('admin_get_subscription_stats', {}),
+    fetchRevenueStats(),
   ]);
   return {
     live_snapshot: liveSnapshot,
     funnel: funnelStats,
+    subscriptions: subscriptionStats,
+    revenue: revenueStats,
     period: { start: fromIso, end: toIso },
   };
 }

@@ -10,6 +10,7 @@ import {
   type FableTopUser,
   type RateLimitViolation,
   type SuspendedUser,
+  type SubscriptionStats,
 } from '../types/analytics';
 
 // ---------------- Session ID management ---------------------------------
@@ -200,6 +201,14 @@ export async function adminGenerateInsightsReport(params: {
   });
   if (error) throw error;
   return data as InsightsReport;
+}
+
+// ---------------- Subscription stats (DB-only, fast) -------------------
+
+export async function adminGetSubscriptionStats(): Promise<SubscriptionStats> {
+  const { data, error } = await supabase.rpc('admin_get_subscription_stats');
+  if (error) throw error;
+  return data as SubscriptionStats;
 }
 
 // ---------------- Fable abuse / suspension admin ------------------------
