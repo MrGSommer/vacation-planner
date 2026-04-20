@@ -32,6 +32,7 @@ import { CURRENCIES } from '../../utils/constants';
 import { formatDate, getDayDates } from '../../utils/dateHelpers';
 import { EditTripSkeleton } from '../../components/skeletons/EditTripSkeleton';
 import { extractDominantColor } from '../../utils/colorExtraction';
+import { logError } from '../../services/errorLogger';
 
 type CoverMode = 'none' | 'upload' | 'unsplash';
 
@@ -144,6 +145,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         setFableWebSearch(trip.fable_web_search);
         setFableMemoryEnabled(trip.fable_memory_enabled);
       } catch (e) {
+        logError(e, { component: 'EditTripScreen', context: { action: 'loadTrip' } });
         console.error(e);
       } finally {
         setLoadingTrip(false);
@@ -157,8 +159,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       const data = await getCollaborators(tripId);
       setMembers(data);
-    } catch {
-      // ignore
+    } catch (e) {
+      logError(e, { component: 'EditTripScreen', context: { action: 'loadMembers' } });
     } finally {
       setMembersLoading(false);
     }
@@ -205,6 +207,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         await applyUnsplashPhoto(unsplashCache.current[unsplashIndex.current]);
       }
     } catch (e) {
+      logError(e, { component: 'EditTripScreen', context: { action: 'handleUnsplashToggle' } });
       console.error(e);
     } finally {
       setUnsplashLoading(false);
@@ -307,6 +310,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
       } catch (e) {
+        logError(e, { component: 'EditTripScreen', context: { action: 'handleSaveDateConflictCheck' } });
         console.error('Error checking date conflicts:', e);
         showToast('Fehler beim Prüfen der Aktivitäten', 'error');
         return;
@@ -333,6 +337,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       setDateChangeInfo(null);
       await saveTrip();
     } catch (e) {
+      logError(e, { component: 'EditTripScreen', context: { action: 'handleDateChangeAction' } });
       console.error('Error handling date change:', e);
       showToast('Fehler beim Anpassen der Aktivitäten', 'error');
     } finally {
@@ -363,6 +368,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       });
       navigation.goBack();
     } catch (e) {
+      logError(e, { component: 'EditTripScreen', context: { action: 'saveTrip' } });
       console.error(e);
       showToast('Fehler beim Speichern', 'error');
     } finally {
@@ -380,7 +386,8 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       await Clipboard.setStringAsync(url);
       showToast('Einladungslink kopiert!', 'success');
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'EditTripScreen', context: { action: 'handleCreateInvite' } });
       showToast('Fehler beim Erstellen', 'error');
     } finally {
       setInviteLoading(false);
@@ -394,7 +401,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
         await removeCollaborator(member.id);
         setMembers(prev => prev.filter(m => m.id !== member.id));
         showToast(`${mName} entfernt`, 'success');
-      } catch { showToast('Fehler', 'error'); }
+      } catch (e) { logError(e, { component: 'EditTripScreen', context: { action: 'handleRemoveMember' } }); showToast('Fehler', 'error'); }
     };
 
     if (Platform.OS === 'web') {
@@ -414,7 +421,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await updateCollaboratorRole(member.id, newRole);
       setMembers(prev => prev.map(m => (m.id === member.id ? { ...m, role: newRole } : m)));
-    } catch { showToast('Fehler', 'error'); }
+    } catch (e) { logError(e, { component: 'EditTripScreen', context: { action: 'handleToggleRole' } }); showToast('Fehler', 'error'); }
   };
 
   const editable = isTripEditable(tripId, trips);
@@ -501,7 +508,7 @@ export const EditTripScreen: React.FC<Props> = ({ navigation, route }) => {
                       setCoverMode('upload');
                       const themeColor = await extractDominantColor(url).catch(() => null);
                       await update(tripId, { cover_image_url: url, cover_image_attribution: null, theme_color: themeColor } as any);
-                    } catch { Alert.alert('Fehler', 'Bild konnte nicht hochgeladen werden'); }
+                    } catch (e) { logError(e, { severity: 'critical', component: 'EditTripScreen', context: { action: 'uploadCoverImage' } }); Alert.alert('Fehler', 'Bild konnte nicht hochgeladen werden'); }
                     finally { setUploadingCover(false); }
                   }}
                   activeOpacity={0.7}

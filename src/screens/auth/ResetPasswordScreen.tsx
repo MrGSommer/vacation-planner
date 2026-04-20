@@ -9,6 +9,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ResetPassword'> };
 
@@ -19,7 +20,10 @@ const isInviteFlow = (() => {
       const fullUrl = window.location.href;
       const hash = window.location.hash;
       return hash.includes('type=invite') || fullUrl.includes('type=invite');
-    } catch { return false; }
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'ResetPasswordScreen', context: { action: 'handleResetPassword' } });
+      return false;
+    }
   }
   return false;
 })();
@@ -65,6 +69,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
       showToast(isInviteFlow ? 'Willkommen bei WayFable!' : 'Passwort erfolgreich geändert', 'success');
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'ResetPasswordScreen', context: { action: 'handleUpdate' } });
       setError(e.message || 'Passwort konnte nicht geändert werden');
     } finally {
       setLoading(false);

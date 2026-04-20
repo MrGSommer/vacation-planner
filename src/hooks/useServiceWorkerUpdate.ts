@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
+import { logError } from '../services/errorLogger';
 
 export function useServiceWorkerUpdate() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -94,7 +95,8 @@ export function useServiceWorkerUpdate() {
           refreshing = true;
           window.location.reload();
         }
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'useServiceWorkerUpdate', context: { action: 'checkVersion' } });
         // Offline or version.json not yet deployed — ignore
       }
     };

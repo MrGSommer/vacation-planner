@@ -19,6 +19,7 @@ import { SupportMessage } from '../../types/database';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { renderMarkdown } from '../../utils/simpleMarkdown';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SupportChat'>;
 
@@ -60,6 +61,7 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation, route }) => {
       setConversationId(conv.id);
       return conv.id;
     } catch (e) {
+      logError(e, { component: 'SupportChatScreen', context: { action: 'ensureConversation' } });
       console.error('Failed to create support conversation:', e);
       return null;
     }
@@ -125,7 +127,8 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation, route }) => {
         setResolved(true);
         setShowSatisfaction(true);
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'SupportChatScreen', context: { action: 'handleSend' } });
       const errorMsg: SupportMessage = {
         role: 'assistant',
         content: 'Entschuldigung, es gab einen Fehler. Bitte versuche es nochmal oder sende uns direkt Feedback.',
@@ -177,7 +180,8 @@ export const SupportChatScreen: React.FC<Props> = ({ navigation, route }) => {
         supportConversationId: conversationId || undefined,
       });
       showToast('Deine Frage wurde eingereicht — wir melden uns!', 'success');
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'SupportChatScreen', context: { action: 'userMessages' } });
       showToast('Frage konnte nicht eingereicht werden', 'error');
     }
 

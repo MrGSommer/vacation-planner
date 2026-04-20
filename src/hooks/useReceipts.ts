@@ -3,6 +3,7 @@ import { Receipt } from '../types/database';
 import * as receiptsApi from '../api/receipts';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useRealtime, RealtimePayload } from './useRealtime';
+import { logError } from '../services/errorLogger';
 
 export const useReceipts = (tripId: string) => {
   const { user } = useAuthContext();
@@ -15,6 +16,7 @@ export const useReceipts = (tripId: string) => {
       const data = await receiptsApi.getReceipts(tripId);
       setReceipts(data);
     } catch (e) {
+      logError(e, { component: 'useReceipts', context: { action: 'fetchReceipts' } });
       console.error('Receipts fetch error:', e);
     } finally {
       setLoading(false);

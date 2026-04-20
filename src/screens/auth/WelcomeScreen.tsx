@@ -15,6 +15,7 @@ import { LandingPlanPreview } from '../../components/landing/LandingPlanPreview'
 import { AiTripPlan } from '../../services/ai/planExecutor';
 import { trackLandingEvent } from '../../api/landingEvents';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -239,6 +240,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         }
       }, 300);
     } catch (e: any) {
+      logError(e, { component: 'WelcomeScreen', context: { action: 'timeout' } });
       if (e?.name === 'AbortError') {
         setPreviewError('Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.');
       } else {
@@ -265,7 +267,9 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         sessionStorage.setItem('pendingPlanPreview', JSON.stringify(previewPlan));
         sessionStorage.setItem('pendingPlanPreview_ts', String(Date.now()));
         sessionStorage.setItem('pendingPlanQuery', previewQuery);
-      } catch {}
+      } catch (e) {
+        logError(e, { component: 'WelcomeScreen', context: { action: 'handleGetStarted' } });
+      }
     }
     navigation.navigate('SignUp');
   }, [previewPlan, previewQuery, navigation]);

@@ -31,6 +31,7 @@ import { Settlement } from '../../utils/splitCalculator';
 import { BudgetSkeleton } from '../../components/skeletons/BudgetSkeleton';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
 import { usePresence } from '../../hooks/usePresence';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Budget'>;
 
@@ -129,6 +130,7 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
           setTab('budget');
         }
       } catch (e) {
+        logError(e, { component: 'BudgetScreen', context: { action: 'fetchTripAndCollaborators' } });
         console.error('Trip/Collab fetch error:', e);
       }
     })();
@@ -137,7 +139,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleAddCategory = useCallback(async (name: string, color: string, limit: number | null, scope: 'group' | 'personal') => {
     try {
       await addCategory(name, color, limit ?? undefined, scope);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleAddCategory' } });
       Alert.alert('Fehler', 'Kategorie konnte nicht erstellt werden');
     }
   }, [addCategory]);
@@ -146,7 +149,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await updateCategory(id, { name, color, budget_limit: limit });
       setEditingCategory(null);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleEditCategory' } });
       Alert.alert('Fehler', 'Kategorie konnte nicht aktualisiert werden');
     }
   }, [updateCategory]);
@@ -178,7 +182,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
       } else {
         await setPersonalLimit(personalLimitCategory.id, value);
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleSavePersonalLimit' } });
       Alert.alert('Fehler', 'Persönliches Limit konnte nicht gesetzt werden');
     }
     setPersonalLimitCategory(null);
@@ -202,7 +207,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         scope: data.scope,
         visible_to: data.visible_to,
       });
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleAddExpense' } });
       Alert.alert('Fehler', 'Ausgabe konnte nicht erstellt werden');
     }
   }, [addExpense, tripId, currency]);
@@ -210,7 +216,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleUpdateExpense = useCallback(async (id: string, updates: Partial<Expense>) => {
     try {
       await updateExpense(id, updates);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleUpdateExpense' } });
       Alert.alert('Fehler', 'Ausgabe konnte nicht aktualisiert werden');
     }
   }, [updateExpense]);
@@ -243,7 +250,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         scope: 'group',
         visible_to: [],
       });
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleSettle' } });
       Alert.alert('Fehler', 'Ausgleich konnte nicht erstellt werden');
     }
   }, [addExpense, tripId, currency, categories, user]);
@@ -279,7 +287,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
         paid_by: data.paidBy,
         category_id: data.categoryId,
       });
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleReceiptSave' } });
       Alert.alert('Fehler', 'Beleg konnte nicht gespeichert werden');
     }
   }, [addReceipt, tripId, user]);
@@ -287,7 +296,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleReceiptUpdate = useCallback(async (id: string, updates: any) => {
     try {
       await updateReceiptHook(id, updates);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleReceiptUpdate' } });
       Alert.alert('Fehler', 'Beleg konnte nicht aktualisiert werden');
     }
   }, [updateReceiptHook]);
@@ -296,7 +306,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await completeReceipt(receipt);
       refresh(); // Refresh expenses too
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleReceiptComplete' } });
       Alert.alert('Fehler', 'Beleg konnte nicht abgeschlossen werden');
     }
   }, [completeReceipt, refresh]);
@@ -305,7 +316,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await reopenReceipt(id);
       refresh();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'BudgetScreen', context: { action: 'handleReceiptReopen' } });
       Alert.alert('Fehler', 'Beleg konnte nicht erneut geöffnet werden');
     }
   }, [reopenReceipt, refresh]);
@@ -314,7 +326,8 @@ export const BudgetScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await removeReceipt(id);
       refresh();
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'BudgetScreen', context: { action: 'handleReceiptDelete' } });
       Alert.alert('Fehler', 'Beleg konnte nicht gelöscht werden');
     }
   }, [removeReceipt, refresh]);

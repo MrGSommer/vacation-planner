@@ -13,6 +13,7 @@ import { getSharedSlideshow, SlideshowShareData } from '../../api/slideshows';
 import { formatDateRange } from '../../utils/dateHelpers';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, typography, borderRadius, gradients } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SlideshowView'>;
 
@@ -46,6 +47,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
         const result = await getSharedSlideshow(token);
         setData(result);
       } catch (e: any) {
+        logError(e, { component: 'SlideshowViewScreen', context: { action: 'loadSlideshow' } });
         setError(e.message || 'Diashow nicht gefunden');
       } finally {
         setLoading(false);
@@ -78,6 +80,7 @@ export const SlideshowViewScreen: React.FC<Props> = ({ route }) => {
         soundRef.current = player;
       }
     } catch (e) {
+      logError(e, { component: 'SlideshowViewScreen', context: { action: 'handleStart' } });
       console.warn('Slideshow audio failed:', e);
     }
     setStarted(true);

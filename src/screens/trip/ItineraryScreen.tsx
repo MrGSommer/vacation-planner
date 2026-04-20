@@ -36,6 +36,7 @@ import { getReactionsByActivities } from '../../api/comments';
 import { getActivityIdsWithDocuments } from '../../api/documents';
 import { ActivityReaction } from '../../types/database';
 import { usePresence } from '../../hooks/usePresence';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Itinerary'>;
 
@@ -180,6 +181,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
     } catch (e) {
+      logError(e, { component: 'ItineraryScreen', context: { action: 'loadData' } });
       console.error(e);
     } finally {
       setLoading(false);
@@ -260,6 +262,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         ));
       }
     } catch (e) {
+      logError(e, { component: 'ItineraryScreen', context: { action: 'resortActivitiesByTime' } });
       console.error('Failed to resort activities:', e);
     }
   };
@@ -322,6 +325,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       setHotelActivities(allActs.filter(a => a.category === 'hotel'));
       if (selectedDayId) await loadDayActivities(selectedDayId);
     } catch (e) {
+      logError(e, { component: 'ItineraryScreen', context: { action: 'handleModalSave' } });
       Alert.alert('Fehler', modalActivity ? 'Aktivität konnte nicht aktualisiert werden' : 'Aktivität konnte nicht erstellt werden');
     }
   };
@@ -337,6 +341,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
         showToast('Aktivität gelöscht', 'success');
         if (selectedDayId) await loadDayActivities(selectedDayId);
       } catch (e: any) {
+        logError(e, { severity: 'critical', component: 'ItineraryScreen', context: { action: 'handleDelete' } });
         showToast('Fehler beim Löschen', 'error');
         if (selectedDayId) await loadDayActivities(selectedDayId);
       }
@@ -381,7 +386,8 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       });
       showToast('Aktivität dupliziert', 'success');
       if (selectedDayId) loadDayActivities(selectedDayId);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ItineraryScreen', context: { action: 'handleDuplicate' } });
       showToast('Fehler beim Duplizieren', 'error');
     }
   };
@@ -668,6 +674,7 @@ export const ItineraryScreen: React.FC<Props> = ({ navigation, route }) => {
       try {
         await deleteActivity(act.id);
       } catch (e) {
+        logError(e, { severity: 'critical', component: 'ItineraryScreen', context: { action: 'bulkDeleteActivities' } });
         console.error('Failed to delete activity:', e);
       }
     }

@@ -7,6 +7,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { Avatar } from './Avatar';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   activityId: string;
@@ -22,7 +23,10 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
     try {
       const data = await getComments(activityId);
       setComments(data);
-    } catch { /* silent - comments are non-critical */ }
+    } catch (e) {
+      logError(e, { component: 'ActivityComments', context: { action: 'load' } });
+      /* silent - comments are non-critical */
+    }
   }, [activityId]);
 
   useEffect(() => { load(); }, [load]);
@@ -34,7 +38,10 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
       const comment = await addComment(activityId, user.id, text.trim());
       setComments(prev => [...prev, comment]);
       setText('');
-    } catch { Alert.alert('Fehler', 'Kommentar konnte nicht gespeichert werden.'); }
+    } catch (e) {
+      logError(e, { component: 'ActivityComments', context: { action: 'handleSend' } });
+      Alert.alert('Fehler', 'Kommentar konnte nicht gespeichert werden.');
+    }
     setSending(false);
   };
 
@@ -42,7 +49,10 @@ export const ActivityComments: React.FC<Props> = ({ activityId }) => {
     try {
       await deleteComment(id);
       setComments(prev => prev.filter(c => c.id !== id));
-    } catch { Alert.alert('Fehler', 'Kommentar konnte nicht gelöscht werden.'); }
+    } catch (e) {
+      logError(e, { component: 'ActivityComments', context: { action: 'handleDelete' } });
+      Alert.alert('Fehler', 'Kommentar konnte nicht gelöscht werden.');
+    }
   };
 
   const timeAgo = (dateStr: string) => {

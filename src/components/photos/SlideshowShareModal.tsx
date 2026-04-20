@@ -9,6 +9,7 @@ import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { MUSIC_TRACKS, MusicTrack } from '../../config/music';
 import { createSlideshowShare } from '../../api/slideshows';
 import { requireOnline } from '../../utils/offlineGate';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   visible: boolean;
@@ -72,7 +73,9 @@ export const SlideshowShareModal: React.FC<Props> = ({
       soundRef.current = player;
       setPreviewingTrack(track);
       setTimeout(() => stopPreview(), 8000);
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'SlideshowShareModal', context: { action: 'info' } });
+    }
   }, [previewingTrack, stopPreview]);
 
   const handleCreate = async () => {
@@ -88,6 +91,7 @@ export const SlideshowShareModal: React.FC<Props> = ({
       });
       setShareUrl(`https://wayfable.ch/slideshow/${share.token}`);
     } catch (_e) {
+      logError(_e, { component: 'SlideshowShareModal', context: { action: 'handleCreate' } });
       if (Platform.OS === 'web') {
         window.alert('Link konnte nicht erstellt werden');
       }

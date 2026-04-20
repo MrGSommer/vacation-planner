@@ -11,6 +11,7 @@ import { STRIPE_CONFIG } from '../../config/stripe';
 import { requireOnline } from '../../utils/offlineGate';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -184,6 +185,7 @@ export const SubscriptionScreen: React.FC<Props> = ({ navigation }) => {
                   if (res.data?.url) { window.location.href = res.data.url; }
                   else { throw new Error('Keine Checkout-URL erhalten'); }
                 } catch (e) {
+                  logError(e, { severity: 'critical', component: 'SubscriptionScreen', context: { action: 'buyInspirationen' } });
                   setBuyError((e as Error).message || 'Fehler');
                   setBuyLoading(false);
                 }

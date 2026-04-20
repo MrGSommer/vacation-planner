@@ -7,6 +7,7 @@ import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { linkifyText } from '../../utils/linkify';
 import { formatDateMedium } from '../../utils/dateHelpers';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripShare'>;
 
@@ -22,6 +23,7 @@ export const TripShareScreen: React.FC<Props> = ({ route }) => {
         const result = await getSharedTrip(token);
         setData(result);
       } catch (e: any) {
+        logError(e, { component: 'TripShareScreen', context: { action: 'loadShareData' } });
         setError(e.message || 'Share-Link nicht gefunden oder ungültig.');
       } finally {
         setLoading(false);

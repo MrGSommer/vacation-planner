@@ -9,6 +9,7 @@ import { updateProfile } from '../../api/auth';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
 import { Trip } from '../../types/database';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FableTripSettings'>;
 
@@ -58,7 +59,8 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
           const collab = collabs.find(c => c.user_id === user?.id);
           setUserRole(collab?.role || 'viewer');
         }
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'FableTripSettingsScreen', context: { action: 'load' } });
         Alert.alert('Fehler', 'Trip konnte nicht geladen werden');
       } finally {
         setLoading(false);
@@ -72,7 +74,8 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
     setter(value);
     try {
       await updateTrip(tripId, { [field]: value } as Partial<Trip>);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableTripSettingsScreen', context: { action: 'handleGroupToggle' } });
       setter(!value);
     }
   };
@@ -85,7 +88,8 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
       await updateTrip(tripId, { fable_instruction: value } as Partial<Trip>);
       setInstructionSaved(true);
       setTimeout(() => setInstructionSaved(false), 2000);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableTripSettingsScreen', context: { action: 'handleSaveInstruction' } });
       Alert.alert('Fehler', 'Anweisung konnte nicht gespeichert werden');
     } finally {
       setInstructionSaving(false);
@@ -98,7 +102,8 @@ export const FableTripSettingsScreen: React.FC<Props> = ({ navigation, route }) 
     try {
       await updateProfile(user.id, { [field]: value });
       await refreshProfile();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableTripSettingsScreen', context: { action: 'handlePersonalToggle' } });
       setter(!value);
     }
   };

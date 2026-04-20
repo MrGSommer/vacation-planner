@@ -12,6 +12,7 @@ import { lookupFlight, isValidFlightNumber, FlightInfo, searchFlightsByRoute, Ro
 import { getTransitDetails, TransitDetail } from '../../services/directions';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   category: string;
@@ -708,7 +709,8 @@ const LegRouteSearch: React.FC<LegRouteSearchProps> = ({ depIata, arrIata, depNa
         setRoutes(result);
       }
       setSearched(true);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'CategoryFieldsInput', context: { action: 'doSearch' } });
       setSearched(true);
     } finally {
       setLoading(false);
@@ -775,7 +777,9 @@ const LegFlightLookup: React.FC<LegFlightLookupProps> = ({ flightNumber, flightD
     try {
       const result = await lookupFlight(normalized, flightDate);
       if (result?.found) onApply(result);
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'CategoryFieldsInput', context: { action: 'doLookup' } });
+    }
     setLoading(false);
     setDone(true);
   }, [flightNumber, flightDate, normalized, key, onApply]);
@@ -843,7 +847,8 @@ const FlightLookupWidget: React.FC<FlightLookupWidgetProps> = ({ flightNumber, f
       } else {
         setError('Flug nicht gefunden');
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'CategoryFieldsInput', context: { action: 'doLookup' } });
       setError('Fehler bei der Flugsuche');
     } finally {
       setLoading(false);
@@ -968,7 +973,8 @@ const TransitSearchWidget: React.FC<TransitSearchWidgetProps> = ({
       const details = await getTransitDetails(origin, destination);
       setResults(details);
       setSearched(true);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'CategoryFieldsInput', context: { action: 'doSearch' } });
       setError('Fehler bei der Verbindungssuche');
       setSearched(true);
     } finally {
@@ -1129,7 +1135,8 @@ const RouteSearchWidget: React.FC<RouteSearchWidgetProps> = ({
         onNoResults?.();
       }
       setSearched(true);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'CategoryFieldsInput', context: { action: 'doSearch' } });
       setError('Fehler bei der Routensuche');
       setSearched(true);
     } finally {

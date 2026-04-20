@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { EmailTest } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminEmailTest'> };
 
@@ -26,6 +27,7 @@ export const AdminEmailTestScreen: React.FC<Props> = ({ navigation }) => {
       const data = await adminGetEmailTests(30);
       setTests(data);
     } catch (e) {
+      logError(e, { component: 'AdminEmailTestScreen', context: { action: 'loadTests' } });
       console.error('Load tests error:', e);
     } finally {
       setLoading(false);
@@ -50,6 +52,7 @@ export const AdminEmailTestScreen: React.FC<Props> = ({ navigation }) => {
       await adminSaveEmailTest(profile.id, email.trim(), subject, res.sent, res.error);
       await loadTests();
     } catch (e) {
+      logError(e, { component: 'AdminEmailTestScreen', context: { action: 'handleSend' } });
       const msg = (e as Error).message;
       setResult({ sent: false, error: msg });
       if (profile) {
@@ -66,6 +69,7 @@ export const AdminEmailTestScreen: React.FC<Props> = ({ navigation }) => {
       await adminConfirmEmailTest(testId);
       setTests((prev) => prev.map((t) => t.id === testId ? { ...t, manually_confirmed: true, confirmed_at: new Date().toISOString() } : t));
     } catch (e) {
+      logError(e, { component: 'AdminEmailTestScreen', context: { action: 'handleConfirm' } });
       console.error('Confirm error:', e);
     }
   };

@@ -6,6 +6,7 @@ import { Card } from './Card';
 import { Button } from './Button';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, iconSize } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface PollCardProps {
   poll: PollWithVotes;
@@ -109,7 +110,9 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({ visible, tripI
       setOptions(['', '']);
       onCreated();
       onClose();
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'PollCard', context: { action: 'validOptions' } });
+    }
     setCreating(false);
   };
 

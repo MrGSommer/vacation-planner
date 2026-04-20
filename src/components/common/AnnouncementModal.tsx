@@ -10,6 +10,7 @@ import { colors, spacing, borderRadius, typography, gradients } from '../../util
 import { Icon } from '../../utils/icons';
 import { Announcement } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 const PWA_ANNOUNCEMENT_TITLE = 'WayFable als App installieren';
 
@@ -42,6 +43,7 @@ export const AnnouncementModal: React.FC = () => {
           setAnnouncement(matching[0]);
         }
       } catch (e) {
+        logError(e, { component: 'AnnouncementModal', context: { action: 'load' } });
         console.error('Announcements load error:', e);
       } finally {
         setLoaded(true);
@@ -55,6 +57,7 @@ export const AnnouncementModal: React.FC = () => {
     try {
       await dismissAnnouncement(announcement.id);
     } catch (e) {
+      logError(e, { component: 'AnnouncementModal', context: { action: 'handleDismiss' } });
       console.error('Dismiss error:', e);
     }
     setAnnouncement(null);
@@ -68,6 +71,7 @@ export const AnnouncementModal: React.FC = () => {
     try {
       await dismissAnnouncement(announcement.id);
     } catch (e) {
+      logError(e, { component: 'AnnouncementModal', context: { action: 'handleCta' } });
       console.error('Dismiss error:', e);
     }
     setAnnouncement(null);
@@ -89,7 +93,8 @@ export const AnnouncementModal: React.FC = () => {
           // No trip — fallback to home
           return;
         }
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'AnnouncementModal', context: { action: 'resolveLatestTrip' } });
         return;
       }
     }

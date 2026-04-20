@@ -13,6 +13,7 @@ import { formatDate } from '../../utils/dateHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = {};
 
@@ -51,7 +52,8 @@ export const FeedbackScreen: React.FC<Props> = () => {
     try {
       const data = await getMyFeedback();
       setFeedbacks(data);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FeedbackScreen', context: { action: 'loadFeedbacks' } });
       // ignore
     } finally {
       setLoadingFeedbacks(false);
@@ -87,7 +89,8 @@ export const FeedbackScreen: React.FC<Props> = () => {
       setTitle('');
       setDescription('');
       loadFeedbacks();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FeedbackScreen', context: { action: 'handleSubmit' } });
       showToast('Feedback konnte nicht gesendet werden', 'error');
     } finally {
       setSubmitting(false);

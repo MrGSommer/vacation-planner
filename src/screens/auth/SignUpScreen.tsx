@@ -12,6 +12,7 @@ import { colors, spacing, typography, borderRadius, gradients } from '../../util
 import { Icon } from '../../utils/icons';
 import { trackLandingEvent } from '../../api/landingEvents';
 import { trackEvent } from '../../api/analytics';
+import { logError } from '../../services/errorLogger';
 
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
@@ -61,7 +62,9 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       trackEvent('signup_completed', { tier: 'free' });
       trackLandingEvent('registered');
       navigation.replace('SignUpSuccess', { email: email.trim() });
-    } catch {}
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleSignUp' } });
+    }
   };
 
   const handleWaitlist = async () => {
@@ -90,7 +93,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         setWaitlistStatus(status);
         if (status === 'confirm_email') trackLandingEvent('waitlisted');
       }
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleWaitlist' } });
       setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
     } finally {
       setWaitlistLoading(false);

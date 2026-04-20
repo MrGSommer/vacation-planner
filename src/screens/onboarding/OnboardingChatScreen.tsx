@@ -15,6 +15,7 @@ import { colors, spacing, borderRadius, typography, shadows, gradients } from '.
 import { Icon, MISC_ICONS } from '../../utils/icons';
 import { linkifyText, openExternalUrl } from '../../utils/linkify';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'Onboarding'> };
 
@@ -88,7 +89,8 @@ function parseMetadata(content: string): { onboarding_complete?: boolean; sugges
   if (!match) return {};
   try {
     return JSON.parse(match[1]);
-  } catch {
+  } catch (e) {
+    logError(e, { component: 'OnboardingChatScreen', context: { action: 'parseMetadata' } });
     return {};
   }
 }
@@ -229,6 +231,7 @@ export const OnboardingChatScreen: React.FC<Props> = ({ navigation }) => {
         setTimeout(() => refreshProfile(), 1000);
       }
     } catch (e: any) {
+      logError(e, { component: 'OnboardingChatScreen', context: { action: 'sendMessage' } });
       const errorMsg: ChatMessage = {
         id: `msg-${++msgIdRef.current}`,
         role: 'assistant',
@@ -290,6 +293,7 @@ export const OnboardingChatScreen: React.FC<Props> = ({ navigation }) => {
         setTrialDeclined(true);
       }
     } catch (e) {
+      logError(e, { component: 'OnboardingChatScreen', context: { action: 'handleActivateTrial' } });
       console.error('Trial activation failed:', e);
       setTrialDeclined(true);
     } finally {

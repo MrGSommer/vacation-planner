@@ -6,6 +6,7 @@ import { CollaboratorWithProfile } from '../../api/invitations';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 const CATEGORY_COLORS = [
   '#FF6B6B', '#4ECDC4', '#FFD93D', '#6C5CE7', '#74B9FF',
@@ -101,7 +102,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       await onCreateCategory(name, color);
       setNewCatName('');
       setShowNewCat(false);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'AddExpenseModal', context: { action: 'createCategory' } });
       Alert.alert('Fehler', 'Kategorie konnte nicht erstellt werden.');
     }
   };

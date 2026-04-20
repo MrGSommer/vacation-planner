@@ -17,6 +17,7 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../utils/
 import { linkifyText } from '../../utils/linkify';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useTripContext } from '../../contexts/TripContext';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Map'>;
 
@@ -96,6 +97,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
         });
       }
     } catch (e) {
+      logError(e, { component: 'MapScreen', context: { action: 'loadData' } });
       console.error(e);
     }
   }, [tripId]);
@@ -156,6 +158,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       resetForm();
       await loadData();
     } catch (e) {
+      logError(e, { component: 'MapScreen', context: { action: 'handleAddActivity' } });
       Alert.alert('Fehler', 'Aktivität konnte nicht erstellt werden');
     }
   };

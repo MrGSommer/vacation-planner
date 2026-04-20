@@ -23,6 +23,7 @@ import { TrialBanner } from '../../components/common/TrialBanner';
 import { Icon, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
 import { FREE_TRIP_RETENTION_DAYS } from '../../config/stripe';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -291,8 +292,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const map = await getCollaboratorsForTrips(trips.map(t => t.id));
       setCollabMap(map);
-    } catch {
-      // ignore
+    } catch (e) {
+      logError(e, { component: 'HomeScreen', context: { action: 'loadCollaborators' } });
     }
   }, [trips]);
 
@@ -335,7 +336,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       const collabs = await getCollaborators(trip.id);
       const others = collabs.filter(c => c.user_id !== user?.id);
       setDeleteCollabs(others);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'HomeScreen', context: { action: 'loadDeleteCollaborators' } });
       // If collabs fail to load, still allow deletion
     } finally {
       setDeleteLoading(false);
@@ -349,7 +351,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       await remove(deleteTrip.id);
       showToast('Reise gelöscht', 'success');
       setDeleteTrip(null);
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'HomeScreen', context: { action: 'handleForceDelete' } });
       showToast('Fehler beim Löschen', 'error');
     } finally {
       setDeleteLoading(false);
@@ -365,7 +368,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       await fetchTrips();
       showToast(`Besitz übertragen an ${getDisplayName(newOwner.profile)}`, 'success');
       setDeleteTrip(null);
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'HomeScreen', context: { action: 'handleTransferOwnership' } });
       showToast('Fehler bei der Übertragung', 'error');
     } finally {
       setDeleteLoading(false);
@@ -379,7 +383,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       await duplicateTrip(trip.id, user!.id);
       await fetchTrips();
       showToast(`"${trip.name}" kopiert`, 'success');
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'HomeScreen', context: { action: 'handleDuplicateTrip' } });
       showToast('Fehler beim Kopieren', 'error');
     }
   }, [user, fetchTrips, showToast]);

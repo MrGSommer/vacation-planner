@@ -6,6 +6,7 @@ import { Button } from '../../components/common';
 import { colors, spacing, typography, gradients } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { supabase } from '../../api/supabase';
+import { logError } from '../../services/errorLogger';
 
 const SUPABASE_URL = supabase.supabaseUrl;
 
@@ -38,7 +39,8 @@ export const WaitlistConfirmScreen: React.FC<Props> = ({ navigation, route }) =>
       } else {
         setStatus('error');
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'WaitlistConfirmScreen', context: { action: 'confirmToken' } });
       setStatus('error');
     }
   };

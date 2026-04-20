@@ -5,6 +5,7 @@ import { parseGeoFile, ImportedPlace } from '../../utils/geoImport';
 import { Button } from './Button';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   visible: boolean;
@@ -43,7 +44,8 @@ export const ImportPlacesModal: React.FC<Props> = ({ visible, onClose, onImport,
 
       setPlaces(parsed);
       setSelected(new Set(parsed.map((_, i) => i)));
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ImportPlacesModal', context: { action: 'handlePickFile' } });
       showToast('Datei konnte nicht gelesen werden', 'error');
     }
   };
@@ -77,7 +79,8 @@ export const ImportPlacesModal: React.FC<Props> = ({ visible, onClose, onImport,
       await onImport(selectedPlaces);
       showToast(`${selectedPlaces.length} Ort(e) importiert`, 'success');
       handleClose();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ImportPlacesModal', context: { action: 'selectedPlaces' } });
       showToast('Import fehlgeschlagen', 'error');
     } finally {
       setImporting(false);

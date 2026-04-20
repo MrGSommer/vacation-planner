@@ -9,6 +9,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Profile } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUserList'> };
 
@@ -59,6 +60,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       setUsers(reset ? fetched : [...users, ...fetched]);
       setTotalCount(count);
     } catch (e) {
+      logError(e, { component: 'AdminUserListScreen', context: { action: 'loadUsers' } });
       console.error('Admin list users error:', e);
     } finally {
       setLoading(false);
@@ -72,6 +74,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       const data = await adminGetWaitlist();
       setWaitlist(data);
     } catch (e) {
+      logError(e, { component: 'AdminUserListScreen', context: { action: 'loadWaitlist' } });
       console.error('Admin waitlist error:', e);
     } finally {
       setWaitlistLoading(false);
@@ -134,6 +137,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       setSelectedEntry(null);
       loadWaitlist();
     } catch (e: any) {
+      logError(e, { component: 'AdminUserListScreen', context: { action: 'handleInviteFromWaitlist' } });
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
     } finally {
       setActionLoading(null);
@@ -149,6 +153,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       setSelectedEntry(null);
       loadWaitlist();
     } catch (e: any) {
+      logError(e, { component: 'AdminUserListScreen', context: { action: 'handleCancelWaitlist' } });
       alert('Fehler', e.message || 'Stornierung fehlgeschlagen');
     } finally {
       setActionLoading(null);
@@ -184,6 +189,7 @@ export const AdminUserListScreen: React.FC<Props> = ({ navigation }) => {
       setInvNote('');
       setShowInviteModal(false);
     } catch (e: any) {
+      logError(e, { component: 'AdminUserListScreen', context: { action: 'handleDirectInvite' } });
       alert('Fehler', e.message || 'Einladung fehlgeschlagen');
     } finally {
       setInviting(false);

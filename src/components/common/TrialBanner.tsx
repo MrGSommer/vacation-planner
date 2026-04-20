@@ -9,6 +9,7 @@ import { activateFreeTrial } from '../../api/auth';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 export const TrialBanner: React.FC = () => {
   const { isTrialing, trialDaysLeft, hasHadTrial, tier } = useSubscription();
@@ -24,6 +25,7 @@ export const TrialBanner: React.FC = () => {
         await activateFreeTrial();
         await refreshProfile();
       } catch (e) {
+        logError(e, { component: 'TrialBanner', context: { action: 'handleActivateTrial' } });
         console.error('Trial activation failed:', e);
       } finally {
         setActivating(false);

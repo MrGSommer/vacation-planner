@@ -36,6 +36,7 @@ import { TripRecapCard } from '../../components/trip/TripRecapCard';
 import { ChangeLog } from '../../components/common/ChangeLog';
 import { usePresence } from '../../hooks/usePresence';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
 
@@ -100,6 +101,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       setCollaborators(collabs);
       setPhotoCount(photos.length);
     } catch (e) {
+      logError(e, { component: 'TripDetailScreen', context: { action: 'loadData' } });
       console.error(e);
       // Offline fallback: try loading trip from localStorage cache
       if (!trip) {
@@ -173,6 +175,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       setMapReady(false);
       loadData();
     } catch (e) {
+      logError(e, { component: 'TripDetailScreen', context: { action: 'handleSaveMapActivity' } });
       console.error('Failed to add activity from map:', e);
     }
   };
@@ -313,6 +316,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         mapInitializedRef.current = true;
         setMapReady(true);
       } catch (e) {
+        logError(e, { component: 'TripDetailScreen', context: { action: 'initMap' } });
         console.error('Map init error:', e);
       }
     };

@@ -7,6 +7,7 @@ import { updateProfile } from '../../api/auth';
 import { CURRENCIES } from '../../utils/constants';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LanguageCurrency'>;
 
@@ -26,7 +27,8 @@ export const LanguageCurrencyScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await updateProfile(user.id, updates);
       await refreshProfile();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'LanguageCurrencyScreen', context: { action: 'save' } });
       Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden');
     } finally {
       setSaving(false);

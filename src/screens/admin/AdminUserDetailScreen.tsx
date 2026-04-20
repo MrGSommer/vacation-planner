@@ -13,6 +13,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Profile, AiUsageLog, StripeCharge, StripeInvoice, StripeSubscriptionDetail } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminUserDetail'>;
 
@@ -84,6 +85,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         setEditIsAdmin(p.is_admin);
         setEditNote(p.admin_note || '');
       } catch (e) {
+        logError(e, { component: 'AdminUserDetailScreen', context: { action: 'load' } });
         console.error('Admin get user error:', e);
       } finally {
         setLoading(false);
@@ -111,6 +113,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         setStripeInvoices(results[1].invoices);
         if (results[2]) setStripeSub(results[2].subscription);
       } catch (e) {
+        logError(e, { component: 'AdminUserDetailScreen', context: { action: 'loadStripe' } });
         console.error('Stripe data load error:', e);
       } finally {
         setStripeLoading(false);
@@ -132,6 +135,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         });
         setProfile(updated);
       } catch (e: any) {
+        logError(e, { component: 'AdminUserDetailScreen', context: { action: 'doSave' } });
         const msg = e?.message || 'Speichern fehlgeschlagen';
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Fehler', msg);
@@ -172,6 +176,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Erfolg', msg);
       } catch (e: any) {
+        logError(e, { component: 'AdminUserDetailScreen', context: { action: 'doGrant' } });
         const msg = e?.message || 'Trial konnte nicht vergeben werden';
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Fehler', msg);
@@ -211,6 +216,7 @@ export const AdminUserDetailScreen: React.FC<Props> = ({ navigation, route }) =>
         const updated = await adminGetUser(userId);
         setProfile(updated);
       } catch (e: any) {
+        logError(e, { component: 'AdminUserDetailScreen', context: { action: 'doAction' } });
         const msg = e?.message || 'Aktion fehlgeschlagen';
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Fehler', msg);

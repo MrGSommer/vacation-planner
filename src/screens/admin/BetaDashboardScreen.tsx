@@ -16,6 +16,7 @@ import { BetaFeedback } from '../../api/feedback';
 import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'BetaDashboard'> };
 
@@ -85,6 +86,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       if (es) setEchoStats(es);
       if (ls) setLandingStats(ls);
     } catch (e) {
+      logError(e, { component: 'BetaDashboardScreen', context: { action: 'loadAll' } });
       console.error('Beta dashboard load error:', e);
     }
   }, []);
@@ -104,6 +106,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       await adminUpdateFeedbackStatus(id, status);
       setFeedbacks(prev => prev.map(f => f.id === id ? { ...f, status } : f));
     } catch (e) {
+      logError(e, { component: 'BetaDashboardScreen', context: { action: 'handleFeedbackStatusChange' } });
       console.error('Status update error:', e);
     }
   };
@@ -116,6 +119,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       setTasks(prev => [task, ...prev]);
       setNewTaskTitle('');
     } catch (e) {
+      logError(e, { component: 'BetaDashboardScreen', context: { action: 'handleAddTask' } });
       console.error('Task create error:', e);
     }
   };
@@ -126,6 +130,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       const updated = await updateBetaTask(task.id, { status: nextStatus });
       setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     } catch (e) {
+      logError(e, { component: 'BetaDashboardScreen', context: { action: 'handleToggleTaskStatus' } });
       console.error('Task update error:', e);
     }
   };
@@ -135,6 +140,7 @@ export const BetaDashboardScreen: React.FC<Props> = ({ navigation }) => {
       await deleteBetaTask(id);
       setTasks(prev => prev.filter(t => t.id !== id));
     } catch (e) {
+      logError(e, { component: 'BetaDashboardScreen', context: { action: 'handleDeleteTask' } });
       console.error('Task delete error:', e);
     }
   };

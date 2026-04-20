@@ -3,6 +3,7 @@ import { BudgetCategory, Expense } from '../types/database';
 import * as budgetApi from '../api/budgets';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useRealtime, RealtimePayload } from './useRealtime';
+import { logError } from '../services/errorLogger';
 
 export const useBudget = (tripId: string) => {
   const { user } = useAuthContext();
@@ -20,6 +21,7 @@ export const useBudget = (tripId: string) => {
       setCategories(cats);
       setExpenses(exps);
     } catch (e) {
+      logError(e, { component: 'useBudget', context: { action: 'fetchData' } });
       console.error('Budget-Fehler:', e);
     } finally {
       setLoading(false);

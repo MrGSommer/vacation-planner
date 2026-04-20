@@ -9,6 +9,7 @@ import { trackEvent } from '../../api/analytics';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { getDayCount } from '../../utils/dateHelpers';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   trip: Trip;
@@ -90,6 +91,7 @@ Regeln:
         console.error('Failed to save recap:', e),
       );
     } catch (e: any) {
+      logError(e, { component: 'TripRecapCard', context: { action: 'generateRecap' } });
       setRecapError(e.message || 'Rückblick konnte nicht erstellt werden');
     } finally {
       setRecapLoading(false);

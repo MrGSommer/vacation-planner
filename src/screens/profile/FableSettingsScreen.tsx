@@ -7,6 +7,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { updateProfile } from '../../api/auth';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FableSettings'>;
 
@@ -42,7 +43,8 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableSettingsScreen', context: { action: 'handleSaveInstruction' } });
       Alert.alert('Fehler', 'Anweisung konnte nicht gespeichert werden');
     } finally {
       setSaving(false);
@@ -55,7 +57,8 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await updateProfile(user.id, { ai_trip_context_enabled: value });
       await refreshProfile();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableSettingsScreen', context: { action: 'handleContextToggle' } });
       setAiContextEnabled(!value);
     }
   };
@@ -66,7 +69,8 @@ export const FableSettingsScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await updateProfile(user.id, { [field]: value });
       await refreshProfile();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'FableSettingsScreen', context: { action: 'handleToggle' } });
       setter(!value);
     }
   };

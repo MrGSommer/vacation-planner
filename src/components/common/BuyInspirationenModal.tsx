@@ -5,6 +5,7 @@ import { supabase } from '../../api/supabase';
 import { STRIPE_CONFIG } from '../../config/stripe';
 import { colors, spacing, borderRadius, typography, iconSize, gradients } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 interface BuyInspirationenModalProps {
   visible: boolean;
@@ -43,6 +44,7 @@ export const BuyInspirationenModal: React.FC<BuyInspirationenModalProps> = ({
         throw new Error('Keine Checkout-URL erhalten');
       }
     } catch (e) {
+      logError(e, { severity: 'critical', component: 'BuyInspirationenModal', context: { action: 'handleBuy' } });
       setError((e as Error).message || 'Fehler beim Erstellen der Bezahlseite');
       setLoading(false);
     }

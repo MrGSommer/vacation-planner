@@ -17,6 +17,7 @@ import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { Announcement } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminAnnouncements'> };
 
@@ -99,6 +100,7 @@ export const AdminAnnouncementsScreen: React.FC<Props> = ({ navigation }) => {
         }
       }
     } catch (e) {
+      logError(e, { component: 'AdminAnnouncementsScreen', context: { action: 'handleEnhance' } });
       console.error('Enhance error:', e);
     } finally {
       setEnhancing(false);
@@ -124,6 +126,7 @@ export const AdminAnnouncementsScreen: React.FC<Props> = ({ navigation }) => {
       );
       setAnnouncements(withCounts);
     } catch (e) {
+      logError(e, { component: 'AdminAnnouncementsScreen', context: { action: 'loadAnnouncements' } });
       console.error('Load announcements error:', e);
     } finally {
       setLoading(false);
@@ -158,6 +161,7 @@ export const AdminAnnouncementsScreen: React.FC<Props> = ({ navigation }) => {
       setPriority('0');
       await loadAnnouncements();
     } catch (e) {
+      logError(e, { component: 'AdminAnnouncementsScreen', context: { action: 'handleCreate' } });
       console.error('Create announcement error:', e);
     } finally {
       setSaving(false);
@@ -169,6 +173,7 @@ export const AdminAnnouncementsScreen: React.FC<Props> = ({ navigation }) => {
       await adminUpdateAnnouncement(id, { active: !currentActive });
       setAnnouncements((prev) => prev.map((a) => a.id === id ? { ...a, active: !currentActive } : a));
     } catch (e) {
+      logError(e, { component: 'AdminAnnouncementsScreen', context: { action: 'handleToggleActive' } });
       console.error('Toggle error:', e);
     }
   };
@@ -178,6 +183,7 @@ export const AdminAnnouncementsScreen: React.FC<Props> = ({ navigation }) => {
       await adminDeleteAnnouncement(id);
       setAnnouncements((prev) => prev.filter((a) => a.id !== id));
     } catch (e) {
+      logError(e, { component: 'AdminAnnouncementsScreen', context: { action: 'handleDelete' } });
       console.error('Delete error:', e);
     }
   };

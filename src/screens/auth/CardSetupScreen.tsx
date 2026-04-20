@@ -7,6 +7,7 @@ import { supabase } from '../../api/supabase';
 import { colors, spacing, borderRadius, typography, shadows, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
 import { STRIPE_CONFIG } from '../../config/stripe';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -67,6 +68,7 @@ export const CardSetupScreen: React.FC<Props> = ({ navigation }) => {
         await loadStripeAndMount(cs);
       }
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'CardSetupScreen', context: { action: 'handleSetupCard' } });
       setError(e?.message || 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
@@ -133,6 +135,7 @@ export const CardSetupScreen: React.FC<Props> = ({ navigation }) => {
         navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       }
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'CardSetupScreen', context: { action: 'handleConfirmSetup' } });
       setError(e?.message || 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
@@ -160,6 +163,7 @@ export const CardSetupScreen: React.FC<Props> = ({ navigation }) => {
         }
       }
     } catch (e) {
+      logError(e, { severity: 'critical', component: 'CardSetupScreen', context: { action: 'handleSkip' } });
       console.error('Skip card setup error:', e);
     } finally {
       setLoading(false);

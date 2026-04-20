@@ -7,6 +7,7 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { colors, spacing, borderRadius, typography, gradients } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 const LOST_FEATURES: { icon: IconName; text: string }[] = [
   { icon: 'airplane-outline', text: 'Unbegrenzte Reisen' },
@@ -22,7 +23,7 @@ export const TrialExpiredModal: React.FC = () => {
   const { isTrialExpired } = useSubscription();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(DISMISSED_KEY) === 'true'; } catch { return false; }
+    try { return localStorage.getItem(DISMISSED_KEY) === 'true'; } catch (e) { logError(e, { component: 'TrialExpiredModal', context: { action: 'loadDismissedState' } }); return false; }
   });
 
   const dismiss = () => {

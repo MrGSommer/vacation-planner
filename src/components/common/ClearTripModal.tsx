@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Ale
 import { clearTripData, ClearTripOptions } from '../../api/trips';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   visible: boolean;
@@ -65,6 +66,7 @@ export const ClearTripModal: React.FC<Props> = ({ visible, tripId, onClose, onCl
       await clearTripData(tripId, options);
       onCleared();
     } catch (e) {
+      logError(e, { severity: 'critical', component: 'ClearTripModal', context: { action: 'handleClear' } });
       console.error('Clear trip data failed:', e);
       Alert.alert('Fehler', 'Daten konnten nicht gelöscht werden. Bitte versuche es erneut.');
     } finally {

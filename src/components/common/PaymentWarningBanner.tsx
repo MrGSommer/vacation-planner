@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { createPortalSession } from '../../api/stripe';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   message?: string | null;
@@ -15,7 +16,8 @@ export const PaymentWarningBanner: React.FC<Props> = ({ message }) => {
     try {
       const { url } = await createPortalSession();
       if (Platform.OS === 'web') window.location.href = url;
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'PaymentWarningBanner', context: { action: 'handlePress' } });
       // Ignore — user can try again
     } finally {
       setLoading(false);

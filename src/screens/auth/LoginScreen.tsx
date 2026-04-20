@@ -9,6 +9,7 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography, borderRadius } from '../../utils/theme';
 import { trackEvent } from '../../api/analytics';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -24,7 +25,9 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       await signIn(email.trim(), password);
       trackEvent('login_succeeded');
       showToast('Willkommen zurück!', 'success');
-    } catch {}
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'LoginScreen', context: { action: 'handleLogin' } });
+    }
   };
 
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -33,7 +36,8 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
-    } catch {
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'LoginScreen', context: { action: 'handleGoogleLogin' } });
       setGoogleLoading(false);
     }
   };

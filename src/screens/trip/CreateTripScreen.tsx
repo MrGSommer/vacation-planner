@@ -23,6 +23,7 @@ import { colors, spacing, borderRadius, typography, gradients, shadows } from '.
 import { CURRENCIES, DEFAULT_CURRENCY } from '../../utils/constants';
 import { formatDate } from '../../utils/dateHelpers';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -107,6 +108,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
         triggerDownload(photo);
       }
     } catch (e) {
+      logError(e, { component: 'CreateTripScreen', context: { action: 'handleUnsplashToggle' } });
       console.error(e);
     } finally {
       setUnsplashLoading(false);
@@ -232,6 +234,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
             await update(trip.id, { theme_color: themeColor } as any);
           }
         } catch (e) {
+          logError(e, { component: 'CreateTripScreen', context: { action: 'handleCreate' } });
           console.error('Cover upload failed:', e);
         }
       }
@@ -242,6 +245,7 @@ export const CreateTripScreen: React.FC<Props> = ({ navigation }) => {
 
       navigation.replace('TripDetail', { tripId: trip.id });
     } catch (e) {
+      logError(e, { component: 'CreateTripScreen', context: { action: 'handleCreate' } });
       console.error(e);
     }
   };

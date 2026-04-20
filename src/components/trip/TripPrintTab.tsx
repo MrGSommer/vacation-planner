@@ -11,6 +11,7 @@ import { fetchWeatherData } from '../../hooks/useWeather';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../common';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   tripId: string;
@@ -61,7 +62,8 @@ async function loadPrintData(tripId: string, options: PrintOptions): Promise<Pri
         tripId, trip.start_date, trip.end_date,
         trip.destination_lat, trip.destination_lng,
       );
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'TripPrintTab', context: { action: 'fetchWeatherData' } });
       // Weather is optional — continue without it
     }
   }
@@ -100,6 +102,7 @@ export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
       const printData = await loadPrintData(tripId, options);
       await printTripHtml(printData, options);
     } catch (e) {
+      logError(e, { component: 'TripPrintTab', context: { action: 'handlePrint' } });
       showToast('Fehler beim Laden der Daten', 'error');
     } finally {
       setLoading(false);
@@ -112,6 +115,7 @@ export const TripPrintTab: React.FC<Props> = ({ tripId, tripName }) => {
       const printData = await loadPrintData(tripId, options);
       await exportTripPdf(printData, options);
     } catch (e) {
+      logError(e, { component: 'TripPrintTab', context: { action: 'handleExportPdf' } });
       showToast('Fehler beim Erstellen der PDF', 'error');
     } finally {
       setLoading(false);

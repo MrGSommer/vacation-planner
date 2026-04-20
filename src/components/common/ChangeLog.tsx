@@ -5,6 +5,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { Avatar } from './Avatar';
 import { Icon } from '../../utils/icons';
 import { colors, spacing, borderRadius, typography, shadows, iconSize } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   tripId: string;
@@ -44,7 +45,9 @@ export const ChangeLog: React.FC<Props> = ({ tripId, visible, onClose }) => {
     try {
       const data = await getActivityLog(tripId);
       setEntries(data);
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'ChangeLog', context: { action: 'load' } });
+    }
     setLoading(false);
   }, [tripId]);
 

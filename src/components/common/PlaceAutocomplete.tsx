@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -81,7 +82,10 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
       setPredictions(mapped);
       if (mapped.length > 0) setShowDropdown(true);
       else setShowDropdown(false);
-    } catch { setPredictions([]); }
+    } catch (e) {
+      logError(e, { component: 'PlaceAutocomplete', context: { action: 'search' } });
+      setPredictions([]);
+    }
   }, []);
 
   const handleChange = (text: string) => {
@@ -111,7 +115,8 @@ export const PlaceAutocomplete: React.FC<Props> = ({ label, placeholder, value, 
           types: place.types || undefined,
         });
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'PlaceAutocomplete', context: { action: 'handleSelect' } });
       onSelect({ name: label, place_id: prediction.placeId, address: prediction.text?.text || '', lat: 0, lng: 0 });
     }
   };

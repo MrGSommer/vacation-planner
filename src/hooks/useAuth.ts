@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { signUpWithEmail, signInWithEmail, signInWithGoogle, signOut } from '../api/auth';
 import { useAuthContext } from '../contexts/AuthContext';
+import { logError } from '../services/errorLogger';
 
 export const useAuth = () => {
   const context = useAuthContext();
@@ -13,6 +14,7 @@ export const useAuth = () => {
     try {
       await signUpWithEmail(email, password, firstName, lastName);
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'useAuth', context: { action: 'handleSignUp' } });
       setError(e.message || 'Registrierung fehlgeschlagen');
       throw e;
     } finally {
@@ -26,6 +28,7 @@ export const useAuth = () => {
     try {
       await signInWithEmail(email, password);
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'useAuth', context: { action: 'handleSignIn' } });
       setError(e.message || 'Anmeldung fehlgeschlagen');
       throw e;
     } finally {
@@ -39,6 +42,7 @@ export const useAuth = () => {
     try {
       await signInWithGoogle();
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'useAuth', context: { action: 'handleSignInWithGoogle' } });
       setError(e.message || 'Google-Anmeldung fehlgeschlagen');
       throw e;
     } finally {
@@ -51,6 +55,7 @@ export const useAuth = () => {
     try {
       await signOut();
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'useAuth', context: { action: 'handleSignOut' } });
       setError(e.message || 'Abmeldung fehlgeschlagen');
     } finally {
       setLoading(false);

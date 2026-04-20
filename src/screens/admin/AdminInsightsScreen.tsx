@@ -24,6 +24,7 @@ import type {
 } from '../../types/analytics';
 import type { RevenueStats } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminInsights'> };
 
@@ -67,6 +68,7 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
       // Revenue from Stripe API — load async, don't block render
       adminGetRevenueStats().then(setRevenue).catch((e) => console.error('Revenue stats error:', e));
     } catch (e) {
+      logError(e, { component: 'AdminInsightsScreen', context: { action: 'loadAll' } });
       console.error('Insights load error:', e);
     } finally {
       setLoading(false);
@@ -84,6 +86,7 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
       setViolations(vios);
       setSuspended(susp);
     } catch (e) {
+      logError(e, { component: 'AdminInsightsScreen', context: { action: 'reloadFable' } });
       console.error('Fable reload error:', e);
     }
   }, []);
@@ -95,6 +98,7 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
       await adminSetFableSuspension(userId, until, hours === null ? undefined : `manual: ${hours}h via AdminInsights`);
       await reloadFable();
     } catch (e) {
+      logError(e, { component: 'AdminInsightsScreen', context: { action: 'handleSuspend' } });
       console.error('Suspension change failed:', e);
     } finally {
       setSuspendBusy(null);
@@ -106,7 +110,9 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const snap = await adminGetLiveSnapshot();
       setSnapshot(snap);
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'AdminInsightsScreen', context: { action: 'refreshLive' } });
+    }
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -123,6 +129,7 @@ export const AdminInsightsScreen: React.FC<Props> = ({ navigation }) => {
       const report = await adminGenerateInsightsReport({ focus: reportFocus });
       setReports((prev) => [report, ...prev].slice(0, 10));
     } catch (e: any) {
+      logError(e, { component: 'AdminInsightsScreen', context: { action: 'handleGenerateReport' } });
       setReportError(e?.message || 'Fehler beim Generieren');
     } finally {
       setReportLoading(false);

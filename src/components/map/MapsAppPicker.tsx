@@ -5,6 +5,7 @@ import { Icon } from '../../utils/icons';
 import { openInMaps, type MapsProvider } from '../../utils/openInMaps';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { updateProfile } from '../../api/auth';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   visible: boolean;
@@ -106,7 +107,8 @@ function getLocalPreference(): MapsProvider | null {
   if (Platform.OS !== 'web') return null;
   try {
     return localStorage.getItem('preferred_maps_app') as MapsProvider | null;
-  } catch {
+  } catch (e) {
+    logError(e, { component: 'MapsAppPicker', context: { action: 'getLocalPreference' } });
     return null;
   }
 }

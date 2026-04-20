@@ -9,6 +9,7 @@ import { getDisplayName } from '../../utils/profileHelpers';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Profile } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'> };
 
@@ -25,6 +26,7 @@ export const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
         setStats(s);
         setRecentUsers(r);
       } catch (e) {
+        logError(e, { component: 'AdminDashboardScreen', context: { action: 'load' } });
         console.error('Admin stats error:', e);
       } finally {
         setLoading(false);

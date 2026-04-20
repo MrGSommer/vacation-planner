@@ -27,6 +27,7 @@ import { StopsSkeleton } from '../../components/skeletons/StopsSkeleton';
 import { RouteMapModal } from '../../components/map/RouteMapModal';
 import { AiTripModal } from '../../components/ai/AiTripModal';
 import { usePresence } from '../../hooks/usePresence';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Stops'>;
 
@@ -289,6 +290,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
     } catch (e) {
+      logError(e, { component: 'StopsScreen', context: { action: 'loadData' } });
       console.error(e);
     } finally {
       if (loadIdRef.current === thisLoadId) setLoading(false);
@@ -418,6 +420,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
       setEditingActivity(null);
       await loadData();
     } catch (e) {
+      logError(e, { component: 'StopsScreen', context: { action: 'handleModalSave' } });
       Alert.alert('Fehler', editingActivity ? 'Änderung fehlgeschlagen' : 'Aktivität konnte nicht erstellt werden');
     }
   };
@@ -440,6 +443,7 @@ export const StopsScreen: React.FC<Props> = ({ navigation, route }) => {
         showToast('Eintrag gelöscht', 'success');
         await loadData();
       } catch (e: any) {
+        logError(e, { severity: 'critical', component: 'StopsScreen', context: { action: 'handleDelete' } });
         showToast('Fehler beim Löschen', 'error');
         setActivities(prevActivities);
       }

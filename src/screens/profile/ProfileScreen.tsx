@@ -18,6 +18,7 @@ import { colors, spacing, borderRadius, typography, iconSize } from '../../utils
 import { Icon, SETTINGS_ICONS, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import appJson from '../../../app.json';
 import { BUILD_NUMBER, BUILD_STAMP } from '../../utils/buildInfo';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -53,6 +54,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       // Account deleted — signOut already called in deleteAccount()
       setShowDeleteModal(false);
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'ProfileScreen', context: { action: 'handleDeleteAccount' } });
       setDeleteError(e?.message || 'Kontolöschung fehlgeschlagen');
     } finally {
       setDeleteLoading(false);
@@ -197,6 +199,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 const { url } = await createPortalSession();
                 if (Platform.OS === 'web') window.location.href = url;
               } catch (e: any) {
+                logError(e, { severity: 'critical', component: 'ProfileScreen', context: { action: 'deleteAccount' } });
                 setStripeError(e?.message || 'Abo-Verwaltung konnte nicht geladen werden');
               } finally {
                 setStripeLoading(null);

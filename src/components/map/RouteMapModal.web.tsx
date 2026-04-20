@@ -5,6 +5,7 @@ import { Activity } from '../../types/database';
 import { DirectionsResult, formatDuration, formatDistance } from '../../services/directions';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   visible: boolean;
@@ -213,7 +214,8 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
                 polylinesRef.current.push(pl);
               });
             }
-          } catch {
+          } catch (e) {
+            logError(e, { component: 'RouteMapModal', context: { action: 'modes' } });
             if (cancelled) return;
             // Fallback: simple polylines — transport-type-aware if available
             if (transportActivities && transportActivities.length > 0) {
@@ -255,6 +257,7 @@ export const RouteMapModal: React.FC<Props> = ({ visible, onClose, stops, travel
           }
         }
       } catch (e) {
+        logError(e, { component: 'RouteMapModal', context: { action: 'initMap' } });
         if (!cancelled) setError('Karte konnte nicht geladen werden');
       }
     };

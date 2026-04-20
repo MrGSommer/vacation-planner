@@ -5,6 +5,7 @@ import { Header, Input, Button } from '../../components/common';
 import { resetPassword } from '../../api/auth';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -22,6 +23,7 @@ export const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
       showToast('E-Mail zum Zurücksetzen wurde gesendet', 'success', 4000);
       navigation.navigate('Login');
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'ForgotPasswordScreen', context: { action: 'handleReset' } });
       setError(e.message || 'Zurücksetzen fehlgeschlagen');
     } finally {
       setLoading(false);

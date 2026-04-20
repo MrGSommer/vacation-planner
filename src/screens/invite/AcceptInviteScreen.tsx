@@ -10,6 +10,7 @@ import { TripInvitation } from '../../types/database';
 import { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AcceptInvite'>;
 
@@ -31,6 +32,7 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
         setInvitation(data.invitation);
         setTrip(data.trip);
       } catch (e: any) {
+        logError(e, { component: 'AcceptInviteScreen', context: { action: 'loadInvite' } });
         setError(e.message || 'Einladung nicht gefunden oder ungültig.');
       } finally {
         setLoading(false);
@@ -64,11 +66,13 @@ export const AcceptInviteScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         }
       } catch (e) {
+        logError(e, { component: 'AcceptInviteScreen', context: { action: 'setAccepting' } });
         console.error('Auto-adjust group_type failed:', e);
       }
       setPendingInviteToken(null);
       setDone(true);
     } catch (e: any) {
+      logError(e, { component: 'AcceptInviteScreen', context: { action: 'handleAccept' } });
       setError(e.message || 'Fehler beim Annehmen der Einladung');
     } finally {
       setAccepting(false);

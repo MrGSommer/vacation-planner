@@ -35,6 +35,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { MUSIC_TRACKS, MusicTrack, getMusicUrl } from '../../config/music';
 import { SlideshowShareModal } from '../../components/photos/SlideshowShareModal';
 import { trackEvent } from '../../api/analytics';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Photos'>;
 
@@ -147,6 +148,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       }
     } catch (e) {
+      logError(e, { component: 'PhotosScreen', context: { action: 'loadPhotos' } });
       console.error(e);
     } finally {
       setLoading(false);
@@ -245,6 +247,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           }
           await loadPhotos();
         } catch (e: any) {
+          logError(e, { severity: 'critical', component: 'PhotosScreen', context: { action: 'handleUploadPhotos' } });
           if (e?.code === 'photo_limit_reached' || e?.message === 'photo_limit_reached') {
             trackEvent('paywall_shown', { trigger: 'photo_limit_reached' });
             showToast(
@@ -307,6 +310,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       await loadPhotos();
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'PhotosScreen', context: { action: 'handleCameraCapture' } });
       if (e?.code === 'photo_limit_reached' || e?.message === 'photo_limit_reached') {
         trackEvent('paywall_shown', { trigger: 'photo_limit_reached' });
         showToast('Foto-Limit erreicht — Premium für unbegrenzte Fotos', 'error');
@@ -339,6 +343,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       await loadPhotos();
     } catch (e) {
+      logError(e, { severity: 'critical', component: 'PhotosScreen', context: { action: 'handleDeletePhoto' } });
       showToast('Foto konnte nicht gelöscht werden', 'error');
     } finally {
       setDeleting(false);
@@ -360,6 +365,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       setPhotos(prev => prev.map(p => p.id === selectedPhoto.id ? { ...p, caption: newCaption } : p));
       setSelectedPhoto(prev => prev ? { ...prev, caption: newCaption } : null);
     } catch (e) {
+      logError(e, { component: 'PhotosScreen', context: { action: 'handleSaveCaption' } });
       showToast('Beschreibung konnte nicht gespeichert werden', 'error');
     }
     setEditingCaption(false);
@@ -389,6 +395,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       exitSelectMode();
       await loadPhotos();
     } catch (e) {
+      logError(e, { severity: 'critical', component: 'PhotosScreen', context: { action: 'handleBulkDelete' } });
       showToast('Einige Fotos konnten nicht gelöscht werden', 'error');
     } finally {
       setBulkProcessing(false);
@@ -450,6 +457,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           URL.revokeObjectURL(blobUrl);
         }
       } catch (e) {
+        logError(e, { component: 'PhotosScreen', context: { action: 'handleExportWeb' } });
         showToast('Fotos konnten nicht geteilt werden', 'error');
       }
       return;
@@ -466,6 +474,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
         await Sharing.shareAsync(url, { mimeType: 'image/jpeg', dialogTitle: 'Foto speichern oder teilen' });
       }
     } catch (e) {
+      logError(e, { component: 'PhotosScreen', context: { action: 'handleExportNative' } });
       showToast('Fotos konnten nicht geteilt werden', 'error');
     }
   };
@@ -478,6 +487,7 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       await handleExport(selected.map(p => p.url), selected);
       exitSelectMode();
     } catch (e) {
+      logError(e, { component: 'PhotosScreen', context: { action: 'handleBulkExport' } });
       showToast('Export fehlgeschlagen', 'error');
     } finally {
       setBulkProcessing(false);
@@ -748,7 +758,8 @@ export const PhotosScreen: React.FC<Props> = ({ navigation, route }) => {
       await insertInspirationPhotos(tripId, user.id, inspirationLocations);
       await loadPhotos();
       showToast('Inspirationsfotos hinzugefügt');
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'PhotosScreen', context: { action: 'handleAddInspirationPhotos' } });
       showToast('Fehler beim Laden der Fotos', 'error');
     } finally { setInspirationLoading(false); }
   };

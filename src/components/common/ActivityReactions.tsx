@@ -4,6 +4,7 @@ import { ActivityReaction } from '../../types/database';
 import { getReactions, toggleReaction } from '../../api/comments';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
+import { logError } from '../../services/errorLogger';
 
 const EMOJIS = ['👍', '👎', '❤️', '🤔'] as const;
 
@@ -19,7 +20,9 @@ export const ActivityReactions: React.FC<Props> = ({ activityId }) => {
     try {
       const data = await getReactions(activityId);
       setReactions(data);
-    } catch {}
+    } catch (e) {
+      logError(e, { component: 'ActivityReactions', context: { action: 'load' } });
+    }
   }, [activityId]);
 
   useEffect(() => { load(); }, [load]);
@@ -41,7 +44,8 @@ export const ActivityReactions: React.FC<Props> = ({ activityId }) => {
     try {
       await toggleReaction(activityId, user.id, emoji);
       await load(); // Refresh from server
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ActivityReactions', context: { action: 'existing' } });
       await load(); // Revert on error
     }
   };

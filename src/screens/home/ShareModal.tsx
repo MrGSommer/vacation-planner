@@ -34,6 +34,7 @@ import { Icon } from '../../utils/icons';
 import { Button, Avatar } from '../../components/common';
 import { TripPrintTab } from '../../components/trip/TripPrintTab';
 import { trackEvent } from '../../api/analytics';
+import { logError } from '../../services/errorLogger';
 
 interface ShareModalProps {
   visible: boolean;
@@ -95,8 +96,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     try {
       const data = await getCollaborators(tripId);
       setMembers(data);
-    } catch {
-      // ignore
+    } catch (e) {
+      logError(e, { component: 'ShareModal', context: { action: 'loadMembers' } });
     } finally {
       setMembersLoading(false);
     }
@@ -108,8 +109,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       const { url, share_config } = await getOrCreateInviteLink(tripId, userId, type, role);
       setGeneratedUrl(url);
       if (share_config) setShareConfig(share_config);
-    } catch {
-      // No existing link yet, that's fine
+    } catch (e) {
+      logError(e, { component: 'ShareModal', context: { action: 'loadExistingLink' } });
       setGeneratedUrl(null);
     } finally {
       setLoading(false);
@@ -123,7 +124,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         const { url } = await resetInviteLink(tripId, userId, type, role);
         setGeneratedUrl(url);
         showToast('Link zurückgesetzt', 'success');
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'ShareModal', context: { action: 'handleResetLink' } });
         showToast('Fehler beim Zurücksetzen', 'error');
       } finally {
         setLoading(false);
@@ -163,7 +165,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     setShareConfig(updated);
     try {
       await updateShareConfig(tripId, updated);
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ShareModal', context: { action: 'handleToggleShareConfig' } });
       // Revert on error
       setShareConfig(shareConfig);
       showToast('Fehler beim Speichern', 'error');
@@ -190,7 +193,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         await removeCollaborator(member.id);
         setMembers(prev => prev.filter(m => m.id !== member.id));
         showToast(`${name} entfernt`, 'success');
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'ShareModal', context: { action: 'handleRemoveMember' } });
         showToast('Fehler beim Entfernen', 'error');
       }
     };
@@ -220,7 +224,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       setMembers(prev =>
         prev.map(m => (m.id === member.id ? { ...m, role: newRole } : m)),
       );
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'ShareModal', context: { action: 'handleToggleRole' } });
       showToast('Fehler beim Ändern der Rolle', 'error');
     }
   };
@@ -238,6 +243,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           handleOwnerLeaveNoCollabs();
         }
       } catch (e: any) {
+        logError(e, { component: 'ShareModal', context: { action: 'handleLeaveTrip' } });
         showToast(e.message || 'Fehler beim Verlassen', 'error');
       }
     };
@@ -264,7 +270,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         await deleteTrip(tripId);
         showToast('Reise gelöscht', 'success');
         handleClose();
-      } catch {
+      } catch (e) {
+        logError(e, { severity: 'critical', component: 'ShareModal', context: { action: 'handleOwnerLeaveNoCollabs' } });
         showToast('Fehler beim Löschen', 'error');
       }
     };
@@ -293,6 +300,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       showToast('Ownership übertragen. Du hast die Reise verlassen.', 'success');
       handleClose();
     } catch (e: any) {
+      logError(e, { severity: 'critical', component: 'ShareModal', context: { action: 'handleTransferOwnership' } });
       showToast(e.message || 'Fehler bei der Übertragung', 'error');
     } finally {
       setTransferLoading(false);

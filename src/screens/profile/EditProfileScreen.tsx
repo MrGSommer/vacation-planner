@@ -17,6 +17,7 @@ import { supabase } from '../../api/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
 
@@ -78,7 +79,8 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
       setAvatarUrl(urlData.publicUrl + '?t=' + Date.now());
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'EditProfileScreen', context: { action: 'pickImage' } });
       showToast('Bild-Upload fehlgeschlagen', 'error');
     }
   };
@@ -98,7 +100,8 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
       }
       showToast('Profil gespeichert', 'success');
       navigation.goBack();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'EditProfileScreen', context: { action: 'handleSave' } });
       showToast('Speichern fehlgeschlagen', 'error');
     } finally {
       setSaving(false);

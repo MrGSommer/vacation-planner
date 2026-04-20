@@ -19,6 +19,7 @@ import { MapNearbySearch } from '../../components/map/MapNearbySearch';
 import { MapsAppPicker, tryOpenMapsDirectly } from '../../components/map/MapsAppPicker';
 import { OfflineMapView } from '../../components/map/OfflineMapView';
 import { prefetchTripMapTiles, computeBoundingBox } from '../../utils/mapTileCache';
+import { logError } from '../../services/errorLogger';
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -173,6 +174,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       const map = googleMapRef.current;
       if (map) map.panTo({ lat: poi.lat, lng: poi.lng });
     } catch (err) {
+      logError(err, { component: 'MapScreen', context: { action: 'handlePoiClick' } });
       console.error('POI details error:', err);
     }
   }, []);
@@ -255,6 +257,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       setNearbyResultCount(markers.length);
       setNearbyChipId(chipId);
     } catch (err) {
+      logError(err, { component: 'MapScreen', context: { action: 'handleNearbySearch' } });
       console.error('Nearby search error:', err);
     }
   }, [nearbyMarkers, handlePoiClick]);
@@ -518,6 +521,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       const hasPoints = s.length > 0 || a.some((act: Activity) => act.location_lat);
       if (hasPoints) map.fitBounds(bounds, 60);
     } catch (e) {
+      logError(e, { component: 'MapScreen', context: { action: 'initMap' } });
       console.error('Map init error:', e);
     } finally {
       setLoading(false);
@@ -554,6 +558,7 @@ export const MapScreen: React.FC<Props> = ({ navigation, route }) => {
       setLoading(true);
       await initMap();
     } catch (e) {
+      logError(e, { component: 'MapScreen', context: { action: 'handleAddActivity' } });
       Alert.alert('Fehler', 'Aktivität konnte nicht erstellt werden');
     }
   };

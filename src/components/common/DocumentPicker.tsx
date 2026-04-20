@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { openDocument, cacheDocument, uncacheDocument } from '../../utils/documentCache';
 import { colors, spacing, borderRadius, typography } from '../../utils/theme';
 import { Icon, IconName } from '../../utils/icons';
+import { logError } from '../../services/errorLogger';
 
 interface Props {
   activityId: string;
@@ -47,7 +48,8 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
       if (navigator.onLine) {
         docs.forEach(d => cacheDocument(d.url));
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'DocumentPicker', context: { action: 'loadDocuments' } });
       // ignore
     } finally {
       setLoading(false);
@@ -101,7 +103,8 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
             file.size,
           );
           uploaded.push(doc);
-        } catch {
+        } catch (e) {
+          logError(e, { component: 'DocumentPicker', context: { action: 'uploadDocument' } });
           failed++;
         }
       }
@@ -122,7 +125,8 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
       } else {
         showToast('Upload fehlgeschlagen', 'error');
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'DocumentPicker', context: { action: 'handlePick' } });
       showToast('Upload fehlgeschlagen', 'error');
     } finally {
       setUploading(false);
@@ -136,7 +140,8 @@ export const DocumentPicker: React.FC<Props> = ({ activityId, tripId, userId, re
         uncacheDocument(doc.url);
         setDocuments(prev => prev.filter(d => d.id !== doc.id));
         showToast('Dokument gelöscht', 'success');
-      } catch {
+      } catch (e) {
+        logError(e, { component: 'DocumentPicker', context: { action: 'doDelete' } });
         showToast('Löschen fehlgeschlagen', 'error');
       }
     };

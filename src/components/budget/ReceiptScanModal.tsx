@@ -16,6 +16,7 @@ import { requireOnline } from '../../utils/offlineGate';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { Icon } from '../../utils/icons';
 import { DatePickerInput } from '../common/DatePickerInput';
+import { logError } from '../../services/errorLogger';
 
 const CATEGORY_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8C42', '#6C5CE7'];
 
@@ -164,6 +165,7 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
       // Store imageUrl for save
       imageUrlRef.current = imageUrl;
     } catch (e: any) {
+      logError(e, { component: 'ReceiptScanModal', context: { action: 'handleFileSelect' } });
       setError(e.message || 'Beleg konnte nicht gelesen werden');
       setStep('processing'); // Stay on processing to show error + retry
     } finally {
@@ -510,7 +512,9 @@ export const ReceiptScanModal: React.FC<ReceiptScanModalProps> = ({
                           setCategoryId(created.id);
                           setNewCatName('');
                           setShowNewCategory(false);
-                        } catch {}
+                        } catch (e) {
+                          logError(e, { component: 'ReceiptScanModal', context: { action: 'createCategory' } });
+                        }
                       }}
                       disabled={!newCatName.trim()}
                       style={{ marginTop: spacing.xs }}

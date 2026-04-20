@@ -9,6 +9,7 @@ import { isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPus
 import { supabase } from '../../api/supabase';
 import { colors, spacing, borderRadius, typography, shadows } from '../../utils/theme';
 import { RootStackParamList } from '../../types/navigation';
+import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>;
 
@@ -134,6 +135,7 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
         }`
       );
     } catch (e: any) {
+      logError(e, { component: 'NotificationsScreen', context: { action: 'togglePushNotifications' } });
       Alert.alert('Fehler', `${e.message || 'Test-Push fehlgeschlagen'}\n\nTipp: Push deaktivieren, erneut aktivieren.`);
     } finally {
       setTestPushLoading(false);
@@ -146,7 +148,8 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await updateProfile(user.id, { [field]: value });
       await refreshProfile();
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'NotificationsScreen', context: { action: 'savePreference' } });
       rollback();
       Alert.alert('Fehler', 'Einstellung konnte nicht gespeichert werden.');
     } finally {
@@ -173,7 +176,8 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
         await unsubscribeFromPush(user.id);
         setPushEnabled(false);
       }
-    } catch {
+    } catch (e) {
+      logError(e, { component: 'NotificationsScreen', context: { action: 'handlePushToggle' } });
       Alert.alert('Fehler', 'Push-Einstellung konnte nicht gespeichert werden.');
     } finally {
       setPushSaving(false);

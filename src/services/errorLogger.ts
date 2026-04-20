@@ -54,6 +54,15 @@ export function logError(
         ? error
         : JSON.stringify(error);
 
+    const stack = error instanceof Error && error.stack
+      ? error.stack.split('\n').slice(0, 5).join('\n')
+      : undefined;
+
+    const enrichedContext = {
+      ...context,
+      ...(stack ? { stack } : {}),
+    };
+
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       supabase.from('app_error_logs').insert({
@@ -62,7 +71,7 @@ export function logError(
         error_message: truncate(message, MAX_MESSAGE_LENGTH),
         error_code: errorCode || null,
         component,
-        context: context || {},
+        context: enrichedContext,
         device_info: getDeviceInfo(),
         app_version: `${appJson.expo.version}+${BUILD_NUMBER}`,
       }).then(() => {
