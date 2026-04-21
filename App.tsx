@@ -9,6 +9,7 @@ import { SubscriptionProvider } from './src/contexts/SubscriptionContext';
 import { TripProvider } from './src/contexts/TripContext';
 import { ToastProvider, useToast } from './src/contexts/ToastContext';
 import { PlanGenerationProvider } from './src/contexts/PlanGenerationContext';
+import { OfflineSyncProvider } from './src/contexts/OfflineSyncContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { UpdateBanner } from './src/components/common/UpdateBanner';
@@ -70,6 +71,7 @@ export default function App() {
             <SessionStartTracker />
             <UnhandledRejectionHandler>
               <AuthProvider>
+                <OfflineSyncProvider>
                 <SubscriptionProvider>
                   <TripProvider>
                     <PlanGenerationProvider>
@@ -80,6 +82,7 @@ export default function App() {
                     </PlanGenerationProvider>
                   </TripProvider>
                 </SubscriptionProvider>
+              </OfflineSyncProvider>
               </AuthProvider>
             </UnhandledRejectionHandler>
           </ErrorBoundary>

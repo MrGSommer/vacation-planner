@@ -15,9 +15,10 @@ interface Props {
   trip: Trip;
   activityCount: number;
   totalSpent: number;
+  isPremium?: boolean;
 }
 
-export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent }) => {
+export const TripRecapCard: React.FC<Props> = ({ trip, activityCount, totalSpent, isPremium }) => {
   const [photoCount, setPhotoCount] = useState(0);
   const [stopCount, setStopCount] = useState(0);
   const [recap, setRecap] = useState<string | null>(trip.fable_recap || null);
@@ -137,7 +138,7 @@ Regeln:
               <Icon name="sparkles-outline" size={iconSize.md} color={colors.accent} />
               <View>
                 <Text style={styles.fableBtnText}>Fable Rückblick</Text>
-                <Text style={styles.fableBtnHint}>1 Inspiration</Text>
+                {!isPremium && <Text style={styles.fableBtnHint}>1 Inspiration</Text>}
               </View>
             </>
           )}

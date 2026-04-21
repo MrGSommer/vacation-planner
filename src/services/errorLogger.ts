@@ -41,6 +41,25 @@ function isRateLimited(): boolean {
   return false;
 }
 
+// Network/connectivity errors are not application bugs — skip logging them
+const NETWORK_ERROR_PATTERNS = [
+  'failed to fetch',
+  'load failed',
+  'networkerror',
+  'network request failed',
+  'net::err_',
+  'the internet connection appears to be offline',
+  'the network connection was lost',
+  'a server with the specified hostname could not be found',
+  'the operation couldn\'t be completed',
+  'aborted',
+];
+
+function isNetworkError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return NETWORK_ERROR_PATTERNS.some(p => lower.includes(p));
+}
+
 export function logError(
   error: unknown,
   { severity = 'error', component, errorCode, context }: LogOptions,
@@ -53,6 +72,9 @@ export function logError(
       : typeof error === 'string'
         ? error
         : JSON.stringify(error);
+
+    // Skip network/connectivity errors — these are not application bugs
+    if (isNetworkError(message)) return;
 
     const stack = error instanceof Error && error.stack
       ? error.stack.split('\n').slice(0, 5).join('\n')

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ImageBackground, Linking, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +36,7 @@ import { TripRecapCard } from '../../components/trip/TripRecapCard';
 import { ChangeLog } from '../../components/common/ChangeLog';
 import { usePresence } from '../../hooks/usePresence';
 import { Icon } from '../../utils/icons';
+import { useOfflineSync } from '../../contexts/OfflineSyncContext';
 import { logError } from '../../services/errorLogger';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripDetail'>;
@@ -59,6 +60,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { user } = useAuthContext();
   const { trips: allTrips } = useTripContext();
   const { isFeatureAllowed, aiCredits, isTripEditable, isPremium } = useSubscription();
+  const { isOffline, getStatus, enableOffline, disableOffline } = useOfflineSync();
   const insets = useSafeAreaInsets();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [activityCount, setActivityCount] = useState(0);
@@ -74,7 +76,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const menuBtnRef = useRef<View>(null);
-  const MENU_HEIGHT = 200;
+  const MENU_HEIGHT = 250;
   const [showClearModal, setShowClearModal] = useState(false);
   const [showChangeLog, setShowChangeLog] = useState(false);
   const presenceUsers = usePresence(tripId, 'TripDetail');
@@ -429,6 +431,28 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.erlebtBadgeText}>Erlebt</Text>
           </View>
         )}
+        {Platform.OS === 'web' && isOffline(tripId) && (() => {
+          const s = getStatus(tripId);
+          if (s.status === 'synced') return (
+            <View style={styles.offlineBadge}>
+              <Icon name="checkmark-circle" size={14} color={colors.success} />
+              <Text style={styles.offlineBadgeText}>Offline</Text>
+            </View>
+          );
+          if (s.status === 'syncing') return (
+            <View style={styles.offlineBadge}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.offlineBadgeText}>Sync...</Text>
+            </View>
+          );
+          if (s.status === 'error') return (
+            <TouchableOpacity style={styles.offlineBadgeError} onPress={() => enableOffline(tripId)}>
+              <Icon name="alert-circle" size={14} color={colors.error} />
+              <Text style={[styles.offlineBadgeText, { color: colors.error }]}>Fehler</Text>
+            </TouchableOpacity>
+          );
+          return null;
+        })()}
       </View>
       <Text style={styles.destination}>{trip.destination}</Text>
       <Text style={styles.dates}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
@@ -464,8 +488,8 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           </LinearGradient>
         )}
 
-        {/* When notes exist: scrollable layout. Otherwise: fixed layout with map filling space */}
-        {trip.notes ? (
+        {/* Scrollable dashboard when notes or recap exist. Otherwise: fixed layout with map filling space */}
+        {trip.notes || trip.status === 'completed' ? (
         <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: spacing.lg }}>
           {/* Stats */}
           <View style={[styles.statsRow, { backgroundColor: themeTint }]}>
@@ -510,7 +534,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
           {/* Post-Trip Recap */}
           {trip.status === 'completed' && (
-            <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} />
+            <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} isPremium={isPremium} />
           )}
 
           {/* Map — fixed height when notes present */}
@@ -557,7 +581,7 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             </Card>
           )}
 
-          {!mapFullscreen && (
+          {!mapFullscreen && trip.notes && (
             <Card style={[styles.notesCard, { backgroundColor: themeTint }]}>
               <Text style={styles.notesTitle}>Notizen</Text>
               <Text style={styles.notesText}>{linkifyText(trip.notes)}</Text>
@@ -606,11 +630,6 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               </Text>
             </TouchableOpacity>
           </View>
-
-          {/* Post-Trip Recap */}
-          {trip.status === 'completed' && (
-            <TripRecapCard trip={trip} activityCount={activityCount} totalSpent={totalSpent} />
-          )}
 
           {/* Map — fills remaining space */}
           {Platform.OS === 'web' && (
@@ -792,6 +811,22 @@ export const TripDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               <Icon name="time-outline" size={18} color={colors.text} />
               <Text style={styles.menuLabel}>Verlauf</Text>
             </TouchableOpacity>
+            {Platform.OS === 'web' && trip.status !== 'completed' && trip.status !== 'archived' && (
+              <>
+                <View style={styles.menuDivider} />
+                {isOffline(tripId) ? (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); disableOffline(tripId); }}>
+                    <Icon name="cloud-offline-outline" size={18} color={colors.textSecondary} />
+                    <Text style={styles.menuLabel}>Offline entfernen</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); enableOffline(tripId); }}>
+                    <Icon name="cloud-download-outline" size={18} color={colors.primary} />
+                    <Text style={styles.menuLabel}>Offline verfügbar machen</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
             {editable && (
               <>
                 <View style={styles.menuDivider} />
@@ -874,4 +909,7 @@ const styles = StyleSheet.create({
   notesCard: { marginBottom: spacing.lg },
   notesTitle: { ...typography.h3, marginBottom: spacing.sm },
   notesText: { ...typography.body, color: colors.textSecondary },
+  offlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  offlineBadgeError: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  offlineBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
 });

@@ -163,6 +163,26 @@ export function invalidateCache(prefix: string): void {
   }
 }
 
+/** Purge all cached data for a specific trip (memory + localStorage). */
+export function purgeTripCache(tripId: string): void {
+  for (const key of cache.keys()) {
+    if (key.includes(tripId)) {
+      cache.delete(key);
+    }
+  }
+  if (isWeb()) {
+    const map = getStorageMap();
+    let changed = false;
+    for (const key of Object.keys(map)) {
+      if (key.includes(tripId)) {
+        delete map[key];
+        changed = true;
+      }
+    }
+    if (changed) saveStorageMap(map);
+  }
+}
+
 export function clearCache(): void {
   cache.clear();
   inflight.clear();

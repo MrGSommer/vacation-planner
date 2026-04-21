@@ -13,29 +13,60 @@ function isSupported(): boolean {
   return Platform.OS === 'web' && 'caches' in window;
 }
 
-/** Cache a single document URL. No-op if already cached. */
-export async function cacheDocument(url: string): Promise<void> {
-  if (!isSupported() || !url) return;
+/**
+ * Cache a single document URL into wayfable-docs.
+ * Uses mode: 'cors' + credentials: 'omit' for cross-origin Supabase Storage.
+ * Returns true if cached successfully, false otherwise.
+ */
+export async function cacheDocument(url: string): Promise<boolean> {
+  if (!isSupported() || !url) return false;
   try {
     const cache = await caches.open(DOCS_CACHE);
     const existing = await cache.match(url);
-    if (existing) return;
-    const response = await fetch(url);
-    if (response.ok) {
-      await cache.put(url, response);
+    if (existing) return true;
+
+    // Explicit CORS + omit credentials for Supabase Storage public URLs
+    const response = await fetch(url, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-cache', // bypass browser HTTP cache to get fresh response
+    });
+
+    if (!response.ok) {
+      console.warn(`[DocCache] fetch failed: ${response.status} ${response.statusText} for ${url.slice(0, 80)}`);
+      return false;
     }
-  } catch {
-    // Silent — best-effort caching
+
+    // Clone before consuming — safety against double-read
+    await cache.put(url, response.clone());
+
+    // Verify it was actually stored
+    const verify = await cache.match(url);
+    if (!verify) {
+      console.warn(`[DocCache] put succeeded but verify failed for ${url.slice(0, 80)}`);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn(`[DocCache] error caching ${url.slice(0, 80)}:`, err);
+    return false;
   }
 }
 
-/** Cache multiple document URLs in parallel (throttled). */
-export async function cacheDocuments(urls: string[]): Promise<void> {
-  if (!isSupported()) return;
+/** Cache multiple document URLs in parallel (throttled). Returns count of successfully cached. */
+export async function cacheDocuments(urls: string[]): Promise<number> {
+  if (!isSupported()) return 0;
+  let cached = 0;
   const BATCH = 4;
   for (let i = 0; i < urls.length; i += BATCH) {
-    await Promise.all(urls.slice(i, i + BATCH).map(cacheDocument));
+    const results = await Promise.all(urls.slice(i, i + BATCH).map(cacheDocument));
+    cached += results.filter(Boolean).length;
   }
+  if (urls.length > 0) {
+    console.log(`[DocCache] cached ${cached}/${urls.length} documents`);
+  }
+  return cached;
 }
 
 /** Check if a document URL is in cache. */
@@ -53,7 +84,7 @@ export async function isDocumentCached(url: string): Promise<boolean> {
 /**
  * Open a document, serving from cache when offline.
  * Online: opens URL directly (fast, uses CDN).
- * Offline: fetches from cache, creates blob URL, opens in new tab.
+ * Offline: fetches from wayfable-docs cache, then falls back to SW cache.
  */
 export async function openDocument(url: string, fileName?: string): Promise<void> {
   if (Platform.OS !== 'web') {
@@ -68,7 +99,7 @@ export async function openDocument(url: string, fileName?: string): Promise<void
     return;
   }
 
-  // Offline: serve from cache
+  // Offline: serve from wayfable-docs cache
   try {
     const cache = await caches.open(DOCS_CACHE);
     const cached = await cache.match(url);
@@ -76,7 +107,6 @@ export async function openDocument(url: string, fileName?: string): Promise<void
       const blob = await cached.blob();
       const objectUrl = URL.createObjectURL(blob);
       window.open(objectUrl, '_blank');
-      // Clean up after a delay (browser needs time to start loading)
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
       return;
     }
@@ -84,7 +114,7 @@ export async function openDocument(url: string, fileName?: string): Promise<void
     // Fall through
   }
 
-  // Also check the SW's main cache as fallback
+  // Also check ALL other caches as fallback (SW versioned caches etc.)
   try {
     const keys = await caches.keys();
     for (const key of keys) {
@@ -106,6 +136,17 @@ export async function openDocument(url: string, fileName?: string): Promise<void
   // Nothing cached — show error
   if (typeof alert !== 'undefined') {
     alert(`"${fileName || 'Dokument'}" ist offline nicht verfügbar. Bitte verbinde dich mit dem Internet.`);
+  }
+}
+
+/** Remove multiple document URLs from cache (e.g. when disabling offline for a trip). */
+export async function uncacheTripDocuments(urls: string[]): Promise<void> {
+  if (!isSupported() || urls.length === 0) return;
+  try {
+    const cache = await caches.open(DOCS_CACHE);
+    await Promise.all(urls.map(url => cache.delete(url)));
+  } catch {
+    // Silent
   }
 }
 

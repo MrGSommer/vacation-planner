@@ -193,26 +193,54 @@ export const AppNavigator: React.FC = () => {
   }, [session, pendingInviteToken, setPendingInviteToken]);
 
   // After login: redirect to pending path (non-invite deep links)
+  // Uses direct navigation instead of popstate to avoid race conditions with linking config changes
   useEffect(() => {
     if (!prevSessionRef.current && session) {
       setTimeout(() => {
         if (pendingRedirectPath) {
           const path = pendingRedirectPath;
           setPendingRedirectPath(null);
-          if (typeof window !== 'undefined') {
-            window.history.replaceState(null, '', path);
-            const attemptRedirect = (retries = 0) => {
-              if (retries > 20) return;
-              if (!navigationRef.current?.getRootState()?.routes) {
-                setTimeout(() => attemptRedirect(retries + 1), 100);
-                return;
-              }
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            };
-            attemptRedirect();
-          }
+
+          const attemptRedirect = (retries = 0) => {
+            if (retries > 30) return;
+            if (!navigationRef.current?.getRootState()?.routes) {
+              setTimeout(() => attemptRedirect(retries + 1), 100);
+              return;
+            }
+
+            // Parse path and navigate directly (avoids unreliable popstate dispatch)
+            const tripMatch = path.match(/^\/trip\/([^/]+?)(?:\/(itinerary|map|photos|budget|packing|stops|edit|fable-settings))?$/);
+            if (tripMatch) {
+              const tripId = tripMatch[1];
+              const sub = tripMatch[2];
+              const screenMap: Record<string, string> = {
+                itinerary: 'Itinerary', map: 'Map', photos: 'Photos',
+                budget: 'Budget', packing: 'Packing', stops: 'Stops',
+                edit: 'EditTrip', 'fable-settings': 'FableTripSettings',
+              };
+              const screen = sub ? screenMap[sub] || 'TripDetail' : 'TripDetail';
+              navigationRef.current?.navigate(screen as any, { tripId });
+            } else if (path === '/profile' || path === '/profile/') {
+              navigationRef.current?.navigate('Main' as any, { screen: 'Profile' });
+            } else if (path === '/subscription') {
+              navigationRef.current?.navigate('Subscription' as any);
+            } else if (path.startsWith('/admin')) {
+              const adminMap: Record<string, string> = {
+                '/admin': 'AdminDashboard', '/admin/users': 'AdminUserList',
+                '/admin/insights': 'AdminInsights', '/admin/beta': 'BetaDashboard',
+              };
+              const screen = adminMap[path];
+              if (screen) navigationRef.current?.navigate(screen as any);
+            }
+
+            // Update URL bar to match destination
+            if (typeof window !== 'undefined') {
+              window.history.replaceState(null, '', path);
+            }
+          };
+          attemptRedirect();
         }
-      }, 100);
+      }, 300);
     }
     prevSessionRef.current = session;
   }, [session, pendingRedirectPath, setPendingRedirectPath]);

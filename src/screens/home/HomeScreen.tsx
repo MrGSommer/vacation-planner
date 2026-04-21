@@ -23,6 +23,7 @@ import { TrialBanner } from '../../components/common/TrialBanner';
 import { Icon, NAV_ICONS, MISC_ICONS } from '../../utils/icons';
 import { SwipeableRow } from '../../components/common/SwipeableRow';
 import { FREE_TRIP_RETENTION_DAYS } from '../../config/stripe';
+import { useOfflineSync, OfflineTripState } from '../../contexts/OfflineSyncContext';
 import { logError } from '../../services/errorLogger';
 
 type Props = { navigation: NativeStackNavigationProp<any> };
@@ -55,11 +56,14 @@ const TripCard: React.FC<{
   isPast?: boolean;
   isReadonly?: boolean;
   deletionDaysLeft?: number | null;
-}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast, isReadonly, deletionDaysLeft }) => {
+  offlineState?: OfflineTripState;
+  onEnableOffline?: () => void;
+  onDisableOffline?: () => void;
+}> = React.memo(({ trip, collaborators, currentUserId, onPress, onShare, onDelete, onDuplicate, onEdit, isPast, isReadonly, deletionDaysLeft, offlineState, onEnableOffline, onDisableOffline }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const btnRef = useRef<View>(null);
-  const MENU_HEIGHT = 210; // approximate menu height (4 items + divider + padding)
+  const MENU_HEIGHT = 260; // approximate menu height (5 items + divider + padding)
   const others = collaborators.filter(c => c.user_id !== currentUserId);
   const shown = others.slice(0, MAX_AVATARS);
   const overflow = others.length - MAX_AVATARS;
@@ -78,8 +82,21 @@ const TripCard: React.FC<{
     >
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
-          <View style={[styles.badge, { backgroundColor: displayColor }]}>
-            <Text style={styles.badgeText}>{displayLabel}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            <View style={[styles.badge, { backgroundColor: displayColor }]}>
+              <Text style={styles.badgeText}>{displayLabel}</Text>
+            </View>
+            {offlineState?.status === 'syncing' && (
+              <ActivityIndicator size="small" color={colors.accent} />
+            )}
+            {offlineState?.status === 'synced' && (
+              <Icon name="checkmark-circle" size={iconSize.sm} color={colors.success} />
+            )}
+            {offlineState?.status === 'error' && (
+              <TouchableOpacity onPress={onEnableOffline} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Icon name="alert-circle" size={iconSize.sm} color={colors.error} />
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.cardTopRight}>
             {shown.length > 0 && (
@@ -192,6 +209,18 @@ const TripCard: React.FC<{
               <Icon name="copy-outline" size={iconSize.sm} color={colors.primary} />
               <Text style={styles.cardMenuLabel}>Kopieren</Text>
             </TouchableOpacity>
+            {Platform.OS === 'web' && !isPast && onEnableOffline && !offlineState && (
+              <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onEnableOffline(); }}>
+                <Icon name="cloud-download-outline" size={iconSize.sm} color={colors.primary} />
+                <Text style={styles.cardMenuLabel}>Offline verfügbar machen</Text>
+              </TouchableOpacity>
+            )}
+            {Platform.OS === 'web' && offlineState && onDisableOffline && (
+              <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onDisableOffline(); }}>
+                <Icon name="cloud-offline-outline" size={iconSize.sm} color={colors.textSecondary} />
+                <Text style={styles.cardMenuLabel}>Offline entfernen</Text>
+              </TouchableOpacity>
+            )}
             <View style={styles.cardMenuDivider} />
             <TouchableOpacity style={styles.cardMenuItem} onPress={() => { setMenuOpen(false); onDelete(); }}>
               <Icon name="trash-outline" size={iconSize.sm} color={colors.error} />
@@ -210,6 +239,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { trips, loading, fetchTrips, remove } = useTrips();
   const { user, profile } = useAuthContext();
   const { paymentWarning, paymentErrorMessage, isPremium, isTrialing } = useSubscription();
+  const { enableOffline, disableOffline, getStatus, isOffline } = useOfflineSync();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [shareTrip, setShareTrip] = useState<Trip | null>(null);
@@ -548,6 +578,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     onDuplicate={() => handleDuplicateTrip(trip)}
                     onEdit={() => navigation.navigate('EditTrip', { tripId: trip.id })}
                     isReadonly={isReadonly}
+                    offlineState={isOffline(trip.id) ? getStatus(trip.id) : undefined}
+                    onEnableOffline={() => enableOffline(trip.id)}
+                    onDisableOffline={() => disableOffline(trip.id)}
                   />
                 </SwipeableRow>
               </React.Fragment>
