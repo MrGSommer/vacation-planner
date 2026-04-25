@@ -42,7 +42,6 @@ export const signOut = async () => {
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.removeItem('wayfable_profile');
-      localStorage.removeItem('wayfable_dismissed_recaps');
       localStorage.removeItem('wayfable_custom_templates');
       localStorage.removeItem('wayfable_offline_queue');
       localStorage.removeItem('wayfable_offline_trips');

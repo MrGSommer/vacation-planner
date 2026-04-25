@@ -34,7 +34,7 @@ async function sendInviteEmail(
   credits: number
 ): Promise<boolean> {
   const tierLabel = tier === 'premium' ? 'Premium' : 'Free';
-  const creditsLine = credits > 0 ? `<p style="color:#475569;font-size:16px;line-height:1.6;margin:0 0 8px">Du hast <strong>${credits} Inspirationen</strong> erhalten, um Fable \u2014 deinen KI-Reisebegleiter \u2014 zu nutzen.</p>` : '';
+  const creditsLine = tier !== 'premium' && credits > 0 ? `<p style="color:#475569;font-size:16px;line-height:1.6;margin:0 0 8px">Du hast <strong>${credits} Inspirationen</strong> erhalten, um Fable \u2014 deinen KI-Reisebegleiter \u2014 zu nutzen.</p>` : '';
   const tierBadgeColor = tier === 'premium' ? '#0EA5E9' : '#64748b';
 
   const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
@@ -66,7 +66,7 @@ async function sendInviteEmail(
       5. Setze dein Passwort und vervollst\u00e4ndige dein Profil</p>
     </td></tr></table>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px"><tr><td align="center" style="background-color:#0EA5E9;border-radius:50px">
-      <a href="https://wayfable.ch" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">Zu WayFable</a>
+      <a href="https://wayfable.ch/login" style="display:inline-block;padding:14px 40px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">Zu WayFable</a>
     </td></tr></table>
     <p style="color:#94a3b8;font-size:13px;line-height:1.5;margin:0">
     Bei Fragen antworte einfach auf diese E-Mail.</p>

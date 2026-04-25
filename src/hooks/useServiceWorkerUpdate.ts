@@ -60,10 +60,12 @@ export function useServiceWorkerUpdate() {
         console.warn('SW registration failed:', err);
       });
 
-    // When the new SW takes over, reload the page
+    // When a new SW takes over from an existing one, reload to pick up new assets.
+    // Skip on first install (no previous controller) to avoid a spurious double-load.
+    const hadController = !!navigator.serviceWorker.controller;
     let refreshing = false;
     const onControllerChange = () => {
-      if (refreshing) return;
+      if (refreshing || !hadController) return;
       refreshing = true;
       window.location.reload();
     };

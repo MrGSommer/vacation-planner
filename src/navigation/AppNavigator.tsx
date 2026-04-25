@@ -100,7 +100,7 @@ const AUTH_SCREENS = {
 
 // Unauthenticated screens config
 const UNAUTH_SCREENS = {
-  Auth: { screens: { Welcome: '' } },
+  Auth: { screens: { Welcome: '', Login: 'login', SignUp: 'register' } },
 } as const;
 
 function buildLinking(isAuthenticated: boolean) {

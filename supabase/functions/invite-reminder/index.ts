@@ -95,7 +95,7 @@ function unsubscribeUrl(userId: string): string {
 function reminderEmailHtml(userId: string, email: string, name: string, tier: string, credits: number): string {
   const tierLabel = tier === 'premium' ? 'Premium' : 'Free';
   const tierColor = tier === 'premium' ? '#0EA5E9' : '#64748b';
-  const creditsLine = credits > 0
+  const creditsLine = tier !== 'premium' && credits > 0
     ? `<p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 8px">Du hast <strong>${credits} Inspirationen</strong> bereit, um Fable — deinen KI-Reisebegleiter — zu nutzen.</p>`
     : '';
   const unsub = unsubscribeUrl(userId);
@@ -131,7 +131,7 @@ function reminderEmailHtml(userId: string, email: string, name: string, tier: st
     </div>
 
     <div style="text-align:center;margin:24px 0">
-      <a href="${SITE}" style="display:inline-block;background:linear-gradient(135deg,#0EA5E9,#6366F1);color:#fff;text-decoration:none;padding:14px 40px;border-radius:50px;font-size:16px;font-weight:600">Jetzt loslegen</a>
+      <a href="${SITE}/login" style="display:inline-block;background:linear-gradient(135deg,#0EA5E9,#6366F1);color:#fff;text-decoration:none;padding:14px 40px;border-radius:50px;font-size:16px;font-weight:600">Jetzt loslegen</a>
     </div>
 
     <p style="color:#94a3b8;font-size:13px;line-height:1.5;margin:24px 0 0">

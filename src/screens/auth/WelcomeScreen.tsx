@@ -495,6 +495,17 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Animated.View style={[s.heroCtas, { opacity: heroCtaOpacity, transform: [{ translateY: heroCtaTranslateY }], width: '100%', maxWidth: 520 }]}>
                 <View style={s.heroInputWrap}>
                   <TextInput
+                    ref={(ref: any) => {
+                      if (ref && Platform.OS === 'web') {
+                        const el = ref as unknown as HTMLInputElement;
+                        el.setAttribute('autocomplete', 'off');
+                        el.setAttribute('data-1p-ignore', '');
+                        el.setAttribute('data-lpignore', 'true');
+                        el.setAttribute('data-form-type', 'other');
+                        el.setAttribute('name', 'trip-search');
+                        el.setAttribute('role', 'search');
+                      }
+                    }}
                     style={[s.heroInput, isMobile && { fontSize: 14 }]}
                     placeholder="z.B. 3 Wochen Japan, Roadtrip Norwegen..."
                     placeholderTextColor="rgba(255,255,255,0.45)"
@@ -506,6 +517,7 @@ export const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
                     autoComplete="off"
                     textContentType="none"
                     autoCorrect={false}
+                    inputMode="search"
                   />
                 </View>
                 <TouchableOpacity
