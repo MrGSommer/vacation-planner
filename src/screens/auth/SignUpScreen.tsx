@@ -16,6 +16,7 @@ import { logError } from '../../services/errorLogger';
 
 // Default to waitlist mode (safe). Set EXPO_PUBLIC_WAITLIST_MODE=false to enable registration.
 const WAITLIST_MODE = process.env.EXPO_PUBLIC_WAITLIST_MODE !== 'false';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 
 const REFERRAL_OPTIONS = [
   { label: 'Freunde / Familie', value: 'friends' },
@@ -36,10 +37,14 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [localError, setLocalError] = useState<string | null>(null);
   const [agbAccepted, setAgbAccepted] = useState(false);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
-  const [waitlistStatus, setWaitlistStatus] = useState<null | 'confirm_email' | 'resent' | 'already_confirmed' | 'has_account'>(null);
+  const [waitlistStatus, setWaitlistStatus] = useState<null | 'confirmed' | 'already_confirmed' | 'has_account'>(null);
   const [referralSource, setReferralSource] = useState('');
   const [userGoal, setUserGoal] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [verificationPhase, setVerificationPhase] = useState<'form' | 'code_sent'>('form');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [codeSending, setCodeSending] = useState(false);
+  const [codeVerifying, setCodeVerifying] = useState(false);
   const { signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const { pendingInviteToken } = useAuthContext();
 
@@ -67,7 +72,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleWaitlist = async () => {
+  const handleRequestCode = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       setLocalError('Bitte gib deinen Vor- und Nachnamen ein');
       return;
@@ -76,6 +81,69 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       setLocalError('Bitte gib deine E-Mail-Adresse ein');
       return;
     }
+    setCodeSending(true);
+    setLocalError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-send-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), first_name: firstName.trim() }),
+      });
+      const data = await res.json();
+      if (data.error === 'rate_limit') {
+        setLocalError('Zu viele Anfragen. Bitte warte etwas.');
+      } else if (data.error) {
+        setLocalError('Code konnte nicht gesendet werden. Versuche es nochmal.');
+      } else {
+        setVerificationPhase('code_sent');
+      }
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleRequestCode' } });
+      setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+    } finally {
+      setCodeSending(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!verificationCode.trim()) {
+      setLocalError('Bitte gib den Code ein');
+      return;
+    }
+    setCodeVerifying(true);
+    setLocalError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: verificationCode.trim() }),
+      });
+      const data = await res.json();
+      if (data.verified) {
+        await handleWaitlistSignup();
+      } else if (data.error === 'too_many_attempts') {
+        setLocalError('Zu viele Fehlversuche. Bitte fordere einen neuen Code an.');
+      } else if (data.error === 'expired') {
+        setLocalError('Code abgelaufen. Bitte fordere einen neuen Code an.');
+      } else {
+        setLocalError('Code ist falsch. Bitte überprüfe deine Eingabe.');
+      }
+    } catch (e) {
+      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleVerifyCode' } });
+      setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+    } finally {
+      setCodeVerifying(false);
+    }
+  };
+
+  const handleResendCode = () => {
+    setVerificationPhase('form');
+    setVerificationCode('');
+    setEmail('');
+    setLocalError(null);
+  };
+
+  const handleWaitlistSignup = async () => {
     setWaitlistLoading(true);
     setLocalError(null);
     try {
@@ -87,14 +155,20 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         p_user_goal: userGoal.trim() || null,
       });
       if (rpcError) {
-        setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+        if (rpcError.message?.includes('email_not_verified')) {
+          setLocalError('E-Mail konnte nicht verifiziert werden. Bitte fordere einen neuen Code an.');
+          setVerificationPhase('form');
+          setVerificationCode('');
+        } else {
+          setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
+        }
       } else {
         const status = data?.status;
         setWaitlistStatus(status);
-        if (status === 'confirm_email') trackLandingEvent('waitlisted');
+        if (status === 'confirmed') trackLandingEvent('waitlisted');
       }
     } catch (e) {
-      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleWaitlist' } });
+      logError(e, { severity: 'critical', component: 'SignUpScreen', context: { action: 'handleWaitlistSignup' } });
       setLocalError('Etwas ist schiefgelaufen. Versuche es nochmal.');
     } finally {
       setWaitlistLoading(false);
@@ -105,7 +179,6 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
   if (WAITLIST_MODE) {
     if (waitlistStatus) {
-      const isConfirmEmail = waitlistStatus === 'confirm_email' || waitlistStatus === 'resent';
       const isAlreadyConfirmed = waitlistStatus === 'already_confirmed';
       const isHasAccount = waitlistStatus === 'has_account';
 
@@ -115,23 +188,23 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.successContainer}>
             <LinearGradient colors={[...gradients.ocean]} style={styles.successGradient}>
               <Icon
-                name={isConfirmEmail ? 'mail-outline' : isAlreadyConfirmed ? 'checkmark-circle-outline' : 'person-outline'}
+                name={isHasAccount ? 'person-outline' : 'checkmark-circle-outline'}
                 size={48}
                 color="#FFFFFF"
               />
               <Text style={styles.successTitle}>
-                {isConfirmEmail
-                  ? (waitlistStatus === 'resent' ? 'E-Mail erneut gesendet!' : 'Fast geschafft!')
+                {isHasAccount
+                  ? 'Konto vorhanden'
                   : isAlreadyConfirmed
-                  ? 'Bereits bestätigt!'
-                  : 'Konto vorhanden'}
+                  ? 'Bereits eingetragen!'
+                  : 'Du bist dabei!'}
               </Text>
               <Text style={styles.successMessage}>
-                {isConfirmEmail
-                  ? 'Wir haben dir eine E-Mail geschickt. Bitte bestätige deine E-Mail-Adresse, damit wir dich benachrichtigen können, sobald WayFable für dich bereit ist.'
+                {isHasAccount
+                  ? 'Zu dieser E-Mail-Adresse existiert bereits ein Konto. Melde dich an, um WayFable zu nutzen.'
                   : isAlreadyConfirmed
-                  ? 'Deine E-Mail-Adresse ist bereits bestätigt. Wir melden uns, sobald WayFable für dich bereit ist!'
-                  : 'Zu dieser E-Mail-Adresse existiert bereits ein Konto. Melde dich an, um WayFable zu nutzen.'}
+                  ? 'Deine E-Mail-Adresse ist bereits auf der Warteliste. Wir melden uns, sobald WayFable für dich bereit ist!'
+                  : 'Vielen Dank! Du stehst jetzt auf der Warteliste. Wir melden uns, sobald WayFable für dich bereit ist.'}
               </Text>
               {isHasAccount ? (
                 <TouchableOpacity style={styles.successButton} onPress={() => navigation.navigate('Login')}>
@@ -148,9 +221,13 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       );
     }
 
+    const isCodeSent = verificationPhase === 'code_sent';
+
     return (
       <View style={styles.container}>
-        <Header title="Warteliste" onBack={() => navigation.goBack()} />
+        <Header title="Warteliste" onBack={() => {
+          if (isCodeSent) { handleResendCode(); } else { navigation.goBack(); }
+        }} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Icon name="airplane-outline" size={48} color={colors.primary} />
@@ -162,36 +239,90 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             {displayError && <View style={styles.errorBox}><Text style={styles.errorText}>{displayError}</Text></View>}
 
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} containerStyle={{ flex: 1 }} />
-              <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} containerStyle={{ flex: 1 }} />
+              <Input label="Vorname" placeholder="Vorname" value={firstName} onChangeText={setFirstName} containerStyle={{ flex: 1 }} editable={!isCodeSent} />
+              <Input label="Nachname" placeholder="Nachname" value={lastName} onChangeText={setLastName} containerStyle={{ flex: 1 }} editable={!isCodeSent} />
             </View>
-            <Input label="E-Mail" placeholder="deine@email.ch" value={email} onChangeText={(t) => { setEmail(t); setLocalError(null); }} keyboardType="email-address" autoCapitalize="none" />
+            <View style={isCodeSent ? styles.disabledFieldWrapper : undefined}>
+              <Input
+                label="E-Mail"
+                placeholder="deine@email.ch"
+                value={email}
+                onChangeText={(t) => { setEmail(t); setLocalError(null); }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!isCodeSent}
+              />
+              {isCodeSent && <View style={styles.disabledOverlay} />}
+            </View>
 
-            <Text style={styles.fieldLabel}>Wie bist du auf WayFable gestossen?</Text>
-            <View style={styles.referralRow}>
-              {REFERRAL_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.referralChip, referralSource === opt.value && styles.referralChipActive]}
-                  onPress={() => setReferralSource(referralSource === opt.value ? '' : opt.value)}
-                >
-                  <Text style={[styles.referralChipText, referralSource === opt.value && styles.referralChipTextActive]}>{opt.label}</Text>
+            {isCodeSent && (
+              <View style={styles.codeSection}>
+                <View style={styles.codeSentBanner}>
+                  <Icon name="mail-outline" size={20} color={colors.primary} />
+                  <Text style={styles.codeSentText}>Code gesendet an <Text style={{ fontWeight: '700' }}>{email}</Text></Text>
+                </View>
+                <Input
+                  label="Bestätigungscode"
+                  placeholder="8-stelliger Code"
+                  value={verificationCode}
+                  onChangeText={(t) => { setVerificationCode(t.replace(/[^0-9]/g, '').slice(0, 8)); setLocalError(null); }}
+                  keyboardType="number-pad"
+                  maxLength={8}
+                />
+              </View>
+            )}
+
+            {!isCodeSent && (
+              <>
+                <Text style={styles.fieldLabel}>Wie bist du auf WayFable gestossen?</Text>
+                <View style={styles.referralRow}>
+                  {REFERRAL_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.referralChip, referralSource === opt.value && styles.referralChipActive]}
+                      onPress={() => setReferralSource(referralSource === opt.value ? '' : opt.value)}
+                    >
+                      <Text style={[styles.referralChipText, referralSource === opt.value && styles.referralChipTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.fieldLabel}>Was erhoffst du dir von WayFable?</Text>
+                <TextInput
+                  style={styles.goalInput}
+                  placeholder="z.B. Reiseplanung vereinfachen, Inspiration für Reisen..."
+                  placeholderTextColor={colors.textLight}
+                  value={userGoal}
+                  onChangeText={setUserGoal}
+                  multiline
+                  maxLength={300}
+                />
+              </>
+            )}
+
+            {isCodeSent ? (
+              <View style={styles.codeButtonRow}>
+                <Button
+                  title="Code prüfen"
+                  onPress={handleVerifyCode}
+                  loading={codeVerifying || waitlistLoading}
+                  disabled={verificationCode.length !== 8}
+                  style={styles.codeVerifyButton}
+                />
+                <TouchableOpacity onPress={handleResendCode} style={styles.resendLink}>
+                  <Icon name="refresh-outline" size={16} color={colors.primary} />
+                  <Text style={styles.resendText}>Code erneut senden</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>Was erhoffst du dir von WayFable?</Text>
-            <TextInput
-              style={styles.goalInput}
-              placeholder="z.B. Reiseplanung vereinfachen, Inspiration für Reisen..."
-              placeholderTextColor={colors.textLight}
-              value={userGoal}
-              onChangeText={setUserGoal}
-              multiline
-              maxLength={300}
-            />
-
-            <Button title="Auf die Warteliste" onPress={handleWaitlist} loading={waitlistLoading} disabled={!firstName.trim() || !lastName.trim() || !email.trim()} style={styles.signUpButton} />
+              </View>
+            ) : (
+              <Button
+                title="Code anfordern"
+                onPress={handleRequestCode}
+                loading={codeSending}
+                disabled={!firstName.trim() || !lastName.trim() || !email.trim()}
+                style={styles.signUpButton}
+              />
+            )}
 
             <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
               <Text style={styles.linkText}>Bereits ein Konto? <Text style={styles.linkBold}>Anmelden</Text></Text>
@@ -307,6 +438,15 @@ const styles = StyleSheet.create({
   referralChipText: { ...typography.bodySmall, color: colors.textSecondary },
   referralChipTextActive: { color: '#FFFFFF', fontWeight: '600' },
   goalInput: { ...typography.body, backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, minHeight: 72, textAlignVertical: 'top', marginBottom: spacing.sm },
+  disabledFieldWrapper: { position: 'relative' as const, opacity: 0.5 },
+  disabledOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
+  codeSection: { marginTop: spacing.sm },
+  codeSentBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, backgroundColor: colors.primary + '10', padding: spacing.md, borderRadius: borderRadius.md, marginBottom: spacing.md },
+  codeSentText: { ...typography.bodySmall, color: colors.text, flex: 1 },
+  codeButtonRow: { marginTop: spacing.md, gap: spacing.md },
+  codeVerifyButton: {},
+  resendLink: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: spacing.xs, paddingVertical: spacing.sm },
+  resendText: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' as const },
   waitlistEmoji: { fontSize: 48, textAlign: 'center', marginBottom: spacing.md },
   successContainer: { flex: 1 },
   successGradient: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
