@@ -33,6 +33,11 @@ export const signInWithGoogle = async () => {
 export const signOut = async () => {
   const { clearCache } = await import('../utils/queryCache');
   clearCache();
+  // Nuke offline document storage (blobs + metadata + legacy cache)
+  try {
+    const { clearAllCachedDocuments } = await import('../utils/documentCache');
+    await clearAllCachedDocuments();
+  } catch {}
   // Clear all user-specific localStorage/sessionStorage
   if (typeof localStorage !== 'undefined') {
     try {
@@ -40,6 +45,7 @@ export const signOut = async () => {
       localStorage.removeItem('wayfable_dismissed_recaps');
       localStorage.removeItem('wayfable_custom_templates');
       localStorage.removeItem('wayfable_offline_queue');
+      localStorage.removeItem('wayfable_offline_trips');
     } catch {}
   }
   if (typeof sessionStorage !== 'undefined') {
@@ -95,6 +101,10 @@ export const deleteAccount = async (password?: string, confirmText?: string) => 
 
   const { clearCache } = await import('../utils/queryCache');
   clearCache();
+  try {
+    const { clearAllCachedDocuments } = await import('../utils/documentCache');
+    await clearAllCachedDocuments();
+  } catch {}
   await supabase.auth.signOut();
 };
 

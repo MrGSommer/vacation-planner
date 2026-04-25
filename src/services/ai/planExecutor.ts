@@ -215,6 +215,7 @@ export const executePlan = async (
 };
 
 export const parsePlanJson = (content: string): AiTripPlan => {
+  if (!content) throw new Error('Empty AI response');
   let cleaned = content.trim();
 
   // Strip markdown code fences if present

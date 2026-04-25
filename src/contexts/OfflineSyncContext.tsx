@@ -5,8 +5,6 @@ import { getTrips } from '../api/trips';
 import { prefetchTrip } from '../utils/prefetch';
 import { purgeTripCache } from '../utils/queryCache';
 import { uncacheTripDocuments } from '../utils/documentCache';
-import { getDocuments, getActivityIdsWithDocuments } from '../api/documents';
-import { getActivitiesForTrip } from '../api/itineraries';
 import { logError } from '../services/errorLogger';
 
 export interface OfflineTripState {
@@ -52,7 +50,6 @@ function saveOfflineTripIds(ids: string[]): void {
 }
 
 export const OfflineSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Only active on web
   if (Platform.OS !== 'web') {
     return (
       <OfflineSyncContext.Provider value={{
@@ -74,6 +71,7 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
   const { user } = useAuthContext();
   const [offlineTrips, setOfflineTrips] = useState<Map<string, OfflineTripState>>(new Map());
   const syncingRef = useRef<Set<string>>(new Set());
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const updateTripState = useCallback((tripId: string, state: OfflineTripState) => {
     setOfflineTrips(prev => {
@@ -83,21 +81,74 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, []);
 
+  // Request persistent storage once per session — the browser may grant this
+  // (Chrome/Firefox desktop always grant for installed PWAs). iOS Safari is
+  // known to ignore this, but calling is harmless. Re-requesting on every
+  // app-open gives best-effort durability against eviction.
+  useEffect(() => {
+    (async () => {
+      try {
+        if (navigator.storage?.persist) {
+          const persisted = await navigator.storage.persist();
+          if (persisted) {
+            // eslint-disable-next-line no-console
+            console.log('[OfflineSync] persistent storage granted');
+          }
+        }
+      } catch {
+        // Silent — not critical
+      }
+    })();
+  }, []);
+
+  async function checkQuota(): Promise<{ ok: boolean; freeMB: number }> {
+    if (!navigator.storage?.estimate) return { ok: true, freeMB: Infinity };
+    try {
+      const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+      const freeMB = (quota - usage) / (1024 * 1024);
+      return { ok: freeMB >= 50, freeMB };
+    } catch {
+      return { ok: true, freeMB: Infinity };
+    }
+  }
+
   const syncTrip = useCallback(async (tripId: string) => {
     if (syncingRef.current.has(tripId)) return;
     syncingRef.current.add(tripId);
+
+    // Fresh AbortController per sync (allows cancel on toggle-OFF)
+    const prev = abortControllersRef.current.get(tripId);
+    if (prev) prev.abort();
+    const controller = new AbortController();
+    abortControllersRef.current.set(tripId, controller);
+
     updateTripState(tripId, { status: 'syncing', progress: 0 });
 
     try {
-      await prefetchTrip(tripId, (progress) => {
-        updateTripState(tripId, { status: 'syncing', progress });
-      });
+      const quota = await checkQuota();
+      if (!quota.ok) {
+        logError(new Error(`Low storage: ${quota.freeMB.toFixed(1)}MB free`), {
+          component: 'OfflineSyncContext',
+          context: { action: 'lowQuota', tripId, freeMB: quota.freeMB },
+        });
+      }
+
+      await prefetchTrip(
+        tripId,
+        (progress) => updateTripState(tripId, { status: 'syncing', progress }),
+        { abortSignal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       updateTripState(tripId, { status: 'synced', progress: 100 });
     } catch (e) {
+      if (controller.signal.aborted) return;
       logError(e, { component: 'OfflineSyncContext', context: { action: 'syncTrip', tripId } });
       updateTripState(tripId, { status: 'error', progress: 0 });
     } finally {
       syncingRef.current.delete(tripId);
+      if (abortControllersRef.current.get(tripId) === controller) {
+        abortControllersRef.current.delete(tripId);
+      }
     }
   }, [updateTripState]);
 
@@ -111,6 +162,15 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
   }, [syncTrip]);
 
   const disableOffline = useCallback(async (tripId: string) => {
+    // 1. Cancel any in-flight sync for this trip
+    const controller = abortControllersRef.current.get(tripId);
+    if (controller) {
+      controller.abort();
+      abortControllersRef.current.delete(tripId);
+    }
+    syncingRef.current.delete(tripId);
+
+    // 2. Remove from persisted list + UI state
     const ids = loadOfflineTripIds().filter(id => id !== tripId);
     saveOfflineTripIds(ids);
     setOfflineTrips(prev => {
@@ -119,22 +179,14 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
       return next;
     });
 
-    // Purge cached data
+    // 3. Purge cached query data (activities, budget, etc.)
     purgeTripCache(tripId);
 
-    // Purge cached documents
+    // 4. Remove blobs + document metadata for this trip
     try {
-      const activities = await getActivitiesForTrip(tripId);
-      const actIds = activities.map(a => a.id);
-      const withDocs = await getActivityIdsWithDocuments(actIds).catch(() => new Set<string>());
-      const docPromises = Array.from(withDocs).map(actId => getDocuments(actId).catch(() => []));
-      const allDocs = await Promise.all(docPromises);
-      const urls = allDocs.flat().map(d => d.url).filter(Boolean);
-      if (urls.length > 0) {
-        await uncacheTripDocuments(urls);
-      }
-    } catch {
-      // Best-effort cleanup
+      await uncacheTripDocuments(tripId);
+    } catch (e) {
+      logError(e, { component: 'OfflineSyncContext', context: { action: 'disableOffline.uncacheTripDocuments', tripId } });
     }
   }, []);
 
@@ -152,7 +204,6 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
       const ids = loadOfflineTripIds();
       if (ids.length === 0) return;
 
-      // Auto-cleanup: remove completed/archived trips
       try {
         const allTrips = await getTrips(user.id);
         const tripMap = new Map(allTrips.map(t => [t.id, t]));
@@ -161,8 +212,8 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
         for (const id of ids) {
           const trip = tripMap.get(id);
           if (!trip || trip.status === 'completed' || trip.status === 'archived') {
-            // Purge cache for removed trips
             purgeTripCache(id);
+            await uncacheTripDocuments(id).catch(() => {});
           } else {
             cleanedIds.push(id);
           }
@@ -172,20 +223,18 @@ const OfflineSyncProviderWeb: React.FC<{ children: React.ReactNode }> = ({ child
           saveOfflineTripIds(cleanedIds);
         }
 
-        // Initialize state + re-sync
         const initial = new Map<string, OfflineTripState>();
         for (const id of cleanedIds) {
           initial.set(id, { status: 'syncing', progress: 0 });
         }
         setOfflineTrips(initial);
 
-        // Re-sync sequentially in background
+        // Re-sync sequentially in background — resumable, per-doc atomic
         for (const id of cleanedIds) {
           await syncTrip(id);
         }
       } catch (e) {
         logError(e, { component: 'OfflineSyncContext', context: { action: 'init' } });
-        // Still mark them as having unknown state
         const initial = new Map<string, OfflineTripState>();
         for (const id of ids) {
           initial.set(id, { status: 'error', progress: 0 });

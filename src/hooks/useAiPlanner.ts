@@ -97,6 +97,7 @@ let messageIdCounter = 0;
 const nextId = () => `msg_${++messageIdCounter}_${Date.now()}`;
 
 function parseMetadata(text: string): { cleanText: string; metadata: AiMetadata | null } {
+  if (!text) return { cleanText: '', metadata: null };
   const metadataRegex = /<metadata>([\s\S]*?)<\/metadata>/;
   const match = text.match(metadataRegex);
 
@@ -114,6 +115,7 @@ function parseMetadata(text: string): { cleanText: string; metadata: AiMetadata 
 }
 
 function stripLeakedFormOptions(text: string, metadata: AiMetadata | null): { cleanText: string; metadata: AiMetadata | null } {
+  if (!text) return { cleanText: '', metadata };
   const formOptionRegex = /<form_option>([\s\S]*?)<\/form_option>/g;
   const matches = [...text.matchAll(formOptionRegex)];
   if (matches.length === 0) return { cleanText: text, metadata };
@@ -162,6 +164,7 @@ function sanitizeMetadata(meta: AiMetadata, prevMeta: AiMetadata | null): AiMeta
 }
 
 function stripLeakedAgentAction(text: string, metadata: AiMetadata | null): { cleanText: string; metadata: AiMetadata | null } {
+  if (!text) return { cleanText: '', metadata };
   const actionRegex = /<agent_action>([\s\S]*?)<\/agent_action>/g;
   const matches = [...text.matchAll(actionRegex)];
   if (matches.length === 0) return { cleanText: text, metadata };
@@ -186,7 +189,7 @@ interface MemoryParseResult {
 }
 
 function parsePersonalMemory(text: string): MemoryParseResult {
-  let cleanText = text;
+  let cleanText = text || '';
   let memoryAdd: string | null = null;
   let memoryConflict: { old: string; new_val: string } | null = null;
 
@@ -226,7 +229,7 @@ interface TripMemoryParseResult {
 }
 
 function parseTripMemory(text: string): TripMemoryParseResult {
-  let cleanText = text;
+  let cleanText = text || '';
   let tripMemoryAdd: string | null = null;
   let tripMemoryConflict: { old: string; new_val: string } | null = null;
 

@@ -86,6 +86,8 @@ export function useServiceWorkerUpdate() {
       try {
         const res = await fetch('/version.json', { cache: 'no-store' });
         if (!res.ok) return;
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) return;
         const { v } = await res.json();
         if (!v) return;
         if (knownVersion === null) {

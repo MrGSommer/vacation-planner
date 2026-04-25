@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const CACHE_NAME = `wayfable-cache-${APP_VERSION}`;
 const PRECACHE_URLS = [];
 
@@ -11,7 +11,10 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: clean up old caches (preserve wayfable-docs + wayfable-map-tiles)
+// Activate: clean up old caches. wayfable-map-tiles is persistent across SW
+// upgrades. wayfable-docs is legacy (migrated to OPFS/IDB via blobStore) but
+// kept around so users with pending migrations can still read; the app deletes
+// it after migration completes. Versioned wayfable-cache-<older> are purged.
 const PERSISTENT_CACHES = [CACHE_NAME, 'wayfable-docs', 'wayfable-map-tiles'];
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -69,9 +72,27 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Cache-first for Supabase Storage public files (photos, documents)
-  // These URLs are immutable (contain timestamp in filename)
+  // Supabase Storage public files:
+  //  - Documents are served by app code from OPFS/IDB via blobStore (not SW).
+  //  - Photos still benefit from SW cache because they're fetched by <img> tags.
+  //  - Legacy wayfable-docs cache is checked as read-through fallback for
+  //    users mid-migration.
   if (url.hostname.includes('supabase') && url.pathname.includes('/storage/v1/object/public/')) {
+    const isDocument = url.pathname.includes('/activity-documents/');
+    if (isDocument) {
+      // Document blobs: try legacy cache (for in-flight migration), otherwise
+      // network-only. Do NOT write back into the versioned cache — blobStore
+      // is the source of truth for offline docs.
+      event.respondWith(
+        caches.open('wayfable-docs').then((legacy) =>
+          legacy.match(request).then((cached) => cached || fetch(request).catch(() =>
+            new Response('Offline', { status: 503, statusText: 'Offline' })
+          ))
+        )
+      );
+      return;
+    }
+    // Photos + other Storage files: cache-first in versioned cache (current behavior)
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
@@ -81,10 +102,7 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
           return response;
-        }).catch(() => {
-          // Offline and not cached — return a simple offline response
-          return new Response('Offline', { status: 503, statusText: 'Offline' });
-        });
+        }).catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
       })
     );
     return;

@@ -184,6 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await supabase.auth.signOut();
       const { clearCache } = await import('../utils/queryCache');
       clearCache();
+      // Nuke offline documents (blobs + metadata + legacy cache)
+      try {
+        const { clearAllCachedDocuments } = await import('../utils/documentCache');
+        await clearAllCachedDocuments();
+      } catch {}
       showToast(message, 'error', 5000);
     } finally {
       validatingRef.current = false;

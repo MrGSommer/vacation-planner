@@ -20,6 +20,7 @@
     "@shopify/flash-list": "2.0.2",
     "@supabase/supabase-js": "^2.93.3",
     "date-fns": "^4.1.0",
+    "dexie": "^4.4.2",
     "expo": "~54.0.33",
     "expo-audio": "~1.1.1",
     "expo-av": "~16.0.8",
